@@ -42,9 +42,17 @@ services:
       redis:
         condition: service_started
     volumes:
-      - ./backend:/app
       - repos:/data/repos
       - kb:/data/knowledge
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
 
 volumes:
   postgres_data:
