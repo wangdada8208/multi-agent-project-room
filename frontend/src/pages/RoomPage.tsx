@@ -10,10 +10,21 @@ import { useChatStore } from "../stores/chatStore";
 import { useRoomStore } from "../stores/roomStore";
 import type { SenderType } from "../types/chat";
 
+const SENDER_ID_KEY = "mapr-sender-id";
+
+function getOrCreateSenderId(): string {
+  let id = localStorage.getItem(SENDER_ID_KEY);
+  if (!id) {
+    id = `user-${Math.random().toString(16).slice(2, 8)}`;
+    localStorage.setItem(SENDER_ID_KEY, id);
+  }
+  return id;
+}
+
 export function RoomPage() {
   const params = useParams();
   const roomId = params.roomId ?? "demo-room";
-  const senderId = useMemo(() => `codex-ui-${Math.random().toString(16).slice(2, 8)}`, []);
+  const senderId = useMemo(getOrCreateSenderId, []);
 
   const { sendMessage } = useWebSocket(roomId);
   const messages = useChatStore((state) => state.messages);

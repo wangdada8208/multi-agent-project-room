@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useChatStore } from "../stores/chatStore";
-import type { MessageType, RoomSocketEvent, SenderType } from "../types/chat";
+import type { ChatMessage, MessageType, RoomSocketEvent, SenderType } from "../types/chat";
 
 interface SendMessageInput {
   content: string;
@@ -30,10 +30,22 @@ export function useWebSocket(roomId: string) {
     socket.addEventListener("close", () => setConnectionStatus("closed"));
     socket.addEventListener("error", () => setConnectionStatus("error"));
     socket.addEventListener("message", (event) => {
-      const payload = JSON.parse(event.data) as RoomSocketEvent;
+      const payload = JSON.parse(event.data);
 
-      if (payload.type === "message") {
+      if (payload.type === "message" && payload.message) {
         addMessage(payload.message);
+      }
+
+      if (payload.type === "system" && payload.content) {
+        addMessage({
+          id: `sys-${Date.now()}`,
+          room_id: roomId,
+          sender_id: "system",
+          sender_type: "system",
+          content: payload.content,
+          msg_type: "system",
+          created_at: new Date().toISOString(),
+        });
       }
 
       if (payload.type === "typing") {

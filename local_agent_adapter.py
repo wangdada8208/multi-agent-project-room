@@ -257,6 +257,12 @@ Examples:
     )
 
     args = parser.parse_args()
+
+    # Handle quoted command: "claude -p" -> ["claude", "-p"]
+    if len(args.command) == 1 and " " in args.command[0]:
+        args.command = args.command[0].split()
+
+    args = parser.parse_args()
     agent_id = args.agent_id or f"{args.agent_name.lower().replace(' ', '-')}-{uuid.uuid4().hex[:6]}"
 
     adapter = LocalAgentAdapter(
