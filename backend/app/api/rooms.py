@@ -1,10 +1,14 @@
+"""Room API: create and list rooms, backed by PostgreSQL."""
+
 from __future__ import annotations
 
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from fastapi import APIRouter, HTTPException
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.app.services.room_store import room_store
-
+from app.core.database import get_db
+from app.models.room import Room
 
 router = APIRouter(prefix="/api/v1/rooms", tags=["rooms"])
 
@@ -14,42 +18,33 @@ class CreateRoomRequest(BaseModel):
     description: str = ""
 
 
-class CreateMessageRequest(BaseModel):
-    sender_id: str = Field(default="human-demo", min_length=1, max_length=120)
-    sender_type: str = Field(default="human")
-    content: str = Field(min_length=1)
-    msg_type: str = Field(default="text")
-
-
 @router.get("")
-async def list_rooms() -> dict:
-    return {"rooms": room_store.list_rooms()}
+async def list_rooms(db: AsyncSession = Depends(get_db)) -> dict:
+    result = await db.execute(
+        select(Room).where(Room.is_active == True).order_by(Room.created_at.desc())
+    )
+    rooms = result.scalars().all()
+    return {"rooms": [r.to_dict() for r in rooms]}
 
 
 @router.post("")
-async def create_room(payload: CreateRoomRequest) -> dict:
-    room = room_store.create_room(room_id=None, name=payload.name, description=payload.description)
+async def create_room(
+    payload: CreateRoomRequest,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    room = Room(name=payload.name, description=payload.description)
+    db.add(room)
+    await db.commit()
+    await db.refresh(room)
     return {"room": room.to_dict()}
 
 
-@router.get("/{room_id}/messages")
-async def list_messages(room_id: str) -> dict:
-    if room_store.get_room(room_id) is None:
+@router.get("/{room_id}")
+async def get_room(
+    room_id: str,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    room = await db.get(Room, room_id)
+    if room is None:
         raise HTTPException(status_code=404, detail="Room not found")
-
-    return {"messages": room_store.list_messages(room_id)}
-
-
-@router.post("/{room_id}/messages")
-async def create_message(room_id: str, payload: CreateMessageRequest) -> dict:
-    if room_store.get_room(room_id) is None:
-        raise HTTPException(status_code=404, detail="Room not found")
-
-    message = room_store.add_message(
-        room_id=room_id,
-        sender_id=payload.sender_id,
-        sender_type=payload.sender_type,  # type: ignore[arg-type]
-        content=payload.content,
-        msg_type=payload.msg_type,  # type: ignore[arg-type]
-    )
-    return {"message": message.to_dict()}
+    return {"room": room.to_dict()}
