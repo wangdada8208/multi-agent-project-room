@@ -4,7 +4,7 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     app_name: str = "Multi-Agent Project Room Demo"
-    cors_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
+    cors_origins: list[str] = ["*"]
     database_url: str = "postgresql+asyncpg://postgres:password@localhost:5432/agent_room"
     redis_url: str = "redis://localhost:6379/0"
     a2a_host: str = "0.0.0.0"
