@@ -1,14 +1,11 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { MessageInput } from "../components/chat/MessageInput";
-import { MessageList } from "../components/chat/MessageList";
 import { useWebSocket } from "../hooks/useWebSocket";
-import { fetchMessages } from "../lib/api";
 import { useAuthStore } from "../stores/authStore";
 import { useChatStore } from "../stores/chatStore";
 import { useRoomStore } from "../stores/roomStore";
-import type { SenderType } from "../types/chat";
+import type { ChatMessage, SenderType } from "../types/chat";
 
 const SENDER_ID_KEY = "mapr-sender-id";
 
@@ -21,12 +18,18 @@ function getOrCreateSenderId(): string {
   return id;
 }
 
+async function fetchMessages(roomId: string): Promise<ChatMessage[]> {
+  const res = await fetch(`/api/v1/rooms/${roomId}/messages`);
+  const data = await res.json();
+  return data.messages ?? data.data ?? [];
+}
+
 const statusLabel: Record<string, string> = {
-  connecting: "Connecting...",
-  open: "Connected",
-  closed: "Disconnected",
-  error: "Error",
-  idle: "Idle",
+  connecting: "连接中...",
+  open: "已连接",
+  closed: "已断开",
+  error: "连接错误",
+  idle: "等待中",
 };
 
 export function RoomPage() {
@@ -40,7 +43,6 @@ export function RoomPage() {
   const setMessages = useChatStore((state) => state.setMessages);
   const displayName = useAuthStore((state) => state.displayName);
   const setActiveRoomId = useRoomStore((state) => state.setActiveRoomId);
-  const activeRoomId = useRoomStore((state) => state.activeRoomId);
 
   const messagesQuery = useQuery({
     queryKey: ["rooms", roomId, "messages"],
@@ -49,9 +51,7 @@ export function RoomPage() {
   });
 
   useEffect(() => {
-    if (messagesQuery.data) {
-      setMessages(messagesQuery.data);
-    }
+    if (messagesQuery.data) setMessages(messagesQuery.data);
   }, [messagesQuery.data, setMessages]);
 
   useEffect(() => {
@@ -62,55 +62,119 @@ export function RoomPage() {
     return sendMessage({ content, senderId, senderType });
   }
 
-  const statusClass =
-    connectionStatus === "open"
-      ? "open"
-      : connectionStatus === "connecting"
-      ? "connecting"
-      : "closed";
-
   return (
-    <section className="room-page">
-      <header className="room-header">
+    <section className="chat-page">
+      <header className="chat-header">
         <div>
-          <Link
-            to="/rooms"
-            style={{ color: "#93c5fd", fontSize: 13, marginBottom: 4, display: "inline-block" }}
-          >
-            ← Back to rooms
-          </Link>
-          <h2 style={{ margin: 0, fontSize: 20 }}>{roomId.slice(0, 16)}...</h2>
-          <p className="room-subtitle">Signed in as {displayName}</p>
+          <Link to="/rooms" className="back-link">← 返回房间列表</Link>
+          <div className="room-name">房间 {roomId.slice(0, 12)}</div>
+          <div className="room-sub">{displayName}</div>
         </div>
-        <span className={`connection-pill ${statusClass}`}>
-          <span
-            style={{
-              display: "inline-block",
-              width: 8,
-              height: 8,
-              borderRadius: "50%",
-              marginRight: 6,
-              background:
-                connectionStatus === "open"
-                  ? "#22c55e"
-                  : connectionStatus === "connecting"
-                  ? "#eab308"
-                  : "#ef4444",
-            }}
-          />
+        <span className={`status-badge ${connectionStatus}`}>
+          <span className="dot" />
           {statusLabel[connectionStatus] || connectionStatus}
         </span>
       </header>
 
       {messagesQuery.isError && (
-        <div className="message-list" style={{ justifyContent: "center", textAlign: "center" }}>
-          <p style={{ color: "#f87171" }}>Failed to load messages.</p>
-          <p style={{ color: "#64748b", fontSize: 13 }}>Make sure the backend server is running.</p>
+        <div className="empty-state">
+          <p style={{ color: "#dc2626" }}>加载消息失败，请检查连接。</p>
         </div>
       )}
 
-      <MessageList messages={messages} />
-      <MessageInput disabled={connectionStatus !== "open"} onSend={handleSend} />
+      <MessageList messages={messages} userId={senderId} />
+      <MessageInputArea
+        disabled={connectionStatus !== "open"}
+        onSend={handleSend}
+      />
     </section>
+  );
+}
+
+/* ── 消息列表 ── */
+
+function MessageList({ messages, userId }: { messages: ChatMessage[]; userId: string }) {
+  const listRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (listRef.current) {
+      listRef.current.scrollTop = listRef.current.scrollHeight;
+    }
+  }, [messages]);
+
+  return (
+    <div className="message-list" ref={listRef}>
+      {messages.length === 0 && (
+        <div className="empty-state">
+          <p>暂无消息，发送第一条消息开始对话。</p>
+        </div>
+      )}
+      {messages.map((msg) => {
+        const isOwn = msg.sender_id === userId;
+        const isAgent = msg.sender_type === "agent";
+        const isSystem = msg.msg_type === "system";
+        return (
+          <div key={msg.id} className={`message-row${isOwn ? " own" : ""}`}>
+            <div className={`message-bubble${isAgent ? " agent" : ""}${isSystem ? " system" : ""}`}>
+              {!isSystem && (
+                <div className="message-meta">
+                  <span className="sender">
+                    {isAgent ? "🤖 " : ""}
+                    {msg.sender_id === userId ? "我" : msg.sender_id.slice(0, 8)}
+                  </span>
+                  <span>
+                    {msg.created_at
+                      ? new Date(msg.created_at).toLocaleTimeString("zh-CN", {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })
+                      : ""}
+                  </span>
+                </div>
+              )}
+              <p>{msg.content}</p>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ── 输入区域 ── */
+
+function MessageInputArea({
+  disabled,
+  onSend,
+}: {
+  disabled: boolean;
+  onSend: (content: string, senderType: SenderType) => boolean;
+}) {
+  const [text, setText] = useState("");
+  const [senderType, setSenderType] = useState<SenderType>("human");
+
+  function handleSubmit() {
+    if (!text.trim() || disabled) return;
+    onSend(text.trim(), senderType);
+    setText("");
+  }
+
+  return (
+    <div className="message-input-area">
+      <select value={senderType} onChange={(e) => setSenderType(e.target.value as SenderType)}>
+        <option value="human">人类</option>
+        <option value="agent">智能体</option>
+      </select>
+      <input
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSubmit(); } }}
+        placeholder={disabled ? "等待连接..." : "输入消息... @Claude 或 @Codex 触发 AI"}
+        disabled={disabled}
+      />
+      <button onClick={handleSubmit} disabled={disabled || !text.trim()}>
+        发送
+      </button>
+    </div>
   );
 }

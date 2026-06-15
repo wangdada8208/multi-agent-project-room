@@ -11,46 +11,24 @@ export function AppLayout() {
     <div className="app-shell">
       <aside className="sidebar">
         <div>
-          <p className="eyebrow" style={{ marginBottom: 2 }}>
-            Project Room
-          </p>
-          <h1 style={{ fontSize: 22, marginBottom: 20 }}>
-            Multi-Agent
-          </h1>
+          <div className="brand">协作空间</div>
+          <div className="brand-sub">Multi-Agent Project Room</div>
 
-          <p style={{ fontSize: 12, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 8 }}>
-            Navigation
-          </p>
+          <div className="nav-label">导航</div>
           <nav>
-            <NavLink to="/rooms" end>
-              📋 All Rooms
-            </NavLink>
-            <NavLink to="/login" end>
-              👤 Profile
-            </NavLink>
+            <NavLink to="/rooms" end>📋 所有房间</NavLink>
+            <NavLink to="/login">👤 登录</NavLink>
           </nav>
 
           {rooms.length > 0 && (
             <>
-              <p
-                style={{
-                  fontSize: 12,
-                  color: "#64748b",
-                  textTransform: "uppercase",
-                  letterSpacing: "0.1em",
-                  marginTop: 24,
-                  marginBottom: 8,
-                }}
-              >
-                Rooms
-              </p>
+              <div className="nav-label" style={{ marginTop: 20 }}>房间列表</div>
               <nav>
                 {rooms.map((room) => (
                   <NavLink
                     key={room.id}
                     to={`/rooms/${room.id}`}
                     className={activeRoomId === room.id ? "active" : ""}
-                    style={{ fontSize: 13 }}
                   >
                     🏠 {room.name}
                   </NavLink>
@@ -60,13 +38,9 @@ export function AppLayout() {
           )}
         </div>
 
-        <div style={{ fontSize: 12, color: "#64748b" }}>
-          {displayName && (
-            <span>
-              👤 {displayName}
-            </span>
-          )}
-        </div>
+        {displayName && (
+          <div className="user-info">👤 {displayName}</div>
+        )}
       </aside>
 
       <main className="main-panel">
