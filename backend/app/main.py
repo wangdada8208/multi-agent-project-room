@@ -7,11 +7,12 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from fastapi.staticfiles import StaticFiles
 
 from app.config import get_settings
 from app.gateway.routes import router as gateway_router
 from app.api.rooms import router as rooms_router
+from app.chat.routes import router as chat_router
+from app.chat.ws_handler import handle_chat
 
 settings = get_settings()
 
@@ -48,8 +49,9 @@ async def global_exception_handler(request: Request, exc: Exception) -> JSONResp
 
 
 # ── Routes ────────────────────────────────────────────
-app.include_router(gateway_router)
-app.include_router(rooms_router)
+app.include_router(gateway_router)  # GET /health
+app.include_router(rooms_router)    # /api/v1/rooms
+app.include_router(chat_router)     # /api/v1/rooms/{id}/messages
 
-# ── Static demo page (keep for now) ───────────────────
-app.mount("/static", StaticFiles(directory="backend/static"), name="static")
+# ── WebSocket ──────────────────────────────────────────
+app.add_websocket_route("/ws/chat/{room_id}", handle_chat)
