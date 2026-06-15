@@ -380,25 +380,25 @@ python local_agent_adapter.py \
 **Frontend 架构**
 
 - [x] 已完成：后端初始 demo（FastAPI + WS + 浏览器页面）
-- [ ] Vite 初始化 `frontend/` 项目（独立的 React 项目）
-- [ ] 配置 TypeScript strict mode
-- [ ] 配置 Tailwind CSS 4.x
-- [ ] 集成 shadcn/ui（Button, Card, Input, Avatar 等基础组件）
-- [ ] 配置 React Router（路由: /login, /rooms/:id）
-- [ ] 配置 TanStack Query（API 客户端封装）
-- [ ] 创建 Zustand store（auth store / chat store / room store）
-- [ ] 基础布局组件（Sidebar + Header + 主内容区）
-- [ ] 登录页 UI（占位，不用真的认证）
-- [ ] 房间列表页 UI
-- [ ] 聊天消息列表（MessageList 组件）
-- [ ] 消息输入框（MessageInput 组件）
-- [ ] 消息气泡组件（区分 human / agent / system 三种样式）
-- [ ] `useWebSocket` Hook（连 Claude 的 `/ws/chat/{room_id}`）
+- [x] Vite 初始化 `frontend/` 项目（独立的 React 项目）
+- [x] 配置 TypeScript strict mode
+- [x] 配置 Tailwind CSS 4.x
+- [x] 集成 shadcn/ui（Button, Card, Input, Avatar 等基础组件）
+- [x] 配置 React Router（路由: /login, /rooms/:id）
+- [x] 配置 TanStack Query（API 客户端封装）
+- [x] 创建 Zustand store（auth store / chat store / room store）
+- [x] 基础布局组件（Sidebar + Header + 主内容区）
+- [x] 登录页 UI（占位，不用真的认证）
+- [x] 房间列表页 UI
+- [x] 聊天消息列表（MessageList 组件）
+- [x] 消息输入框（MessageInput 组件）
+- [x] 消息气泡组件（区分 human / agent / system 三种样式）
+- [x] `useWebSocket` Hook（连 Claude 的 `/ws/chat/{room_id}`）
 - [ ] 验证：发消息 → WebSocket → Claude 后端 → 广播 → 其他人收到
 - [ ] 消息类型展示（普通文字 + Markdown 渲染）
 - [ ] 在线用户列表（从 WS 的 user_online/user_offline 事件）
 - [ ] typing 指示器
-- [ ] 前端 `Dockerfile`
+- [x] 前端 `Dockerfile`
 
 **对接说明（给 Codex）：**
 
