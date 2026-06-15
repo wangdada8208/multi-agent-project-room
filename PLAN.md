@@ -32,7 +32,7 @@
 
 ### 1.2 当前状态
 
-**朋友（Codex）已经完成了初始 demo：** WebSocket 聊天已跑通（in-memory 存储），后端骨架已就绪。
+**Codex 已经完成了初始 demo：** WebSocket 聊天已跑通（in-memory 存储），后端骨架已就绪。
 
 ```
 已完成:
@@ -221,9 +221,9 @@ Codex 先做 → Claude 才能做的依赖:
 
 ---
 
-## 5. Claude 任务清单（你）
+## 5. Claude 任务清单
 
-> 这是 **Claude** 专属部分。Codex 不看这里。
+> 此节仅面向 Claude。Codex 不读此节。
 >
 > 标记说明: [ ] 未开始 [-] 进行中 [x] 已完成
 
@@ -367,9 +367,9 @@ python local_agent_adapter.py \
 
 ---
 
-## 6. Codex 任务清单（朋友）
+## 6. Codex 任务清单
 
-> 这是 **Codex** 专属部分。Claude 不看这里。
+> 此节仅面向 Codex。Claude 不读此节。
 >
 > 标记说明: [ ] 未开始 [-] 进行中 [x] 已完成
 
@@ -682,7 +682,7 @@ W5      修 bug + 写文档
 ### 本周（W1）具体任务
 
 ```
-Claude（你）— 本周做这些:               Codex（朋友）— 本周做这些:
+Claude — 本周任务               Codex — 本周任务
 ─────────────────────────              ─────────────────────────
 □ database.py SQLAlchemy              □ Vite 初始化 frontend/
 □ Alembic 迁移（users/rooms）          □ Tailwind + shadcn/ui
