@@ -248,7 +248,7 @@ Examples:
         "--agent-id", default=None, help="Unique agent ID (auto-generated if omitted)"
     )
     parser.add_argument(
-        "--command", nargs="+", default=["claude", "-p"],
+        "--command", type=str, default="claude -p",
         help="AI command + args (default: claude -p)",
     )
     parser.add_argument(
@@ -257,12 +257,7 @@ Examples:
     )
 
     args = parser.parse_args()
-
-    # Handle quoted command: "claude -p" -> ["claude", "-p"]
-    if len(args.command) == 1 and " " in args.command[0]:
-        args.command = args.command[0].split()
-
-    args = parser.parse_args()
+    args.command = args.command.split()
     agent_id = args.agent_id or f"{args.agent_name.lower().replace(' ', '-')}-{uuid.uuid4().hex[:6]}"
 
     adapter = LocalAgentAdapter(
