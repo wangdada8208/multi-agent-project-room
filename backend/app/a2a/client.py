@@ -1,3 +1,4 @@
+from __future__ import annotations
 """A2A HTTP client — calls remote agents via JSON-RPC."""
 
 import uuid

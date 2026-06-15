@@ -1,3 +1,4 @@
+from __future__ import annotations
 """Approval service — create, list, approve, reject."""
 
 from datetime import datetime, timezone
@@ -25,7 +26,7 @@ async def create_approval(
         description=description,
         risk_level=risk_level,
         status="pending",
-        metadata=metadata,
+        approval_meta=metadata,
     )
     db.add(approval)
     await db.commit()

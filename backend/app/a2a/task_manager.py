@@ -1,3 +1,4 @@
+from __future__ import annotations
 """A2A Task Manager — handles task lifecycle and routing.
 
 State machine:

@@ -1,7 +1,9 @@
+from __future__ import annotations
 """A2A task ORM model — tracks task lifecycle across agents."""
 
 import uuid
 from datetime import datetime, timezone
+from typing import Optional
 from sqlalchemy import String, Text, DateTime, JSON
 from sqlalchemy.orm import Mapped, mapped_column
 from app.core.database import Base
@@ -24,12 +26,12 @@ class A2ATask(Base):
         String(32), nullable=False, default="submitted"
     )
     # submitted | working | completed | failed | canceled | input_required
-    result: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    result: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
     )
-    completed_at: Mapped[datetime | None] = mapped_column(
+    completed_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
 

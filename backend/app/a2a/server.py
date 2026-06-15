@@ -1,3 +1,4 @@
+from __future__ import annotations
 """A2A JSON-RPC server — unified entry point for agent communication.
 
 All A2A methods are routed through POST /a2a.

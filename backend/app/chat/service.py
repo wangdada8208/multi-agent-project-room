@@ -1,3 +1,4 @@
+from __future__ import annotations
 """Chat service: message persistence and retrieval."""
 
 from typing import Literal

@@ -1,3 +1,4 @@
+from __future__ import annotations
 """Agent Discovery — register, discover, and health-check agents."""
 
 from datetime import datetime, timezone

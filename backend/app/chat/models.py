@@ -1,5 +1,7 @@
+from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
+from typing import Optional
 from sqlalchemy import String, Text, DateTime, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column
 from app.core.database import Base
@@ -24,7 +26,7 @@ class Message(Base):
     msg_type: Mapped[str] = mapped_column(
         String(32), nullable=False, default="text"
     )  # text | system | task | proposal | report | approval_request
-    parent_id: Mapped[str | None] = mapped_column(
+    parent_id: Mapped[Optional[str]] = mapped_column(
         String(36), ForeignKey("messages.id"), nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(
