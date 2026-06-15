@@ -236,33 +236,33 @@ Codex 先做 → Claude 才能做的依赖:
 - [x] 初始化 `backend/` 目录结构（Codex 已完成）
 - [x] 创建 `app/config.py` + `app/main.py` + CORS（Codex 已完成）
 - [x] 创建 `.env.example` + `.gitignore`（Codex 已完成）
-- [ ] 创建 `app/core/database.py` — **SQLAlchemy 异步引擎 + session**
-- [ ] 安装 asyncpg + SQLAlchemy 2.0
-- [ ] 创建 `app/core/redis.py` — Redis 连接
-- [ ] 配置 Alembic（初始化 + 配置）
-- [ ] 创建 `users` 表（Alembic 迁移）
-- [ ] 创建 `rooms` 表（Alembic 迁移）
-- [ ] 编写 `backend/Dockerfile`
-- [ ] 编写 `docker-compose.yml`（postgres + redis + backend）
-- [ ] 验证 `docker compose up` 一键启动成功
+- [x] 创建 `app/core/database.py` — **SQLAlchemy 异步引擎 + session**
+- [x] 安装 asyncpg + SQLAlchemy 2.0
+- [-] 创建 `app/core/redis.py` — Redis 连接（MVP 暂不启用）
+- [x] 配置 Alembic（初始化 + 配置）
+- [x] 创建 `users` 表（Alembic 迁移）
+- [x] 创建 `rooms` 表（Alembic 迁移）
+- [x] 编写 `backend/Dockerfile`
+- [x] 编写 `docker-compose.yml`（postgres + redis + backend）
+- [x] 验证 `docker compose up` 一键启动成功
 
 **① Gateway**
 
-- [ ] 创建 `app/gateway/` 模块
-- [ ] 统一路由挂载（所有模块的 router 汇聚到 main.py）
-- [ ] 全局异常处理中间件
-- [ ] 健康检查 `GET /health`（Codex 已做基础版）
+- [x] 创建 `app/gateway/` 模块
+- [x] 统一路由挂载（所有模块的 router 汇聚到 main.py）
+- [x] 全局异常处理中间件
+- [x] 健康检查 `GET /health`（Codex 已做基础版）
 
 **② Chat（改造 Codex 的 demo 为持久化版）**
 
-- [ ] 创建 `app/chat/models.py` — `Message` ORM 模型
-- [ ] 创建 `app/chat/routes.py` — `GET /api/v1/rooms/{id}/messages`
-- [ ] 创建 `app/chat/ws_handler.py` — WebSocket 持久化版
-- [ ] 创建 `app/chat/service.py` — 消息存储 + 广播业务逻辑
-- [ ] 消息类型: text / system / task / proposal / report / approval_request
-- [ ] 心跳检测（ping/pong，30s）
-- [ ] 断线重连
-- [ ] **验证：** 发消息 → 存 PostgreSQL → 广播 → 刷新后历史仍在
+- [x] 创建 `app/chat/models.py` — `Message` ORM 模型
+- [x] 创建 `app/chat/routes.py` — `GET /api/v1/rooms/{id}/messages`
+- [x] 创建 `app/chat/ws_handler.py` — WebSocket 持久化版
+- [x] 创建 `app/chat/service.py` — 消息存储 + 广播业务逻辑
+- [x] 消息类型: text / system / task / proposal / report / approval_request
+- [x] 心跳检测（ping/pong，30s）
+- [x] 断线重连
+- [x] **验证：** 发消息 → 存 PostgreSQL → 广播 → 刷新后历史仍在
 
 ### 5.2 W2 — A2A Hub（核心）
 
@@ -270,46 +270,46 @@ Codex 先做 → Claude 才能做的依赖:
 
 **④ A2A Hub — Server**
 
-- [ ] 创建 `app/a2a/agent_card.py` — AgentCard Pydantic 模型
-- [ ] 创建 `app/a2a/server.py` — `GET /a2a/.well-known/agent-card`
-- [ ] `POST /a2a` — JSON-RPC 统一入口
-- [ ] 方法: `tasks/send`
-- [ ] 方法: `tasks/get`
-- [ ] 方法: `tasks/cancel`
-- [ ] 方法: `tasks/list`
-- [ ] 方法: `message/send`（推消息到聊天室）
-- [ ] 方法: `agent/getCard`
-- [ ] 方法: `agent/list`
+- [x] 创建 `app/a2a/agent_card.py` — AgentCard Pydantic 模型
+- [x] 创建 `app/a2a/server.py` — `GET /a2a/.well-known/agent-card`
+- [x] `POST /a2a` — JSON-RPC 统一入口
+- [x] 方法: `tasks/send`
+- [x] 方法: `tasks/get`
+- [x] 方法: `tasks/cancel`
+- [x] 方法: `tasks/list`
+- [x] 方法: `message/send`（推消息到聊天室）
+- [x] 方法: `agent/getCard`
+- [x] 方法: `agent/list`
 
 **④ A2A Hub — Client**
 
-- [ ] 创建 `app/a2a/client.py` — `A2AClient` 类
-- [ ] `get_agent_card(url)` — 获取远程 Agent Card
-- [ ] `send_task(task_id, query)` — 发送任务
-- [ ] `get_task(task_id)` — 查询任务
-- [ ] 创建 `A2AClientPool` — 连接池管理
+- [x] 创建 `app/a2a/client.py` — `A2AClient` 类
+- [x] `get_agent_card(url)` — 获取远程 Agent Card
+- [x] `send_task(task_id, query)` — 发送任务
+- [x] `get_task(task_id)` — 查询任务
+- [x] 创建 `A2AClientPool` — 连接池管理
 
 **④ A2A Hub — Task Manager**
 
-- [ ] 创建 `app/a2a/task_manager.py`
-- [ ] 状态: submitted → working → completed / failed / canceled
-- [ ] 本地任务处理
-- [ ] 远程任务转发
-- [ ] 创建 `a2a_tasks` 表（Alembic 迁移）
+- [x] 创建 `app/a2a/task_manager.py`
+- [x] 状态: submitted → working → completed / failed / canceled
+- [x] 本地任务处理
+- [x] 远程任务转发
+- [x] 创建 `a2a_tasks` 表（Alembic 迁移）
 
 **④ A2A Hub — Discovery**
 
-- [ ] 创建 `app/a2a/discovery.py`
-- [ ] Agent 注册流程
-- [ ] 定期健康检查 → 标记离线
-- [ ] 按能力查询可用 Agent
+- [x] 创建 `app/a2a/discovery.py`
+- [x] Agent 注册流程
+- [x] 定期健康检查 → 标记离线
+- [x] 按能力查询可用 Agent
 
 **④ A2A Hub — Chat Bridge**
 
-- [ ] 聊天室新消息 → 触发 A2A 任务委派
-- [ ] A2A 任务完成 → 推回聊天室
-- [ ] `A2AService.send_to_room()`
-- [ ] `A2AService.delegating_task_via_a2a()`
+- [x] 聊天室新消息 → 触发 A2A 任务委派
+- [x] A2A 任务完成 → 推回聊天室
+- [x] `A2AService.send_to_room()`
+- [x] `A2AService.delegating_task_via_a2a()`
 
 **验证：**
 ```
@@ -322,34 +322,34 @@ Codex 先做 → Claude 才能做的依赖:
 
 **⑦ Approval 后端**
 
-- [ ] 创建 `app/approval/models.py` — `Approval` ORM 模型（Alembic 迁移）
-- [ ] 创建 `app/approval/routes.py`
-- [ ] `POST /api/v1/rooms/{id}/approvals` — 创建审批
-- [ ] `GET /api/v1/rooms/{id}/approvals` — 列审批
-- [ ] `POST /api/v1/approvals/{id}/approve` — 批准
-- [ ] `POST /api/v1/approvals/{id}/reject` — 拒绝
-- [ ] 审批事件 → WebSocket 通知房间
-- [ ] 审批通过 → 通知申请者
+- [x] 创建 `app/approval/models.py` — `Approval` ORM 模型（Alembic 迁移）
+- [x] 创建 `app/approval/routes.py`
+- [x] `POST /api/v1/rooms/{id}/approvals` — 创建审批
+- [x] `GET /api/v1/rooms/{id}/approvals` — 列审批
+- [x] `POST /api/v1/approvals/{id}/approve` — 批准
+- [x] `POST /api/v1/approvals/{id}/reject` — 拒绝
+- [x] 审批事件 → WebSocket 通知房间
+- [x] 审批通过 → 通知申请者
 
 **收尾**
 
-- [ ] W1 模块加单元测试
-- [ ] W2 A2A 模块加错误处理 + 重试
+- [x] W1 模块加单元测试（13 个测试）
+- [-] W2 A2A 模块加错误处理 + 重试（基础错误处理已完成）
 - [ ] 所有 Claude 模块加日志
 - [ ] 写 Claude 模块的 README
 
 ### 5.4 W4 — 联调 + 部署
 
-- [ ] A2A Hub ↔ Agent 模块联调（Claude ↔ Codex）
-- [ ] A2A Hub ↔ Knowledge 联调
-- [ ] A2A Hub ↔ Repository 联调
-- [ ] A2A Hub ↔ Approval 联调
-- [ ] 端到端测试：聊天室 → A2A 派任务 → 对方处理 → 结果回聊天室
-- [ ] 服务器环境准备（Ubuntu + Docker）
-- [ ] 完整 `docker-compose.yml`（含前端）
-- [ ] Caddy HTTPS 配置
-- [ ] GitHub Actions CI/CD
-- [ ] 本地 `local_agent_adapter.py`（Claude 适配器）
+- [-] A2A Hub ↔ Agent 模块联调（依赖 Codex 的 Agent 模块完成）
+- [-] A2A Hub ↔ Knowledge 联调（依赖 Codex 的 Knowledge 模块）
+- [-] A2A Hub ↔ Repository 联调（依赖 Codex 的 Repository 模块）
+- [x] A2A Hub ↔ Approval 联调
+- [-] 端到端测试（本地适配器已通过，跨 Agent 需 Codex 适配器上线）
+- [x] 服务器环境准备（Ubuntu + Docker）
+- [x] 完整 `docker-compose.yml`（含前端）
+- [x] Nginx + Let's Encrypt HTTPS 配置
+- [x] GitHub Actions CI/CD（自动测试 + 部署）
+- [x] 本地 `local_agent_adapter.py`（Claude 适配器）
 
 ```bash
 # Claude 适配器用法
@@ -361,8 +361,8 @@ python local_agent_adapter.py \
 
 ### 5.5 W5 — 完善
 
-- [ ] 修 bug
-- [ ] 补文档
+- [x] 修 bug（system消息/senderId/WS路由/CLI解析 等）
+- [/] 补文档（PLAN.md/TECHNICAL-IMPLEMENTATION.md 已完善）
 - [ ] Claude 模块的测试覆盖
 
 ---
@@ -509,8 +509,8 @@ WebSocket 会实时推送审批事件
 
 ### 6.5 W5 — 完善
 
-- [ ] 修 bug
-- [ ] 补文档
+- [x] 修 bug（system消息/senderId/WS路由/CLI解析 等）
+- [/] 补文档（PLAN.md/TECHNICAL-IMPLEMENTATION.md 已完善）
 - [ ] Codex 模块的测试覆盖
 - [ ] 本地 `local_agent_adapter.py`（Codex 适配器）
 
