@@ -19,6 +19,7 @@ import app.models.room  # noqa: F401
 import app.models.agent_card  # noqa: F401
 import app.a2a.models  # noqa: F401
 import app.chat.models  # noqa: F401
+import app.approval.models  # noqa: F401
 
 config = context.config
 

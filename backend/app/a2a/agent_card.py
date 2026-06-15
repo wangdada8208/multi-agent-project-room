@@ -37,6 +37,11 @@ def build_hub_card(public_url: str) -> AgentCard:
                   description="向其他 Agent 派发任务并追踪状态"),
             Skill(id="agent-mgmt", name="Agent 管理",
                   description="Agent 注册与发现"),
-            Skill(id="approval", name="审批", description="审批流程管理"),
+            Skill(id="approval", name="审批",
+                  description="审批流程管理 — 创建/审批/拒绝"),
+            Skill(id="knowledge", name="知识库",
+                  description="项目文档管理与搜索", owner="Codex"),
+            Skill(id="repository", name="仓库",
+                  description="Git 仓库状态查询", owner="Codex"),
         ],
     )
