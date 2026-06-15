@@ -36,24 +36,28 @@
 
 ```
 已完成:
-  backend/ 目录结构             ✅ Codex
-  config.py + main.py + CORS   ✅ Codex
-  WebSocket 聊天 Room API       ✅ Codex
-  ConnectionManager             ✅ Codex
-  浏览器 Demo 页面              ✅ Codex
-  .env.example / .gitignore     ✅ Codex
+  后端骨架 + Config + CORS               ✅ Codex
+  WebSocket + ConnectionManager         ✅ Codex
+  PostgreSQL 持久化                      ✅ Claude
+  Docker 容器化                          ✅ Claude
+  Alembic 数据库迁移                      ✅ Claude
+  A2A Hub (JSON-RPC + Agent Card)       ✅ Claude
+  Approval 审批 API + DB + WS通知       ✅ Claude
+  本地适配器                             ✅ Claude
+  部署上线 (hub.wangdada8208.xyz)        ✅ Claude
+  CI/CD (GitHub Actions)                ✅ Claude
+  单元测试 (13个)                        ✅ Claude
+  Frontend 骨架 (Vite + React)          ✅ Codex
+  聊天 UI + WebSocket对接               ✅ Codex
 
-待完成:
-  PostgreSQL 持久化             ❌ Claude
-  Docker 容器化                 ❌ Claude
-  Redis                        ❌ Claude
-  A2A Hub                      ❌ Claude
-  Frontend（React）              ❌ Codex
-  Agent 系统                    ❌ Codex
-  Knowledge 知识库               ❌ Codex
-  Repository Git 面板           ❌ Codex
-  Approval 审批                 ❌ Claude + Codex
-  部署上线                      ❌ Claude + Codex
+待完成 (Codex):
+  Frontend: Agent 面板                   ❌ Codex
+  Frontend: Knowledge 知识库 UI          ❌ Codex
+  Frontend: Repository Git 面板          ❌ Codex
+  Frontend: Approval 审批卡片            ❌ Codex
+  后端: Agent 注册 API + 模型            ❌ Codex
+  后端: Knowledge 文档 API              ❌ Codex
+  后端: Repository Git API              ❌ Codex
 ```
 
 ### 1.3 核心原则
