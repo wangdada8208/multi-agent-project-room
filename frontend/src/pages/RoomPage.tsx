@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { MessageInput } from "../components/chat/MessageInput";
 import { MessageList } from "../components/chat/MessageList";
@@ -21,6 +21,14 @@ function getOrCreateSenderId(): string {
   return id;
 }
 
+const statusLabel: Record<string, string> = {
+  connecting: "Connecting...",
+  open: "Connected",
+  closed: "Disconnected",
+  error: "Error",
+  idle: "Idle",
+};
+
 export function RoomPage() {
   const params = useParams();
   const roomId = params.roomId ?? "demo-room";
@@ -32,10 +40,12 @@ export function RoomPage() {
   const setMessages = useChatStore((state) => state.setMessages);
   const displayName = useAuthStore((state) => state.displayName);
   const setActiveRoomId = useRoomStore((state) => state.setActiveRoomId);
+  const activeRoomId = useRoomStore((state) => state.activeRoomId);
 
   const messagesQuery = useQuery({
     queryKey: ["rooms", roomId, "messages"],
     queryFn: () => fetchMessages(roomId),
+    enabled: !!roomId,
   });
 
   useEffect(() => {
@@ -52,19 +62,51 @@ export function RoomPage() {
     return sendMessage({ content, senderId, senderType });
   }
 
+  const statusClass =
+    connectionStatus === "open"
+      ? "open"
+      : connectionStatus === "connecting"
+      ? "connecting"
+      : "closed";
+
   return (
     <section className="room-page">
       <header className="room-header">
         <div>
-          <p className="eyebrow">Room</p>
-          <h2>{roomId}</h2>
+          <Link
+            to="/rooms"
+            style={{ color: "#93c5fd", fontSize: 13, marginBottom: 4, display: "inline-block" }}
+          >
+            ← Back to rooms
+          </Link>
+          <h2 style={{ margin: 0, fontSize: 20 }}>{roomId.slice(0, 16)}...</h2>
           <p className="room-subtitle">Signed in as {displayName}</p>
         </div>
-        <span className={`connection-pill ${connectionStatus}`}>{connectionStatus}</span>
+        <span className={`connection-pill ${statusClass}`}>
+          <span
+            style={{
+              display: "inline-block",
+              width: 8,
+              height: 8,
+              borderRadius: "50%",
+              marginRight: 6,
+              background:
+                connectionStatus === "open"
+                  ? "#22c55e"
+                  : connectionStatus === "connecting"
+                  ? "#eab308"
+                  : "#ef4444",
+            }}
+          />
+          {statusLabel[connectionStatus] || connectionStatus}
+        </span>
       </header>
 
       {messagesQuery.isError && (
-        <div className="error-text">Message history failed to load.</div>
+        <div className="message-list" style={{ justifyContent: "center", textAlign: "center" }}>
+          <p style={{ color: "#f87171" }}>Failed to load messages.</p>
+          <p style={{ color: "#64748b", fontSize: 13 }}>Make sure the backend server is running.</p>
+        </div>
       )}
 
       <MessageList messages={messages} />

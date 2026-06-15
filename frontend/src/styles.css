@@ -158,6 +158,11 @@ h2 {
   border-color: #22c55e;
 }
 
+.connection-pill.connecting {
+  color: #fef9c3;
+  border-color: #eab308;
+}
+
 .connection-pill.error,
 .connection-pill.closed {
   color: #fecaca;
