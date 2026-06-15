@@ -46,13 +46,13 @@ jobs:
         env:
           MAPR_DATABASE_URL: postgresql+asyncpg://postgres:test_password@localhost:5432/agent_room_test
         run: |
-          cd backend && python3 -m alembic upgrade head
+          python3 -m alembic upgrade head
 
       - name: Run tests
         env:
           MAPR_DATABASE_URL: postgresql+asyncpg://postgres:test_password@localhost:5432/agent_room_test
         run: |
-          cd backend && python3 -m pytest tests/ -v
+          python3 -m pytest backend/tests/ -v
 
   deploy:
     needs: test
@@ -72,6 +72,6 @@ jobs:
             cd /opt/multi-agent-project-room
             git pull origin main
             docker compose up -d --build backend frontend
-            docker compose exec -T backend python3 -m alembic upgrade head
+            docker compose exec -T backend python3 -m alembic -c /app/alembic.ini upgrade head
             docker compose exec -T postgres psql -U postgres -d agent_room -c "ALTER TABLE messages DROP CONSTRAINT IF EXISTS messages_sender_id_fkey;" 2>/dev/null || true
             echo "Deploy complete"
