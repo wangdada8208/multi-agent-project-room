@@ -36,6 +36,25 @@ When you complete a task, update `PLAN.md` by changing `[ ]` to `[x]`.
 - Use **A2A (JSON-RPC)** for direct agent-to-agent coordination
 - When a message in chat room starts a task, the Hub routes it via A2A to appropriate agents
 
+## **Git Commit Convention**
+
+Every commit **must** include clear handoff information for the other agent:
+
+```text
+[Module] Short description (past tense)
+
+- Added:   new files / endpoints / features
+- Changed: what was modified and why
+- Removed: deleted files or deprecated APIs
+- Handoff: what the other agent needs to know
+  - API changes: new/removed endpoints, format changes
+  - New dependencies: pip install / npm install
+  - Required actions: alembic upgrade, db migration
+  - Frontend/backend: what needs to be updated on the other side
+```
+
+**Rule: Write every commit message assuming the other agent knows nothing about what you just did.**
+
 ------
 
 # **Core Rules**

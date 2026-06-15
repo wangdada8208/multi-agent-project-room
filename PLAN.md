@@ -524,7 +524,72 @@ python local_agent_adapter.py \
 
 ---
 
-## 7. A2A 协作协议
+## 7. Git 提交规范
+
+### 7.1 每次提交必须包含的信息
+
+无论 Claude 还是 Codex，每次 `git push` 时，commit message 必须包含以下内容，方便对方对接：
+
+```
+提交格式:
+[模块名] 做了什么
+
+- 新增: 具体新增了什么文件/功能
+- 修改: 改了什么、为什么改
+- 对接注意: 对方需要知道的事（API 变化、依赖新增、配置项等）
+```
+
+### 7.2 模板与示例
+
+```
+[Chat] WebSocket 消息持久化改为 PostgreSQL
+
+- 新增: app/chat/models.py — Message ORM 模型
+- 新增: app/chat/service.py — 消息业务逻辑
+- 修改: ws_handler.py — 存储从 in-memory 改为 DB
+- 删除: room_store.py — 不再使用（已迁移到 DB）
+- 对接注意: WebSocket 消息格式不变，前端不需要改
+  新增依赖: pip install asyncpg sqlalchemy
+  需要执行: alembic upgrade head 建表
+```
+
+```
+[Agent] Agent 注册 API + 面板 UI
+
+- 新增: backend/app/agent/ 模块（routes, models, service）
+- 新增: frontend/src/components/agent/AgentPanel.tsx
+- 修改: main.py 挂载了 agent router
+- 对接注意: Claude 的 A2A 可调用 GET /api/v1/agents 获取 Agent 列表
+  响应格式: {"data": [{"id", "name", "status", "capabilities"}]}
+```
+
+### 7.3 必须写清楚的内容
+
+```
+1. 新增了哪些文件             → 让对方知道去哪里看
+2. 改了哪些文件               → 避免合并冲突
+3. API 变化                  → 新增/修改/删除的端点
+4. 新增的依赖                 → pip install / npm install
+5. 需要执行的操作              → alembic upgrade / npx prisma
+6. 对方需要配合做什么           → "前端需要对接这个 API"
+```
+
+### 7.4 提交前后
+
+```
+提交前:
+  git add <files>
+  git commit -m "[Xxx] 清晰描述做了什么"
+  # 写清楚对接信息，假设对方对你的改动一无所知
+
+提交后:
+  在聊天室说一声:
+  "已提交 [Xxx]，新增了 Y 功能，你那边 pull 后需要执行 Z"
+```
+
+---
+
+## 8. A2A 协作协议
 
 ### 7.1 Agent Card
 
@@ -610,7 +675,7 @@ A2A（JSON-RPC）:
 
 ---
 
-## 8. 接口约定
+## 9. 接口约定
 
 ### 8.1 通用规范
 
@@ -661,7 +726,7 @@ A2A（JSON-RPC）:
 
 ---
 
-## 9. 当前进度
+## 10. 当前进度
 
 ```
 周次     Claude                            Codex
