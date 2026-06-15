@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -58,4 +58,6 @@ app.include_router(a2a_router)        # /a2a (JSON-RPC + Agent Card)
 app.include_router(approval_router)   # /api/v1/approvals
 
 # ── WebSocket ──────────────────────────────────────────
-app.add_websocket_route("/ws/chat/{room_id}", handle_chat)
+@app.websocket("/ws/chat/{room_id}")
+async def chat_websocket(websocket: WebSocket) -> None:
+    await handle_chat(websocket, websocket.path_params["room_id"])
