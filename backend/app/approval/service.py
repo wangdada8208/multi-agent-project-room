@@ -5,6 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.approval.models import Approval
+from app.ws.connection_manager import connection_manager
 
 
 async def create_approval(
@@ -29,6 +30,19 @@ async def create_approval(
     db.add(approval)
     await db.commit()
     await db.refresh(approval)
+
+    # Broadcast approval_update event
+    approval_data = approval.to_dict()
+    await connection_manager.broadcast(
+        room_id,
+        {'type': 'approval_update', 'approval': approval_data},
+    )
+    # Broadcast system message for human readability
+    await connection_manager.broadcast(
+        room_id,
+        {'type': 'system', 'content': f'📋 审批请求: {title} ({risk_level})'},
+    )
+
     return approval
 
 
@@ -73,4 +87,20 @@ async def decide_approval(
     approval.decided_at = datetime.now(timezone.utc)
     await db.commit()
     await db.refresh(approval)
+
+    # Broadcast approval_update event
+    approval_data = approval.to_dict()
+    room_id_local = approval.room_id
+    await connection_manager.broadcast(
+        room_id_local,
+        {'type': 'approval_update', 'approval': approval_data},
+    )
+    # Broadcast system message for human readability
+    emoji = '✅' if decision == 'approved' else '❌'
+    status_text = '审批已批准' if decision == 'approved' else '审批已拒绝'
+    await connection_manager.broadcast(
+        room_id_local,
+        {'type': 'system', 'content': f'{emoji} {status_text}: {approval.title}'},
+    )
+
     return approval
