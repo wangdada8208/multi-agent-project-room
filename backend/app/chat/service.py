@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.chat.models import Message
 from app.models.room import Room
+from app.models.user import User
 
 
 MessageType = Literal[
@@ -25,6 +26,18 @@ async def save_message(
     parent_id: str | None = None,
 ) -> Message:
     """Persist a message and return it."""
+    user = await db.get(User, sender_id)
+    if user is None:
+        db.add(
+            User(
+                id=sender_id,
+                username=sender_id[:64],
+                display_name=sender_id[:128],
+                user_type=sender_type if sender_type in {"human", "agent"} else "human",
+            )
+        )
+        await db.flush()
+
     message = Message(
         room_id=room_id,
         sender_id=sender_id,

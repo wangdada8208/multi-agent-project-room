@@ -394,7 +394,7 @@ python local_agent_adapter.py \
 - [x] 消息输入框（MessageInput 组件）
 - [x] 消息气泡组件（区分 human / agent / system 三种样式）
 - [x] `useWebSocket` Hook（连 Claude 的 `/ws/chat/{room_id}`）
-- [ ] 验证：发消息 → WebSocket → Claude 后端 → 广播 → 其他人收到
+- [x] 验证：发消息 → WebSocket → Claude 后端 → 广播 → 其他人收到
 - [ ] 消息类型展示（普通文字 + Markdown 渲染）
 - [ ] 在线用户列表（从 WS 的 user_online/user_offline 事件）
 - [ ] typing 指示器
@@ -733,7 +733,7 @@ A2A（JSON-RPC）:
 ────────────────────────────────────────────────────────────────
 W1      ⑧ Infra ✅                         Frontend 骨架 ✅
         ① Gateway ✅                       聊天 UI + useWebSocket ✅
-        ② Chat 持久化 ✅                   WS 往返验证待完成
+        ② Chat 持久化 ✅                   WS 往返验证 ✅
 ────────────────────────────────────────────────────────────────
 W2      ④ A2A Hub ✅                       ③ Agent 全栈（待 Codex）
 ────────────────────────────────────────────────────────────────
