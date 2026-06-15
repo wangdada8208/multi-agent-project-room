@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Multi-Agent Project Room Demo</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: #0f172a;
+        color: #e5e7eb;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+      }
+
+      main {
+        width: min(960px, calc(100vw - 32px));
+        height: min(720px, calc(100vh - 32px));
+        border: 1px solid #334155;
+        border-radius: 24px;
+        background: linear-gradient(145deg, #111827, #0f172a);
+        box-shadow: 0 30px 80px rgb(0 0 0 / 0.35);
+        display: grid;
+        grid-template-rows: auto 1fr auto;
+        overflow: hidden;
+      }
+
+      header {
+        padding: 22px 26px;
+        border-bottom: 1px solid #334155;
+      }
+
+      h1 {
+        margin: 0 0 6px;
+        font-size: 24px;
+      }
+
+      p {
+        margin: 0;
+        color: #94a3b8;
+      }
+
+      #messages {
+        padding: 20px;
+        overflow: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      .message {
+        padding: 12px 14px;
+        border: 1px solid #334155;
+        border-radius: 16px;
+        background: #111827;
+      }
+
+      .meta {
+        margin-bottom: 6px;
+        color: #93c5fd;
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+      }
+
+      .system .meta {
+        color: #fbbf24;
+      }
+
+      form {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 12px;
+        padding: 18px;
+        border-top: 1px solid #334155;
+      }
+
+      input, select, button {
+        border: 1px solid #334155;
+        border-radius: 12px;
+        background: #020617;
+        color: #e5e7eb;
+        padding: 12px 14px;
+        font: inherit;
+      }
+
+      .controls {
+        display: flex;
+        gap: 10px;
+      }
+
+      button {
+        cursor: pointer;
+        background: #2563eb;
+        border-color: #3b82f6;
+        font-weight: 700;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>Multi-Agent Project Room Demo</h1>
+        <p>Room: <strong>demo-room</strong> · WebSocket chat + in-memory message history</p>
+      </header>
+
+      <section id="messages" aria-live="polite"></section>
+
+      <form id="composer">
+        <input id="content" autocomplete="off" placeholder="Type a room message..." />
+        <div class="controls">
+          <select id="senderType" aria-label="Sender type">
+            <option value="human">Human</option>
+            <option value="agent">Agent</option>
+          </select>
+          <button type="submit">Send</button>
+        </div>
+      </form>
+    </main>
+
+    <script>
+      const roomId = "demo-room";
+      const senderId = `browser-${Math.random().toString(16).slice(2, 8)}`;
+      const messagesEl = document.querySelector("#messages");
+      const form = document.querySelector("#composer");
+      const input = document.querySelector("#content");
+      const senderType = document.querySelector("#senderType");
+
+      function renderMessage(message, isSystem = false) {
+        const item = document.createElement("article");
+        item.className = `message ${isSystem || message.sender_type === "system" ? "system" : ""}`;
+        const meta = document.createElement("div");
+        meta.className = "meta";
+        meta.textContent = isSystem
+          ? "system"
+          : `${message.sender_type} · ${message.sender_id} · ${message.msg_type}`;
+        const content = document.createElement("div");
+        content.textContent = isSystem ? message.content : message.content;
+        item.append(meta, content);
+        messagesEl.append(item);
+        messagesEl.scrollTop = messagesEl.scrollHeight;
+      }
+
+      async function loadHistory() {
+        const res = await fetch(`/api/v1/rooms/${roomId}/messages`);
+        const data = await res.json();
+        data.messages.forEach((message) => renderMessage(message));
+      }
+
+      const protocol = window.location.protocol === "https:" ? "wss" : "ws";
+      const socket = new WebSocket(`${protocol}://${window.location.host}/ws/chat/${roomId}`);
+
+      socket.addEventListener("message", (event) => {
+        const payload = JSON.parse(event.data);
+        if (payload.type === "message") renderMessage(payload.message);
+        if (payload.type === "system") renderMessage({ content: payload.content }, true);
+        if (payload.type === "error") renderMessage({ content: payload.message }, true);
+      });
+
+      form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        const content = input.value.trim();
+        if (!content) return;
+
+        socket.send(JSON.stringify({
+          type: "message",
+          sender_id: senderId,
+          sender_type: senderType.value,
+          msg_type: "text",
+          content,
+        }));
+        input.value = "";
+      });
+
+      loadHistory();
+    </script>
+  </body>
+</html>

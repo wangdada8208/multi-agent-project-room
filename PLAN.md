@@ -125,11 +125,11 @@ multi-agent-project-room/
 
 **后端骨架**
 
-- [ ] 初始化 `backend/` 目录结构
-- [ ] 创建 `config.py`（环境变量 → Pydantic Settings）
+- [x] 初始化 `backend/` 目录结构
+- [x] 创建 `config.py`（环境变量 → Pydantic Settings）
 - [ ] 创建 `database.py`（SQLAlchemy 异步引擎 + session）
-- [ ] 创建 `main.py`（FastAPI 应用入口 + 生命周期）
-- [ ] 配置 CORS
+- [x] 创建 `main.py`（FastAPI 应用入口 + 生命周期）
+- [x] 配置 CORS
 - [ ] 配置 Alembic 数据库迁移
 
 **数据库**
@@ -146,8 +146,8 @@ multi-agent-project-room/
 
 **启动脚本**
 
-- [ ] 创建 `.env.example`
-- [ ] 创建一键启动脚本 `scripts/start.sh`
+- [x] 创建 `.env.example`
+- [x] 创建一键启动脚本 `scripts/start.sh`
 
 ### 3.2 技术说明
 
