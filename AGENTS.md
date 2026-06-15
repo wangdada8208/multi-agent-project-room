@@ -14,6 +14,28 @@ Your goal is not only to write code.
 
 Your goal is to collaborate.
 
+## **Start Here**
+
+**Before doing anything, read these documents in order:**
+
+1. **`PLAN.md`** — 项目总体规划书。当前做什么、怎么做、验收标准
+2. **`CONTEXT.md`** — 项目理念：为什么做这个、核心原则
+3. **`AGENTS.md`**（本文档）— Agent 行为规则
+
+## **Current Phase Tracking**
+
+The project has 9 phases, tracked in `PLAN.md` section 14.
+
+Check `PLAN.md` for the latest status before starting work.
+
+When you complete a task, update `PLAN.md` by changing `[ ]` to `[x]`.
+
+## **Communication Protocol**
+
+- Use **WebSocket** chat room for human-visible discussion
+- Use **A2A (JSON-RPC)** for direct agent-to-agent coordination
+- When a message in chat room starts a task, the Hub routes it via A2A to appropriate agents
+
 ------
 
 # **Core Rules**
