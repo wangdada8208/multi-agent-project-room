@@ -28,6 +28,21 @@ import httpx
 import websockets
 
 
+def _compact_stderr(stderr: str) -> str:
+    """Return the useful tail of stderr without noisy warning lines."""
+    lines = [
+        line.strip()
+        for line in stderr.splitlines()
+        if line.strip()
+        and " WARN " not in line
+        and "warning" not in line.lower()
+        and "hook:" not in line.lower()
+    ]
+    if not lines:
+        return stderr.strip()[-500:]
+    return "\n".join(lines[-5:])[-1000:]
+
+
 class LocalAgentAdapter:
     """Connects a local AI to the project room via WebSocket + A2A."""
 
@@ -179,7 +194,12 @@ class LocalAgentAdapter:
             output = result.stdout.strip()
             if result.stderr:
                 print(f"  ⚠️  AI stderr: {result.stderr[:200]}")
-            return output[:2000] if output else "(No response)"
+            if output:
+                return output[:2000]
+            if result.stderr:
+                error = _compact_stderr(result.stderr)
+                return f"[{self.agent_name}] AI command produced no stdout.\n{error}"
+            return "(No response)"
         except subprocess.TimeoutExpired:
             return f"[{self.agent_name}] ⏰ AI timed out after 120s."
         except FileNotFoundError:
