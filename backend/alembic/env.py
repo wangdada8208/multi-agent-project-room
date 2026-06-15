@@ -16,6 +16,9 @@ from app.core.database import Base
 # Import all models so Alembic detects them
 import app.models.user  # noqa: F401
 import app.models.room  # noqa: F401
+import app.models.agent_card  # noqa: F401
+import app.a2a.models  # noqa: F401
+import app.chat.models  # noqa: F401
 
 config = context.config
 
