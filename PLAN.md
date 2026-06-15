@@ -731,30 +731,28 @@ A2A（JSON-RPC）:
 ```
 周次     Claude                            Codex
 ────────────────────────────────────────────────────────────────
-W1      ⑧ Infra（进行中）                  Frontend 骨架（未开始）
-        ① Gateway                         聊天 UI + WS 对接
-        ② Chat 持久化
+W1      ⑧ Infra ✅                         Frontend 骨架（待 Codex）
+        ① Gateway ✅                       聊天 UI + WS 对接
+        ② Chat 持久化 ✅
 ────────────────────────────────────────────────────────────────
-W2      ④ A2A Hub                         ③ Agent 全栈
+W2      ④ A2A Hub ✅                       ③ Agent 全栈（待 Codex）
 ────────────────────────────────────────────────────────────────
-W3      ⑦ Approval 后端                    ⑤ Knowledge + ⑥ Repository
+W3      ⑦ Approval 后端（进行中）           ⑤ Knowledge + ⑥ Repository
 ────────────────────────────────────────────────────────────────
 W4      联调 + 部署                         ⑦ Approval 前端 + UI
 ────────────────────────────────────────────────────────────────
 W5      修 bug + 写文档
 ```
 
-### 本周（W1）具体任务
+### 本周（W3）具体任务
 
 ```
 Claude — 本周任务               Codex — 本周任务
-─────────────────────────              ─────────────────────────
-□ database.py SQLAlchemy              □ Vite 初始化 frontend/
-□ Alembic 迁移（users/rooms）          □ Tailwind + shadcn/ui
-□ Dockerfile + docker-compose         □ React Router + Zustand
-□ 替换 in-memory 为 PostgreSQL        □ 聊天组件 + useWebSocket
-□ Gateway 路由 + 异常处理              □ 对接 Claude 的 WS
-□ Chat 持久化改造                      □ 前端 Dockerfile
+─────────────────────────       ─────────────────────────
+□ Approval 审批 API              □ Frontend: Vite + Tailwind + shadcn/ui
+□ Approval 状态管理               □ Frontend: 聊天组件 + useWebSocket
+□ Approval WebSocket 通知         □ Frontend: Agent 面板
+□ 收尾前面模块的测试               □ Agent API + 模型
 ```
 
 ---
