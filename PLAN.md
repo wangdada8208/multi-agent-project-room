@@ -2,7 +2,7 @@
 
 > 让多个人类与多个 AI Agent 在同一项目空间中协作开发软件
 >
-> 版本: v1.0 | 更新: 2026-06-15
+> 版本: v2.0 | 更新: 2026-06-15
 
 ---
 
@@ -13,595 +13,619 @@
 本文档是项目的**总体规划书**。同时面向人类和 AI Agent：
 
 - **人类**用来看进度、做决策、审批
-- **AI Agent**用来理解项目上下文、知道哪些任务是自己该干的
+- **AI Agent**（Claude、Codex）用来理解分工、认领任务、按步骤执行
 
-### 0.2 如何阅读
-
-```
-每个 Phase 的结构:
-─────────────────
-## Phase X: 名称
-  Goal:         这个阶段要达成什么
-  Depends On:   依赖的前置阶段
-  Tasks:        [ ] 未完成  [x] 已完成  [-] 进行中
-                 每个任务带有 [Claude] [Codex] [协作] 标签
-  Tech Notes:   技术选型说明
-  Completion:   验收标准
-```
-
-### 0.3 Agent 分工说明
-
-```
-每个任务前的标签表示负责人：
-
-[Claude]  → 我的 Agent（你这边）负责
-[Codex]   → 朋友的 Agent 负责
-[协作]    → 两个 Agent 需要配合完成
-
-人类（你和朋友）负责审批、决策、纠错。
-```
-
-### 0.4 当前状态
-
-```
-Phase    Status         Owner
-─────────────────────────────────
-Phase 1: [ ] 未开始     Claude + Codex   ← 从这里开始
-Phase 2: [ ] 未开始     Claude + Codex
-Phase 3: [ ] 未开始     协作
-Phase 4: [ ] 未开始     Codex
-Phase 5: [ ] 未开始     Claude
-Phase 6: [ ] 未开始     协作
-Phase 7: [ ] 未开始     Claude(主导) + Codex
-Phase 8: [ ] 未开始     Claude + Codex（各写各的）
-Phase 9: [ ] 未开始     协作
-```
-
----
-
-## 1. 项目概述
-
-### 1.1 一句话
-
-做一个**多人多 AI 的协作聊天室**，人类和 Agent 在一个房间里讨论方案、分派任务、审查代码。
-
-**具体场景**：你（带着 Claude）和朋友（带着 Codex）各自坐在电脑前，打开同一个网页，两个 Agent 在同一个聊天室里看消息、互相派活、一起搭项目。
-
-### 1.2 核心原则
+### 0.2 核心原则
 
 | 原则 | 说明 |
 |---|---|
 | **仓库是真相源** | Agent 优先读仓库和文档，不依赖聊天记录 |
 | **先讨论再执行** | 重大变更先出 Proposal，人类审批后再动手 |
-| **沟通优先** | Agent 不要默默改代码，输出要发到聊天室公示 |
-| **各司其职** | 按标签认领任务，不抢对方的活 |
-| **保持简单** | MVP 不做复杂架构，够用就行，后续再迭代 |
+| **沟通优先** | Agent 完成模块后在聊天室报告，不要闷头干 |
+| **一人一模块** | 每个模块由一个人全包（后端 API + 前端 UI），不交叉 |
+| **保持简单** | MVP 不做复杂架构，够用就行 |
+| **Vibe Coding** | 快速验证协作模式，速度优先于完美 |
 
-### 1.3 技术栈
-
-```
-后端:  FastAPI + SQLAlchemy 2.0 + asyncpg + Redis
-前端:  React + Vite + TypeScript + Tailwind CSS + shadcn/ui
-数据库: PostgreSQL 16
-通信:  WebSocket (聊天室) + JSON-RPC over HTTP (A2A)
-部署:  Docker Compose + Caddy (自动 HTTPS)
-```
-
----
-
-## 2. Agent 分工方案
-
-### 2.1 两个 Agent 的角色定位
-
-| 维度 | Claude（你） | Codex（朋友） |
-|---|---|---|
-| **主力语言** | Python 后端 | TypeScript / React 前端 |
-| **擅长** | 架构设计、API 开发、数据库、复杂逻辑 | UI 组件、前端交互、CSS 样式、可视化 |
-| **主要战场** | `backend/` | `frontend/` |
-| **A2A 角色** | A2A Server（Hub）主导实现者 | A2A Client 集成配合 |
-| **部署** | Docker Compose + 服务器配置 | 前端构建配置 |
-| **文档风格** | 技术文档、API 文档 | 使用文档、组件文档 |
-| **Git 操作** | 后端分支提交 | 前端分支提交 |
-
-### 2.2 分工原则
+### 0.3 模块总览
 
 ```
-1. 后端的归 Claude，前端的归 Codex
-2. 基础设施和协议层（A2A、数据库、WebSocket）归 Claude
-3. 纯前端的归 Codex（UI 组件、页面、样式）
-4. 需要前后端联调的 → [协作] 标签
-5. 各开各的分支，互不干扰
-6. 提交前在聊天室发报告
-```
-
-### 2.3 协作流程
-
-```
-你（人类A）                朋友（人类B）
-    │                          │
-    ▼                          ▼
-Claude（你的 Agent）    Codex（朋友的 Agent）
-    │                          │
-    └──────────┬───────────────┘
-               │
-         WebSocket 聊天室
-         （人类可见的协作界面）
-               │
-     ┌─────────┴─────────┐
-     ▼                   ▼
- 后端任务             前端任务
- 后端代码             前端代码
-     │                   │
-     └──────┬────────────┘
-            │
-    A2A 协议（Agent 间协调）
-    互相派任务、交换结果
+┌──────────────────────────────────────────────────┐
+│                  Frontend                          │
+│              [Codex 负责全部]                       │
+│  聊天界面 │ Agent面板 │ 知识库 │ 审批 │ Git 面板   │
+│         WebSocket ←→ REST API                     │
+└──────────────────────┬───────────────────────────┘
+                       │
+┌──────────────────────┴───────────────────────────┐
+│  Claude 后端                   Codex 后端         │
+│                                                   │
+│  ⑧ Infrastructure  ───── 地基                     │
+│  ① Gateway          ───── 入口    ③ Agent         │
+│  ② Chat             ───── 管道    ⑤ Knowledge     │
+│  ④ A2A Hub          ───── 核心    ⑥ Repository    │
+│  ⑦ Approval 后端    ───── 流程    ⑦ Approval 前端  │
+└───────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 3. 项目结构
+## 1. 模块划分
+
+### 1.1 两人分工总表
+
+| # | 模块 | 谁负责 | 包什么 | 类型 |
+|---|---|---|---|---|
+| ⑧ | **Infrastructure** | **Claude** | PostgreSQL / Redis / Docker / CI / 配置 | 地基 |
+| ① | **Gateway** | **Claude** | 统一入口、认证、路由、限流 | 入口 |
+| ② | **Chat** | **Claude** | WebSocket、房间管理、消息持久化 | 管道 |
+| ④ | **A2A Hub** | **Claude** | Agent Card、JSON-RPC、任务路由、发现 | 核心 |
+| ⑦-a | **Approval 后端** | **Claude** | 审批 API、状态管理、通知 | 流程 |
+| — | **Frontend 架构** | **Codex** | Vite 骨架、路由、组件库、状态管理 | 前端 |
+| ③ | **Agent** | **Codex** | Agent API + Agent 面板 UI | 全栈 |
+| ⑤ | **Knowledge** | **Codex** | 文档 API + 知识库 UI | 全栈 |
+| ⑥ | **Repository** | **Codex** | Git API + Git 面板 UI | 全栈 |
+| ⑦-b | **Approval 前端** | **Codex** | 审批卡片 UI、审批面板 | 前端 |
+
+### 1.2 模块的完整形态
+
+每个模块由一个人**全包**，从数据库到 API 到前端页面：
 
 ```
-multi-agent-project-room/
-├── PLAN.md                      ← 本文档：总体规划书（最重要）
-├── CLAUDE.md                    ← Agent 入口
-├── AGENTS.md                    ← Agent 行为规则
-├── CONTEXT.md                   ← 项目理念与背景
-├── PROJECT.md                   ← 原始愿景
-├── ARCHITECTURE.md              ← 架构设计
+Codex 拿 Knowledge（知识库）为例：
+──────────────────────────────────
+backend/knowledge/          ← 后端 API（Codex 写）
+├── models.py                DB 表定义
+├── routes.py                CRUD API 端点
+└── service.py               搜索逻辑
+
+frontend/src/components/knowledge/  ← 前端 UI（Codex 写）
+├── DocList.tsx              文档列表
+├── DocViewer.tsx            文档阅读器
+└── SearchBar.tsx            搜索框
+
+──────────────────────────────────
+一个人包干，不用跟另一个人对接口。
+```
+
+### 1.3 文件所有权
+
+```
+backend/
+├── app/
+│   ├── gateway/          ← Claude
+│   ├── chat/             ← Claude
+│   ├── agent/            ← Codex
+│   ├── a2a/              ← Claude
+│   ├── knowledge/        ← Codex
+│   ├── repository/       ← Codex
+│   ├── approval/         ← Claude
+│   └── core/             ← Claude (Infrastructure)
 │
-├── backend/                     ← Claude 负责
-│   ├── app/
-│   │   ├── main.py
-│   │   ├── config.py
-│   │   ├── database.py
-│   │   │
-│   │   ├── models/              # ORM 模型
-│   │   ├── schemas/             # Pydantic 模型
-│   │   ├── api/                 # REST API
-│   │   ├── ws/                  # WebSocket
-│   │   ├── a2a/                 # A2A 协议
-│   │   └── services/            # 业务逻辑
-│   │
-│   ├── alembic/
-│   ├── requirements.txt
-│   └── Dockerfile
+├── alembic/              ← Claude
+├── Dockerfile            ← Claude
+├── requirements.txt      ← 两人都改（加依赖时）
 │
-├── frontend/                    ← Codex 负责
-│   ├── src/
-│   │   ├── hooks/
-│   │   ├── components/
-│   │   │   ├── chat/            # 聊天组件
-│   │   │   ├── agent/           # Agent 面板
-│   │   │   ├── approval/        # 审批组件
-│   │   │   └── shared/          # 通用组件
-│   │   ├── stores/
-│   │   ├── pages/
-│   │   └── types/
-│   │
-│   ├── package.json
-│   └── Dockerfile
-│
-├── docs/                        ← Codex 负责
-│
-├── scripts/                     ← Claude 负责
-│   └── start.sh
-│
-├── docker-compose.yml           ← Claude 负责
-├── Caddyfile                    ← Claude 负责
-└── .env.example                 ← Claude 负责
+frontend/                 ← Codex 全部
+├── src/
+│   ├── hooks/             ← Codex
+│   ├── components/        ← Codex
+│   │   ├── chat/          ← Codex（连 Claude 的 WS）
+│   │   ├── agent/         ← Codex
+│   │   ├── knowledge/     ← Codex
+│   │   ├── repository/    ← Codex
+│   │   ├── approval/      ← Codex
+│   │   └── shared/        ← Codex
+│   ├── stores/            ← Codex
+│   ├── pages/             ← Codex
+│   └── types/             ← Codex
+
+docker-compose.yml         ← Claude
+Caddyfile                  ← Claude
+.env.example               ← Claude
+```
+
+### 1.4 Git 分支策略
+
+```
+main                    → 稳定分支，合并需审批
+
+claude/                 → Claude 的模块分支
+├── claude/infra        ← ⑧
+├── claude/gateway      ← ①
+├── claude/chat         ← ②
+├── claude/a2a          ← ④
+└── claude/approval     ← ⑦
+
+codex/                  → Codex 的模块分支
+├── codex/frontend      ← Frontend 骨架
+├── codex/agent         ← ③
+├── codex/knowledge     ← ⑤
+└── codex/repository    ← ⑥
 ```
 
 ---
 
-## 4. Phase 1: 项目骨架搭建
+## 2. 执行时间线
 
-> 目标: 搭好 FastAPI + PostgreSQL 基础项目结构，确保能跑起来
+### 2.1 总览
 
-### 4.1 Tasks
+```
+周次    Claude                         Codex
+──────────────────────────────────────────────────────────
+W1    ⑧ Infra + ① Gateway + ② Chat    Frontend 骨架
+      后端跑起来                        UI 框架就绪
+──────────────────────────────────────────────────────────
+W2    ④ A2A Hub（最重）                 ③ Agent 全栈
+      A2A 核心完成                      Agent 可注册、面板可看
+──────────────────────────────────────────────────────────
+W3    ⑦ Approval 后端                   ⑤ Knowledge 全栈
+      收尾前面模块                      ⑥ Repository 全栈
+──────────────────────────────────────────────────────────
+W4    联调 A2A ↔ 所有模块               ⑦ Approval 前端
+      部署上线                          UI 打磨
+──────────────────────────────────────────────────────────
+W5    ── 完善、修 bug、写文档 ──
+```
 
-**后端骨架 — [Claude]**
+### 2.2 详细周计划
 
-- [x] 初始化 `backend/` 目录结构
-- [x] 创建 `config.py`（环境变量 → Pydantic Settings）
-- [ ] 创建 `database.py`（SQLAlchemy 异步引擎 + session）
-- [x] 创建 `main.py`（FastAPI 应用入口 + 生命周期）
+---
+
+## W1 — 地基 + 骨架
+
+### Claude — ⑧ Infrastructure + ① Gateway + ② Chat
+
+**目标：** 后端能跑起来、数据库能连上、聊天室能发消息
+
+**Tasks:**
+
+⑧ Infrastructure
+
+> Codex 已实现: 后端骨架、Config、Main、CORS、Room API、WS Chat（in-memory）
+> 需继续: PostgreSQL 持久化、Docker、Redis、Alembic
+
+- [x] 初始化 `backend/` 目录结构（含所有模块占位）
+- [x] 创建 `app/config.py`（Pydantic Settings，从 `.env` 读取）
+- [-] 创建 `app/core/database.py`（已创建，in-memory → 需替换为 SQLAlchemy async）
+- [ ] 创建 `app/core/redis.py`（Redis 连接）
+- [x] 创建 `app/main.py`（FastAPI 应用入口 + lifespan）
 - [x] 配置 CORS
-- [ ] 配置 Alembic 数据库迁移
-
-**前端骨架 — [Codex]**
-
-- [ ] 用 Vite 初始化 `frontend/` 项目
-- [ ] 配置 TypeScript + Tailwind CSS + shadcn/ui
-- [ ] 配置基础路由（React Router）
-- [ ] 配置 API 客户端（TanStack Query）
-- [ ] 创建基础布局组件（Sidebar + Header + 主内容区）
-
-**Docker — [Claude]**
-
+- [ ] 配置 Alembic 迁移
+- [ ] 创建 `users` 表 + `rooms` 表（Alembic 迁移）
 - [ ] 编写 `Dockerfile`（backend）
-- [ ] 编写 `docker-compose.yml`（postgres + backend）
-- [ ] 验证 `docker compose up` 能启动成功
-
-**项目配置 — [协作]**
-
+- [ ] 编写 `docker-compose.yml`（postgres + redis + backend）
 - [x] 创建 `.env.example`
-- [x] 创建一键启动脚本 `scripts/start.sh`
+- [x] 创建启动脚本 `scripts/start.sh`
 - [x] 配置 `.gitignore`
 
-### 4.2 技术说明
+① Gateway
 
-- FastAPI 使用 `async def` + `asyncpg` 全异步
-- SQLAlchemy 2.0 使用 `DeclarativeBase` + `Mapped` 注解
-- 前端用 shadcn/ui 内置的 Tailwind 主题系统，不自己写 CSS 变量
-- 配置项通过 `.env` 注入，不硬编码
-- CORS 允许前端开发服务器 (`localhost:5173`)
+- [ ] 创建 `app/gateway/` 模块
+- [ ] 统一路由挂载（所有模块的 router 汇聚到 main.py）
+- [ ] 全局异常处理
+- [ ] 健康检查端点 `GET /health`
 
-### 4.3 验收标准
+② Chat
 
-```
-✅ 后端在 localhost:8000 启动
-✅ 前端在 localhost:5173 启动
-✅ GET /health 返回 {"status": "ok"}
-✅ PostgreSQL 连接成功，Alembic 迁移可执行
-✅ Docker Compose 一键启动
-```
+- [ ] 创建 `app/chat/` 模块
+- [ ] `ConnectionManager`（按房间管理 WebSocket）
+- [ ] `messages` 表（Alembic 迁移）
+- [ ] WebSocket 处理器 `/ws/chat/{room_id}`
+- [ ] 消息接收 → 持久化 → 广播
+- [ ] 心跳（ping/pong，30s）
+- [ ] `GET /api/v1/rooms/{id}/messages`（分页）
+- [ ] 支持 msg_type: text / system / task / proposal / report / approval_request
 
----
-
-## 5. Phase 2: 实时聊天室
-
-> 目标: 人类和 Agent 能在房间里实时聊天，消息持久化
-
-### 5.1 Tasks
-
-**数据库 — [Claude]**
-
-- [ ] 创建 `messages` 表（+ Alembic 迁移）
-- [ ] 字段: id, room_id, sender_id, content, msg_type, parent_id, created_at
-
-**后端 WebSocket — [Claude]**
-
-- [ ] 实现 `ConnectionManager`（按房间管理 WebSocket 连接）
-- [ ] 实现 WebSocket 聊天处理器（`/ws/chat/{room_id}`）
-- [ ] 消息接收 → 持久化 → 广播全链路
-- [ ] 心跳检测（ping/pong，30s 间隔）
-- [ ] 断线重连支持
-- [ ] REST API: `GET /api/v1/rooms/{id}/messages`（分页加载历史）
-
-**消息类型支持 — [Claude]**
-
-- [ ] 支持 `text`（普通聊天）
-- [ ] 支持 `system`（系统通知）
-- [ ] 支持 `task`（任务指派）
-- [ ] 支持 `proposal`（提案）
-- [ ] 支持 `report`（报告）
-- [ ] 支持 `approval_request`（审批请求）
-
-**前端聊天界面 — [Codex]**
-
-- [ ] 聊天消息列表组件（虚拟滚动）
-- [ ] 消息输入框组件（支持回车发送）
-- [ ] 消息气泡组件（区分人类/Agent/系统消息）
-- [ ] Markdown 渲染 + 代码高亮
-- [ ] WebSocket 连接 Hook（`useWebSocket`）
-- [ ] 消息加载 & 状态管理（Zustand store）
-- [ ] 房间页面布局（聊天区 + 侧栏）
-- [ ] 用户在线/离线指示器
-- [ ] typing 输入状态提示
-
-### 5.2 技术说明
-
-- WebSocket 消息格式见下方 5.4 节
-- `ConnectionManager` 是单例，用 `defaultdict` 管理连接池
-- 消息存储使用 `SQLAlchemy async` 插入，不阻塞 WebSocket 循环
-- 前端使用原生 WebSocket API（不引入 Socket.IO）
-- Claude 负责 WebSocket 后端 + 消息 API
-- Codex 负责聊天 UI + 消息渲染 + WebSocket 客户端 Hook
-- **联调方式**：Claude 完成后端后通知 Codex，Codex 接入 WebSocket 端点
-
-### 5.3 验收标准
+**验收：**
 
 ```
-✅ 创建房间、加入房间
-✅ 发送消息，同一房间所有人实时收到
-✅ 刷新页面后历史消息仍存在
-✅ 用户上线/下线通知
-✅ 支持 typing 指示器
-```
-
-### 5.4 WebSocket 协议
-
-```
-客户端 → 服务端:
-  { "type": "message", "content": "...", "msg_type": "text", "parent_id": null }
-  { "type": "typing" }
-  { "type": "ping" }
-
-服务端 → 客户端:
-  { "type": "message",      "id": "...", "sender_id": "...", "content": "...", ... }
-  { "type": "user_online",  "user_id": "..." }
-  { "type": "user_offline", "user_id": "..." }
-  { "type": "typing",       "user_id": "..." }
-  { "type": "pong" }
-  { "type": "error",        "message": "..." }
+✅ docker compose up 一键启动
+✅ localhost:8000/docs 打开 Swagger
+✅ GET /health → {"status": "ok"}
+✅ WebSocket 连接成功，消息发送 + 广播 + 持久化
 ```
 
 ---
 
-## 6. Phase 3: Agent 身份系统
+### Codex — Frontend 骨架
 
-> 目标: Claude 和 Codex 能注册到系统，在聊天室里被识别为 Agent
+**目标：** 前端项目就绪，路由能跑，聊天页面跟后端 WS 连上
 
-### 6.1 Tasks
+**Tasks:**
 
-**数据库 — [协作]**
+- [ ] Vite 初始化 `frontend/` 项目
+- [ ] 配置 TypeScript（strict mode）
+- [ ] 配置 Tailwind CSS 4.x
+- [ ] 集成 shadcn/ui
+- [ ] 配置 React Router（登录页 + 房间页）
+- [ ] 配置 TanStack Query（API 客户端）
+- [ ] 创建 Zustand store 骨架（auth / chat / room）
+- [ ] 基础布局组件（Sidebar + Header + 主内容区）
+- [ ] 房间列表组件
+- [ ] 聊天消息列表（MessageList）
+- [ ] 消息输入框（MessageInput）
+- [ ] 消息气泡组件（区分 human / agent / system）
+- [ ] `useWebSocket` Hook
+- [ ] 连接 Claude 的 WebSocket 后端
+- [ ] 验证：发消息 → 广播 → 刷新后历史仍在
+- [ ] 登录页（UI 占位）
+- [ ] 前端 Docker 构建
+- [ ] 编写 `frontend/Dockerfile`
 
-- [ ] [Claude] `users` 表增加 `user_type`（human / agent）
-- [ ] [Claude] 创建 `agent_cards` 表
-- [ ] Codex 定义 Agent Card 的能力字段
-
-**后端 API — [Claude]**
-
-- [ ] `POST /api/v1/agents/register` — 注册 Agent
-- [ ] `GET /api/v1/agents` — 列出在线 Agent
-- [ ] `GET /api/v1/agents/{id}` — Agent 详情
-- [ ] Agent 在线状态跟踪（通过 WebSocket 心跳）
-- [ ] `POST /api/v1/agents/{id}/tasks` — 向 Agent 派任务
-
-**前端 Agent 面板 — [Codex]**
-
-- [ ] Agent 列表侧栏组件
-- [ ] Agent 在线/离线/忙碌状态指示器
-- [ ] Agent 能力标签展示
-- [ ] Agent 头像/标识（区分 Claude 和 Codex）
-
-### 6.2 验收标准
+**验收：**
 
 ```
-✅ 两个 Agent（Claude + Codex）注册到房间
-✅ 人类能看到谁在线、谁在忙
-✅ Agent 发消息显示 Agent 身份和头像
-✅ 区分 Claude 和 Codex 的视觉标识
-```
-
----
-
-## 7. Phase 4: 知识库
-
-> 目标: Agent 能读取项目文档，作为上下文
-
-### 7.1 Tasks
-
-**数据库 — [Claude]**
-
-- [ ] 创建 `knowledge_docs` 表
-- [ ] 关键词搜索 API（`ILIKE`，不做向量）
-
-**后端 — [Claude]**
-
-- [ ] `POST /api/v1/rooms/{id}/docs` — 上传文档
-- [ ] `GET /api/v1/rooms/{id}/docs` — 列出文档
-- [ ] `GET /api/v1/rooms/{id}/docs/{doc_id}` — 读取内容
-- [ ] `GET /api/v1/rooms/{id}/docs/search?q=xxx` — 关键词搜索
-- [ ] Agent 上下文组装（被 @ 时自动附带文档）
-
-**前端知识库面板 — [Codex]**
-
-- [ ] 文档列表面板
-- [ ] 文档阅读视图（Markdown 渲染）
-- [ ] 搜索框 + 搜索结果展示
-- [ ] 上传文档入口
-
-### 7.2 验收标准
-
-```
-✅ 上传 Markdown 文档到知识库
-✅ 关键词搜索能找到文档
-✅ Agent 响应时自动附带相关文档内容
+✅ localhost:5173 能打开
+✅ 房间列表展示
+✅ 聊天框输入文字 → 走 WebSocket 发送
+✅ 收到的消息展示在聊天框
+✅ 刷新后历史消息还在
 ```
 
 ---
 
-## 8. Phase 5: Git 仓库状态
+## W2 — A2A + Agent
 
-> 目标: Agent 能读取 Git 状态，知道当前分支和最新提交
+### Claude — ④ A2A Hub
 
-### 8.1 Tasks
+**目标：** Agent 之间能通过 A2A 协议发现彼此、派发任务、拿结果
 
-**后端 — [Claude]**
+**Tasks:**
 
-- [ ] `GitService` 类封装 Git 命令
-- [ ] `GET /api/v1/rooms/{id}/git/status`
-- [ ] `GET /api/v1/rooms/{id}/git/log`
-- [ ] `GET /api/v1/rooms/{id}/git/branch`
-- [ ] `GET /api/v1/rooms/{id}/git/diff`
-- [ ] Git 事件记录
+A2A Server
 
-**前端 Git 面板 — [Codex]**
-
-- [ ] 分支展示
-- [ ] 提交历史列表
-- [ ] 变更文件列表
-- [ ] 谁提交了什么
-
-### 8.2 验收标准
-
-```
-✅ 能查看当前分支和最新提交
-✅ 能查看变更文件列表
-✅ Agent 能通过 API 获取仓库上下文
-```
-
----
-
-## 9. Phase 6: 审批流程
-
-> 目标: 关键操作需要人类审批
-
-### 9.1 Tasks
-
-**数据库 — [Claude]**
-
-- [ ] 创建 `approvals` 表
-
-**后端 — [Claude]**
-
-- [ ] `POST /api/v1/rooms/{id}/approvals` — 创建审批
-- [ ] `GET /api/v1/rooms/{id}/approvals` — 列审批
-- [ ] `POST /api/v1/approvals/{id}/approve` — 批准
-- [ ] `POST /api/v1/approvals/{id}/reject` — 拒绝
-- [ ] WebSocket 通知
-
-**前端审批组件 — [Codex]**
-
-- [ ] 审批请求卡片组件（标题 + 描述 + 状态）
-- [ ] 批准/拒绝按钮
-- [ ] 审批面板（待处理 / 已处理）
-
-**需审批的操作**
-
-- [ ] [协作] 定义审批策略（什么需要批、谁批）
-- [ ] [Claude] 数据库 schema 变更 → 需审批
-- [ ] [Codex] 前端架构变更 → 需审批
-- [ ] [协作] 主分支合并 → 需审批
-- [ ] [Claude] 生产部署 → 需审批
-
-### 9.2 验收标准
-
-```
-✅ Agent 能提交审批请求
-✅ 人类在聊天室看到审批卡片
-✅ 批准/拒绝后 Agent 收到通知
-✅ 审批历史可查
-```
-
----
-
-## 10. Phase 7: A2A 协议集成 ★ 核心
-
-> 目标: Claude 和 Codex 能通过 A2A 协议互相发现、派任务、拿结果
-
-### 10.1 什么是 A2A
-
-A2A (Agent-to-Agent Protocol) 是 Google 主导的开放协议。基于 **JSON-RPC 2.0 over HTTP**。
-
-**在我们的项目里：**
-
-```
-聊天室（WebSocket）: 人类能看到 Claude 和 Codex 在聊什么
-A2A（JSON-RPC）:    Claude 和 Codex 私下互相派活
-
-例子:
-  人类在聊天室说: "帮我实现登录功能"
-  Claude 读到:    "我来做后端 API"
-  Claude → (A2A) → Codex: "你做前端登录页面"
-  Codex → (A2A) → Claude: "页面做好了，API 参数给我"
-  Claude → (A2A) → Codex: "API 好了，接口文档在这里"
-  Codex 在聊天室报告: "前后端联调通过 ✅"
-```
-
-### 10.2 Tasks
-
-**A2A Server（后端 Hub）— [Claude]（主导）**
-
-- [ ] Agent Card 生成 `GET /a2a/.well-known/agent-card`
-- [ ] JSON-RPC 统一入口 `POST /a2a`
+- [ ] 创建 `app/a2a/` 模块
+- [ ] `AgentCard` 模型定义（符合 v0.3 规范）
+- [ ] `GET /a2a/.well-known/agent-card`（Agent Card 端点）
+- [ ] `POST /a2a`（JSON-RPC 统一入口）
 - [ ] 方法: `tasks/send` — 接收任务
 - [ ] 方法: `tasks/get` — 查询任务状态
 - [ ] 方法: `tasks/cancel` — 取消任务
 - [ ] 方法: `tasks/list` — 列出任务
-- [ ] 方法: `message/send` — 把 A2A 结果发到聊天室
+- [ ] 方法: `message/send` — 推消息到聊天室
 - [ ] 方法: `agent/getCard` — 查其他 Agent 的 Card
+- [ ] 方法: `agent/list` — 列出在线 Agent
 
-**A2A Client — [Claude]**
+A2A Client
 
-- [ ] `A2AClient` 类
-- [ ] `A2AClientPool` 连接池
+- [ ] `A2AClient` 类（httpx 异步，调用远程 Agent）
+- [ ] `A2AClientPool`（连接池，按 agent_id 缓存）
 - [ ] 远程 Agent Card 获取 + 缓存
 
-**任务管理器 — [Claude]**
+Task Manager
 
-- [ ] `A2ATaskManager`
+- [ ] `A2ATaskManager`（任务生命周期管理）
 - [ ] 状态: submitted → working → completed / failed / canceled
-- [ ] 本地任务 + 远程转发
+- [ ] 本地任务处理 + 远程转发
+- [ ] `a2a_tasks` 表 + 持久化
 
-**Agent 发现 — [Claude]**
+Agent Discovery
 
-- [ ] 注册 / 发现 / 健康检查
-- [ ] 定期检查 → 标记离线
+- [ ] `AgentDiscovery` 服务
+- [ ] Agent 注册流程
+- [ ] 定期健康检查 → 标记离线
+- [ ] 按能力查询可用 Agent
 
-**聊天室 ←→ A2A 桥接 — [Claude]**
+Chat ↔ A2A Bridge
 
-- [ ] 聊天室消息 → 触发 A2A 任务
-- [ ] A2A 结果 → 推回聊天室
+- [ ] 聊天室新消息 → 触发 A2A 任务委派
+- [ ] A2A 任务完成 → 推回聊天室
+- [ ] `A2AService.send_to_room()`
+- [ ] `A2AService.delegating_task_via_a2a()`
 
-**Codex 接入 A2A — [Codex]**
-
-- [ ] 实现 Codex 侧的 A2A Client
-- [ ] 能接收 A2A 任务并返回结果
-- [ ] 能通过 A2A 发送任务给 Claude
-- [ ] 注册自己的 Agent Card
-
-### 10.3 Agent Card 格式
-
-```json
-{
-  "name": "Room Agent Hub",
-  "description": "多人多智能体协作空间 — Agent 通信枢纽",
-  "url": "https://hub.你的域名",
-  "protocol_version": "0.3.0",
-  "skills": [
-    {
-      "id": "chat",
-      "name": "对话交流",
-      "description": "在聊天室中收发消息"
-    },
-    {
-      "id": "backend-dev",
-      "name": "后端开发",
-      "description": "FastAPI / Python / 数据库 / API",
-      "owner": "Claude"
-    },
-    {
-      "id": "frontend-dev",
-      "name": "前端开发",
-      "description": "React / TypeScript / UI / CSS",
-      "owner": "Codex"
-    }
-  ]
-}
-```
-
-### 10.4 验收标准
+**验收：**
 
 ```
-✅ Claude 和 Codex 互相发现（通过 Agent Card）
-✅ Claude → (A2A) → Codex 派任务成功
-✅ Codex → (A2A) → Claude 派任务成功
-✅ A2A 任务结果自动推送到聊天室
-✅ 一个 Agent 离线后对方能感知
+✅ GET /a2a/.well-known/agent-card 返回 Agent Card
+✅ POST /a2a tasks/send 可提交任务
+✅ A2A 任务结果能 push 到聊天室
+✅ Agent 健康检查能标记离线
 ```
 
 ---
 
-## 11. Phase 8: Agent 本地适配器
+### Codex — ③ Agent 全栈
 
-> 目标: 你（Claude）和朋友（Codex）各跑一个适配器连到房间
+**目标：** Agent 能注册到系统，人类能在面板看到 Agent
 
-### 11.1 Tasks
+**Tasks:**
 
-**Claude 适配器（你的电脑）— [Claude]**
+后端 — `app/agent/`
 
-- [ ] `local_agent_adapter.py` 主程序
+- [ ] `AgentCard` DB 表（Alembic 迁移）
+- [ ] `users` 表增加 `user_type`（human / agent）
+- [ ] `POST /api/v1/agents/register` — 注册 Agent
+- [ ] `GET /api/v1/agents` — 列出在线 Agent
+- [ ] `GET /api/v1/agents/{id}` — Agent 详情
+- [ ] Agent 在线状态跟踪（通过 WebSocket 心跳）
+
+前端 — Agent 面板
+
+- [ ] Agent 列表侧栏组件
+- [ ] Agent 在线/离线/忙碌状态指示器
+- [ ] Agent 能力标签展示
+- [ ] Agent 头像标识（区分 Claude 和 Codex）
+- [ ] Agent 详情弹窗
+
+**验收：**
+
+```
+✅ 两个 Agent 可注册到房间
+✅ 面板显示谁在线、谁在忙、有啥能力
+✅ Agent 发消息显示 Agent 身份和头像
+```
+
+---
+
+## W3 — 审批 + 知识库 + Git
+
+### Claude — ⑦ Approval 后端
+
+**目标：** Agent 能提交审批，人类能批准/拒绝
+
+**Tasks:**
+
+- [ ] `approvals` 表（Alembic 迁移）
+- [ ] 创建 `app/approval/` 模块
+- [ ] `POST /api/v1/rooms/{id}/approvals` — 创建审批
+- [ ] `GET /api/v1/rooms/{id}/approvals` — 列审批
+- [ ] `POST /api/v1/approvals/{id}/approve` — 批准
+- [ ] `POST /api/v1/approvals/{id}/reject` — 拒绝
+- [ ] 审批事件 → WebSocket 通知房间
+- [ ] 审批通过 → 通知申请者
+- [ ] 定义需审批的操作类型
+
+**验收：**
+
+```
+✅ Agent 能提交审批请求
+✅ 人类在聊天室看到审批通知
+✅ 批准/拒绝后 Agent 收到通知
+✅ 审批历史可查
+```
+
+**同时 — 收尾前面的 Claude 模块：**
+
+- [ ] W1 模块补测试
+- [ ] W2 A2A 补错误处理
+- [ ] 各模块加日志
+
+---
+
+### Codex — ⑤ Knowledge + ⑥ Repository 全栈
+
+**目标：** 文档能上传搜索，Git 状态能在面板查看
+
+**Tasks (Knowledge):**
+
+后端 — `app/knowledge/`
+
+- [ ] `knowledge_docs` 表（Alembic 迁移）
+- [ ] `POST /api/v1/rooms/{id}/docs` — 上传文档
+- [ ] `GET /api/v1/rooms/{id}/docs` — 列出文档
+- [ ] `GET /api/v1/rooms/{id}/docs/{doc_id}` — 读文档
+- [ ] `GET /api/v1/rooms/{id}/docs/search?q=xxx` — 关键词搜索（ILIKE）
+
+前端 — 知识库面板
+
+- [ ] 文档列表组件
+- [ ] 文档阅读器（Markdown 渲染）
+- [ ] 搜索框 + 搜索结果
+- [ ] 上传文档入口
+
+**Tasks (Repository):**
+
+后端 — `app/repository/`
+
+- [ ] `GitService` 类（封装 git 命令）
+- [ ] `GET /api/v1/rooms/{id}/git/status`
+- [ ] `GET /api/v1/rooms/{id}/git/log`
+- [ ] `GET /api/v1/rooms/{id}/git/branch`
+- [ ] `GET /api/v1/rooms/{id}/git/diff`
+- [ ] Git 事件记录到数据库
+
+前端 — Git 面板
+
+- [ ] 当前分支展示
+- [ ] 提交历史列表
+- [ ] 变更文件列表
+- [ ] 谁提交了什么
+
+**验收：**
+
+```
+✅ 上传 Markdown → 列表可见
+✅ 关键词搜索能搜到文档
+✅ 能查看当前分支和最新提交
+✅ 能查看变更文件
+```
+
+---
+
+## W4 — 联调 + 部署
+
+### 任务分配
+
+**Claude — A2A ↔ 所有模块联调**
+
+- [ ] A2A Hub 与 Agent 模块对接（Claude ↔ Codex 模块）
+- [ ] A2A Hub 与 Knowledge 模块对接
+- [ ] A2A Hub 与 Repository 模块对接
+- [ ] A2A Hub 与 Approval 模块对接
+- [ ] 端到端测试：聊天室消息 → A2A 派任务 → 另一个 Agent 处理 → 结果回聊天室
+- [ ] 修复联调发现的问题
+- [ ] 部署：服务器环境准备
+- [ ] 生产 docker-compose.yml 完善
+- [ ] Caddy HTTPS 配置
+- [ ] GitHub Actions CI/CD
+
+**Codex — ⑦ Approval 前端 + UI 打磨**
+
+- [ ] 审批请求卡片组件（标题 + 描述 + 状态 + 批准/拒绝按钮）
+- [ ] 审批面板（待处理 / 已处理）
+- [ ] 全页面 UI 一致性检查
+- [ ] 暗黑模式（可选）
+- [ ] 加载状态 / 空状态 / 错误状态处理
+- [ ] 前端 Docker 构建优化
+
+**两人一起 — 部署上线**
+
+- [ ] 服务器部署
+- [ ] 域名指向服务器
+- [ ] Claude 适配器连接测试
+- [ ] Codex 适配器连接测试
+- [ ] 两个 Agent A2A 互通验证
+
+### 验收
+
+```
+✅ https://hub.你的域名 可访问
+✅ 登录 → 进房间 → 发消息
+✅ Claude 和 Codex 适配器连上
+✅ 聊天室 @Claude → Claude 回复
+✅ 聊天室 @Codex → Codex 回复
+✅ Claude → A2A → Codex 派任务成功
+✅ Codex → A2A → Claude 派任务成功
+✅ 知识库可搜索
+✅ Git 面板可查看
+✅ 审批流程完整
+```
+
+---
+
+## 3. 模块接口约定
+
+Codex 写的模块需要对外提供 API，Claude 写的 A2A Hub 需要调用它们。
+以下是固定的接口约定，两边按这个来：
+
+### 3.1 通用规范
+
+```
+基础路径:  /api/v1
+请求体:    JSON
+响应格式:  {"data": ..., "error": null} 或 {"data": null, "error": "..."}
+认证:      MVP 阶段暂不强制（预留 Header: Authorization: Bearer <token>）
+```
+
+### 3.2 Codex 模块需提供的 API
+
+```
+③ Agent:
+  GET    /api/v1/agents              →  Agent 列表 [{id, name, status, capabilities}]
+  GET    /api/v1/agents/{id}         →  Agent 详情
+  POST   /api/v1/agents/register     →  注册 {name, capabilities}
+
+⑤ Knowledge:
+  GET    /api/v1/rooms/{id}/docs              →  文档列表
+  GET    /api/v1/rooms/{id}/docs/{doc_id}     →  文档内容
+  GET    /api/v1/rooms/{id}/docs/search?q=xx  →  搜索
+  POST   /api/v1/rooms/{id}/docs              →  上传 {title, content}
+
+⑥ Repository:
+  GET    /api/v1/rooms/{id}/git/status   →  {branch, changes, last_commit}
+  GET    /api/v1/rooms/{id}/git/log      →  [{hash, author, message, date}]
+  GET    /api/v1/rooms/{id}/git/diff     →  变更详情
+```
+
+### 3.3 Claude 模块需提供的 API / WebSocket
+
+```
+① Gateway / ② Chat:
+  WebSocket: /ws/chat/{room_id}?token=xxx
+  GET:       /api/v1/rooms/{id}/messages?page=1&limit=50
+
+④ A2A Hub:
+  POST:      /a2a  (JSON-RPC 统一入口)
+  GET:       /a2a/.well-known/agent-card
+
+⑦ Approval:
+  GET:    /api/v1/rooms/{id}/approvals
+  POST:   /api/v1/rooms/{id}/approvals
+  POST:   /api/v1/approvals/{id}/approve
+  POST:   /api/v1/approvals/{id}/reject
+```
+
+---
+
+## 4. A2A 协作流程
+
+### 4.1 两个 Agent 怎么通过 A2A 配合
+
+```
+场景：Codex（Knowledge 模块）需要了解 Git 状态
+
+Codex → (A2A) → A2A Hub:
+  POST /a2a
+  { "method": "tasks/send",
+    "params": { "query": "获取当前 Git 状态",
+                "target_agent": "claude" }}
+
+A2A Hub（Claude 的模块）→ 路由给 Repository（Codex 的模块）:
+  不需要，Repository 是 Codex 写的，A2A 只是通道
+
+A2A Hub → (A2A) → Codex:
+  { "result": { "status": "completed",
+                "artifacts": [{ "type": "text",
+                                "content": "branch: main, 最新提交: ..." }]}}
+```
+
+### 4.2 什么时候用什么
+
+```
+聊天室（WebSocket）:  人类可见的沟通
+  - 报告模块完成
+  - 提出 Proposal
+  - 请求审批
+  - 人类 @Agent
+
+A2A（JSON-RPC）:     Agent 之间的私下协调
+  - Claude 向 Codex 派任务
+  - Codex 向 Claude 查数据
+  - 两个 Agent 交换结构化信息
+  - 不需要人类介入的通信
+```
+
+### 4.3 Agent Card 定义
+
+```json
+{
+  "name": "Multi-Agent Room Hub",
+  "description": "多人多智能体协作空间",
+  "url": "https://hub.你的域名",
+  "protocol_version": "0.3.0",
+  "skills": [
+    { "id": "chat",        "name": "聊天",     "owner": "Hub" },
+    { "id": "a2a",         "name": "A2A 通信",  "owner": "Hub" },
+    { "id": "agent-mgmt",  "name": "Agent 管理", "owner": "Codex" },
+    { "id": "knowledge",   "name": "知识库",    "owner": "Codex" },
+    { "id": "repository",  "name": "仓库状态",  "owner": "Codex" },
+    { "id": "approval",    "name": "审批",      "owner": "Hub" }
+  ]
+}
+```
+
+---
+
+## 5. Agent 适配器
+
+### 5.1 Claude 适配器（你的电脑）
+
+- [ ] `local_agent_adapter.py`
 - [ ] WebSocket 客户端 → 连聊天室
 - [ ] 调用 `claude -p` 处理任务
 - [ ] A2A 客户端 → 调用 Codex
 - [ ] @Claude 检测自动响应
 - [ ] 自动注册到房间
 
-**Codex 适配器（朋友电脑）— [Codex]**
+```bash
+python local_agent_adapter.py \
+  --server https://hub.你的域名 \
+  --agent-name "Claude" \
+  --agent-id "claude-agent" \
+  --command "claude -p"
+```
+
+### 5.2 Codex 适配器（朋友电脑）
 
 - [ ] 适配器主程序
 - [ ] WebSocket 客户端 → 连聊天室
@@ -610,17 +634,7 @@ A2A（JSON-RPC）:    Claude 和 Codex 私下互相派活
 - [ ] @Codex 检测自动响应
 - [ ] 自动注册到房间
 
-### 11.2 用法
-
 ```bash
-# 你的电脑 — Claude
-python local_agent_adapter.py \
-  --server https://hub.你的域名 \
-  --agent-name "Claude" \
-  --agent-id "claude-agent" \
-  --command "claude -p"
-
-# 朋友的电脑 — Codex
 python local_agent_adapter.py \
   --server https://hub.你的域名 \
   --agent-name "Codex" \
@@ -628,191 +642,47 @@ python local_agent_adapter.py \
   --command "codex"
 ```
 
-### 11.3 验收标准
-
-```
-✅ Claude 适配器启动 → 房间显示 Claude 在线
-✅ Codex 适配器启动 → 房间显示 Codex 在线
-✅ 聊天室 @Claude → Claude 自动回复
-✅ 聊天室 @Codex → Codex 自动回复
-✅ Claude 通过 A2A 调用 Codex 成功
-✅ Codex 通过 A2A 调用 Claude 成功
-```
-
 ---
 
-## 12. Phase 9: 部署上线
-
-> 目标: 项目部署到服务器，你和朋友都能访问，Agent 都能连上
-
-### 12.1 Tasks
-
-**服务器准备 — [Claude]**
-
-- [ ] 准备服务器（Ubuntu 24.04）
-- [ ] 安装 Docker + Docker Compose
-- [ ] 配置域名 DNS → 服务器 IP
-- [ ] 配置 Caddy 自动 HTTPS
-
-**Docker 部署 — [Claude]**
-
-- [ ] 编写完整 `docker-compose.yml`（postgres + redis + backend + caddy）
-- [ ] 数据库迁移自动化
-- [ ] 环境变量配置（生产密钥、密码）
-- [ ] 健康检查 + 日志
-
-**前端构建 — [Codex]**
-
-- [ ] 配置前端生产构建
-- [ ] 确保前端 Docker 构建通过
-- [ ] 优化首屏加载
-
-**CI/CD — [协作]**
-
-- [ ] GitHub Actions 自动部署
-- [ ] Claude 负责后端 CI
-- [ ] Codex 负责前端 CI
-
-### 12.2 验收标准
-
-```
-✅ https://hub.你的域名 可以访问
-✅ 你和朋友都能登录聊天室
-✅ Claude 适配器远程连上
-✅ Codex 适配器远程连上
-✅ Claude 和 Codex 通过 A2A 互通
-✅ 人类在浏览器里看到两个 Agent 实时协作
-```
-
----
-
-## 13. Agent 协作规则
-
-### 13.1 文件所有权
-
-```
-backend/     → Claude 负责（Codex 不修改）
-frontend/    → Codex 负责（Claude 不修改）
-docs/        → Codex 负责
-scripts/     → Claude 负责
-docker-*     → Claude 负责
-*.md（项目文档）→ 谁改谁更新
-```
-
-### 13.2 Git 分支策略
-
-```
-main          → 稳定分支，需审批合并
-phase-1/     → Claude 和 Codex 各自的分支
-  ├── phase-1/backend   ← Claude
-  └── phase-1/frontend  ← Codex
-```
-
-### 13.3 A2A 协作消息格式
-
-当两个 Agent 通过 A2A 通信时，使用以下格式：
-
-```
-派发任务:
-  Claude → Codex:
-  "请实现登录页面的 UI 组件，API 端点 POST /api/auth/login
-   参数: {username, password}, 返回: {token, user}"
-
-  Codex → Claude:
-  "登录页面已完成，需要你确认 API 响应格式是否正确"
-
-报告进度:
-  Claude → 聊天室:
-  "[REPORT] 后端认证 API 完成，POST /api/auth/login 已实现"
-
-  Codex → 聊天室:
-  "[REPORT] 登录页面 UI 完成，已联调通过 ✅"
-```
-
-### 13.4 冲突处理
-
-```
-1. 不要修改对方负责的文件
-2. 需要对方配合时 → 通过 A2A 发送任务
-3. 有分歧 → 在聊天室提出 Proposal，等人类决策
-4. 紧急情况 → @人类 请求仲裁
-```
-
----
-
-## 14. 决策记录
+## 6. 决策记录
 
 | 序号 | 决策 | 理由 | 日期 |
 |---|---|---|---|
-| D001 | 采用 A2A 协议作为 Agent 间通信标准 | 开放标准，跨框架互通 | 2026-06-14 |
-| D002 | MVP 不做向量数据库 | ILIKE 够用，减少复杂度 | 2026-06-14 |
+| D001 | 采用 A2A 协议 | 开放标准，跨框架互通 | 2026-06-14 |
+| D002 | MVP 不做向量数据库 | ILIKE 够用 | 2026-06-14 |
 | D003 | WebSocket + A2A 两层通信 | 聊天室给人看，A2A 给 Agent 用 | 2026-06-14 |
 | D004 | 本地 Agent 跑适配器 | 后端轻量，Agent 可用任意 AI | 2026-06-14 |
 | D005 | Git MVP 只读 | 写操作需审批流程就绪 | 2026-06-14 |
-| D006 | Claude 做后端，Codex 做前端 | 各自擅长领域，减少冲突 | 2026-06-15 |
-| D007 | A2A Hub 集成在 FastAPI 后端 | 统一部署，不用额外跑服务 | 2026-06-15 |
+| D006 | 一人一模块（全栈） | 减少沟通成本，减少代码冲突 | 2026-06-15 |
+| D007 | Claude 做管道/基础，Codex 做功能/UI | 利用各自优势，充分并行 | 2026-06-15 |
+| D008 | 模块分支策略（claude/*, codex/*） | 互不干扰，合并时审批 | 2026-06-15 |
 
 ---
 
-## 15. 当前进度
+## 7. 当前进度
 
 ```
-Phase    Status         Owner             任务划分
-──────────────────────────────────────────────────────
-Phase 1: [ ] 未开始     Claude + Codex    后端 Claude / 前端 Codex
-Phase 2: [ ] 未开始     Claude + Codex    WS 后端 Claude / UI Codex
-Phase 3: [ ] 未开始     协作              API Claude / 面板 Codex
-Phase 4: [ ] 未开始     Codex             Codex 主导文档系统
-Phase 5: [ ] 未开始     Claude            Claude 主导 Git 集成
-Phase 6: [ ] 未开始     协作              API Claude / UI Codex
-Phase 7: [ ] 未开始     Claude(主导)      Claude 写 A2A Hub / Codex 接入
-Phase 8: [ ] 未开始     Claude + Codex    各写各的适配器
-Phase 9: [ ] 未开始     协作              部署 + CI/CD
+周次    Claude                         Codex
+────────────────────────────────────────────────────────────
+W1     ⑧ Infra  ① Gateway  ② Chat    Frontend 骨架 (进行中)
+W2     ④ A2A Hub                      ③ Agent 全栈
+W3     ⑦ Approval 后端                 ⑤ Knowledge + ⑥ Repository
+W4     联调 + 部署                      ⑦ Approval 前端 + UI 打磨
+W5     ── 完善、修 bug、写文档 ──
 ```
 
----
-
-## 16. 如何让 Claude 和 Codex 正确工作
-
-### 16.1 对 Claude（你）
+### 本周任务清单
 
 ```
-当你看到这个文档时：
-
-1. 找到 [Claude] 标签的任务 → 这是你的
-2. 从 Phase 1 开始，按顺序执行
-3. 每个 [Claude] 任务完成后，更新 PLAN.md（[ ]→[x]）
-4. 需要 Codex 配合 → 通过聊天室 @Codex 或 A2A 派任务
-5. 完成一个 Phase 后，确保所有验收标准通过
-6. 在聊天室报告完成
-```
-
-### 16.2 对 Codex（朋友）
-
-```
-当你看到这个文档时：
-
-1. 找到 [Codex] 标签的任务 → 这是你的
-2. 从 Phase 1 开始，按顺序执行
-3. 每个 [Codex] 任务完成后，更新 PLAN.md（[ ]→[x]）
-4. 需要 Claude 配合 → 通过聊天室 @Claude 或 A2A 派任务
-5. 完成一个 Phase 后，确保所有验收标准通过
-6. 在聊天室报告完成
-```
-
-### 16.3 协作要点
-
-```
-Claude 和 Codex 各做各的，不要互相抢活。
-中间需要配合的地方，用 A2A 协议沟通。
-
-什么时候用聊天室，什么时候用 A2A：
-  - 报告进度 → 聊天室（给人看）
-  - 派发任务 → A2A（Agent 之间）
-  - 讨论方案 → 聊天室（人类参与）
-  - 交换数据 → A2A（结构化）
+W1 — Claude (你):                           W1 — Codex (朋友):
+────────────────────────                    ────────────────────────
+□ ⑧ Infrastructure                           □ Vite 初始化
+□ ① Gateway                                  □ Tailwind + shadcn/ui
+□ ② Chat WebSocket                           □ 路由 + 布局
+□ Docker Compose                             □ 聊天组件 + WebSocket Hook
+□ 数据库建表                                 □ 前端 Docker 构建
 ```
 
 ---
 
-*本文档会随项目进展持续更新。每次有新决策或 Phase 完成时，在"决策记录"中追加。*
+*本文档会随项目进展持续更新。每个 W 完成后更新进度表。*
