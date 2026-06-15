@@ -58,6 +58,3 @@ app.include_router(a2a_router)        # /a2a (JSON-RPC + Agent Card)
 app.include_router(approval_router)   # /api/v1/approvals
 
 # ── WebSocket ──────────────────────────────────────────
-@app.websocket("/ws/chat/{room_id}")
-async def chat_websocket_endpoint(websocket: WebSocket, room_id: str) -> None:
-    await handle_chat(websocket, room_id)
