@@ -739,7 +739,7 @@ W2      ④ A2A Hub ✅                       ③ Agent 全栈（待 Codex）
 ────────────────────────────────────────────────────────────────
 W3      ⑦ Approval 后端 ✅                   ⑤ Knowledge + ⑥ Repository
 ────────────────────────────────────────────────────────────────
-W4      联调 + 部署                         ⑦ Approval 前端 + UI
+W4      联调 + 部署 ✅                     ⑦ Approval 前端 + UI
 ────────────────────────────────────────────────────────────────
 W5      修 bug + 写文档
 ```
@@ -754,6 +754,48 @@ Claude — 本周任务               Codex — 本周任务
 □ Approval WebSocket 通知         □ Frontend: Agent 面板
 □ 收尾前面模块的测试               □ Agent API + 模型
 ```
+
+---
+
+## 10. 部署信息
+
+### 服务器
+
+| 项目 | 值 |
+|---|---|
+| IP | `47.80.18.105` |
+| 系统 | Ubuntu 24.04 |
+| Docker | ✅ docker compose |
+| Nginx | ✅ 反向代理 |
+| SSL | ✅ Let's Encrypt (自动续期) |
+
+### 域名
+
+| 域名 | 用途 |
+|---|---|
+| `https://hub.wangdada8208.xyz` | 前端网站 |
+| `https://hub.wangdada8208.xyz/health` | 后端健康检查 |
+| `https://hub.wangdada8208.xyz/api/v1/` | REST API |
+| `https://hub.wangdada8208.xyz/ws/chat/{room_id}` | WebSocket |
+| `https://hub.wangdada8208.xyz/a2a` | A2A JSON-RPC |
+
+### 适配器连接
+
+```bash
+# Claude（你）
+python3 local_agent_adapter.py \
+  --server https://hub.wangdada8208.xyz \
+  --agent-name "Claude"
+
+# Codex（朋友）
+python3 local_agent_adapter.py \
+  --server https://hub.wangdada8208.xyz \
+  --agent-name "Codex"
+```
+
+- Codex 运行适配器前需要装依赖: `pip3 install httpx websockets`
+- 连接后 @Claude 或 @Codex 即可触发 AI 响应
+- 也可通过 A2A 互相派任务: `POST /a2a tasks/send`
 
 ---
 
