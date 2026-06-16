@@ -195,25 +195,52 @@ function MessageInputArea({
   onSend: (content: string, senderType: SenderType) => boolean;
 }) {
   const [text, setText] = useState("");
-  const [senderType, setSenderType] = useState<SenderType>("human");
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  function insertMention(agent: string) {
+    setText((prev) => {
+      const mention = `@${agent} `;
+      if (!prev.trim()) return mention;
+      if (prev.includes(`@${agent}`)) return prev;
+      return mention + prev;
+    });
+    inputRef.current?.focus();
+  }
 
   function handleSubmit() {
     if (!text.trim() || disabled) return;
-    onSend(text.trim(), senderType);
+    onSend(text.trim(), "human");
     setText("");
   }
 
   return (
     <div className="message-input-area">
-      <select value={senderType} onChange={(e) => setSenderType(e.target.value as SenderType)}>
-        <option value="human">人类</option>
-        <option value="agent">智能体</option>
-      </select>
+      <div className="mention-buttons">
+        <button
+          type="button"
+          className="mention-btn claude"
+          onClick={() => insertMention("Claude")}
+          disabled={disabled}
+          title="插入 @Claude"
+        >
+          🤖 @Claude
+        </button>
+        <button
+          type="button"
+          className="mention-btn codex"
+          onClick={() => insertMention("Codex")}
+          disabled={disabled}
+          title="插入 @Codex"
+        >
+          🤖 @Codex
+        </button>
+      </div>
       <input
+        ref={inputRef}
         value={text}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSubmit(); } }}
-        placeholder={disabled ? "等待连接..." : "输入消息... @Claude 或 @Codex 触发 AI"}
+        placeholder={disabled ? "等待连接..." : "输入消息... 或点 @Claude / @Codex 快速呼叫"}
         disabled={disabled}
       />
       <button onClick={handleSubmit} disabled={disabled || !text.trim()}>

@@ -367,8 +367,38 @@ button, input, select { font: inherit; }
   background: var(--bg-sidebar);
 }
 
+.mention-buttons {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.mention-btn {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.mention-btn:hover:not(:disabled) {
+  border-color: var(--accent-blue);
+  background: color-mix(in srgb, var(--accent-blue) 8%, transparent);
+}
+
+.mention-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 .message-input-area input {
   flex: 1;
+  min-width: 0;
   padding: 10px 16px;
   border: 1px solid var(--border);
   border-radius: 10px;
@@ -406,16 +436,6 @@ button, input, select { font: inherit; }
 .message-input-area button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
-}
-
-.message-input-area select {
-  padding: 10px 12px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--bg-card);
-  color: var(--text-primary);
-  font-size: 13px;
-  outline: none;
 }
 
 /* ── 协作侧栏 ── */
