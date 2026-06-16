@@ -19,6 +19,7 @@ Usage:
 import argparse
 import asyncio
 import json
+import re
 import subprocess
 import sys
 import uuid
@@ -49,12 +50,75 @@ def _strip_mention(content: str, agent_name: str) -> str:
     return content.replace(f"@{agent_name}", "").strip().lower()
 
 
+def _target_agent(agent_name: str, content: str) -> Optional[str]:
+    """Detect a different agent mentioned in the message."""
+    lower = content.lower()
+    candidates = {"claude": "Claude", "codex": "Codex"}
+    for key, display_name in candidates.items():
+        if display_name.lower() == agent_name.lower():
+            continue
+        if f"@{key}" in lower or key in lower:
+            return display_name
+    return None
+
+
+def _agent_route_reply(agent_name: str, content: str) -> Optional[str]:
+    """Build a plain chat message to another agent when the user asks for it."""
+    target = _target_agent(agent_name, content)
+    if target is None:
+        return None
+
+    text = _strip_mention(content, agent_name)
+    compact = "".join(text.split())
+    route_words = [
+        "发送", "发一条", "发给", "问", "问问", "告诉", "转告", "联系",
+        "对话", "聊天", "聊聊", "讨论", "协作", "沟通", "请教", "让",
+        "send", "ask", "tell", "talk", "discuss",
+    ]
+    if not any(word in compact for word in route_words):
+        return None
+
+    original = re.sub(rf"@?{re.escape(agent_name)}", "", content, flags=re.IGNORECASE)
+    original = re.sub(rf"@?{re.escape(target)}", "", original, flags=re.IGNORECASE)
+    normalized = original.strip(" ，,。:：")
+
+    if any(word in compact for word in ["问好", "打招呼", "问个好"]):
+        normalized = f"你好，我是 {agent_name}。我这边已经在线，很高兴和你协作。"
+    elif "让它" in normalized or "让他" in normalized:
+        normalized = normalized.replace("告诉", "").replace("转告", "")
+        normalized = normalized.replace("让它", "请").replace("让他", "请")
+        normalized = normalized.strip(" ，,。:：")
+    elif any(word in compact for word in ["讨论", "协作", "对话", "聊天", "聊聊"]):
+        normalized = re.sub(r"^(尝试)?(和|与)?(聊天室内的)?", "", normalized)
+        normalized = normalized.strip(" ，,。:：")
+        normalized = f"我们来{normalized}" if normalized else f"我们可以在这里直接协作。"
+    else:
+        for phrase in [
+            "发送一条消息", "发送消息", "发一条消息", "发消息",
+            "告诉", "转告", "联系", "给", "向",
+        ]:
+            normalized = normalized.replace(phrase, "")
+        normalized = normalized.strip(" ，,。:：")
+
+    if not normalized:
+        normalized = f"你好，我是 {agent_name}，我们可以在这个聊天室里直接协作。"
+    normalized = normalized.replace("它", "你").replace("他", "你").replace("对方", "你")
+
+    if not normalized.startswith(f"@{target}"):
+        normalized = f"@{target} {normalized}"
+    return normalized
+
+
 def _quick_reply(agent_name: str, content: str) -> Optional[str]:
     """Return instant replies for small talk that should not boot the AI CLI."""
     text = _strip_mention(content, agent_name)
     compact = "".join(text.split())
     if not compact:
         return f"我在，{agent_name} 在线。"
+
+    routed = _agent_route_reply(agent_name, content)
+    if routed is not None:
+        return routed
 
     greeting_words = ["你好", "在吗", "在线", "hello", "hi", "hey"]
     identity_words = ["你是谁", "介绍", "身份", "who are you", "你是"]
