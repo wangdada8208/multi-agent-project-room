@@ -45,12 +45,14 @@ jobs:
       - name: Run migrations
         env:
           MAPR_DATABASE_URL: postgresql+asyncpg://postgres:test_password@localhost:5432/agent_room_test
+          PYTHONPATH: backend
         run: |
           python3 -m alembic upgrade head
 
       - name: Run tests
         env:
           MAPR_DATABASE_URL: postgresql+asyncpg://postgres:test_password@localhost:5432/agent_room_test
+          PYTHONPATH: backend
         run: |
           python3 -m pytest backend/tests/ -v
 
