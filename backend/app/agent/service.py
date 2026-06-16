@@ -76,7 +76,15 @@ async def list_agents(db: AsyncSession) -> list[dict]:
             AgentCardRecord.created_at.desc(),
         )
     )
-    return [_agent_to_dict(record) for record in result.scalars().all()]
+    agents = []
+    seen_names = set()
+    for record in result.scalars().all():
+        key = record.agent_name.lower()
+        if key in seen_names:
+            continue
+        seen_names.add(key)
+        agents.append(_agent_to_dict(record))
+    return agents
 
 
 async def get_agent(db: AsyncSession, agent_id: str) -> dict | None:

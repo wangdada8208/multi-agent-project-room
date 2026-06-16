@@ -46,18 +46,21 @@
   本地适配器                             ✅ Claude
   部署上线 (hub.wangdada8208.xyz)        ✅ Claude
   CI/CD (GitHub Actions)                ✅ Claude
-  单元测试 (13个)                        ✅ Claude
+  单元测试 (16个)                        ✅ Claude + Codex
   Frontend 骨架 (Vite + React)          ✅ Codex
   聊天 UI + WebSocket对接               ✅ Codex
+  Frontend: Agent 面板                   ✅ Codex
+  Frontend: Knowledge 知识库 UI          ✅ Codex
+  Frontend: Repository Git 面板          ✅ Codex
+  Frontend: Approval 审批卡片            ✅ Codex
+  后端: Agent 注册 API + 模型            ✅ Codex
+  后端: Knowledge 文档 API              ✅ Codex
+  后端: Repository Git API              ✅ Codex
 
-待完成 (Codex):
-  Frontend: Agent 面板                   ❌ Codex
-  Frontend: Knowledge 知识库 UI          ❌ Codex
-  Frontend: Repository Git 面板          ❌ Codex
-  Frontend: Approval 审批卡片            ❌ Codex
-  后端: Agent 注册 API + 模型            ❌ Codex
-  后端: Knowledge 文档 API              ❌ Codex
-  后端: Repository Git API              ❌ Codex
+剩余完善:
+  WS 在线用户事件                         [-] 后端事件待补
+  暗黑模式 / 窄屏响应式                    [ ] 可选 UI 打磨
+  Claude 模块日志 / README / 覆盖率        [ ] Claude 收尾
 ```
 
 ### 1.3 核心原则
@@ -739,11 +742,11 @@ W1      ⑧ Infra ✅                         Frontend 骨架 ✅
         ① Gateway ✅                       聊天 UI + useWebSocket ✅
         ② Chat 持久化 ✅                   WS 往返验证 ✅
 ────────────────────────────────────────────────────────────────
-W2      ④ A2A Hub ✅                       ③ Agent 全栈（待 Codex）
+W2      ④ A2A Hub ✅                       ③ Agent 全栈 ✅
 ────────────────────────────────────────────────────────────────
-W3      ⑦ Approval 后端 ✅                   ⑤ Knowledge + ⑥ Repository
+W3      ⑦ Approval 后端 ✅                   ⑤ Knowledge + ⑥ Repository ✅
 ────────────────────────────────────────────────────────────────
-W4      联调 + 部署 ✅                     ⑦ Approval 前端 + UI
+W4      联调 + 部署 ✅                     ⑦ Approval 前端 + UI ✅
 ────────────────────────────────────────────────────────────────
 W5      修 bug + 写文档
 ```
