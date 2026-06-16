@@ -744,7 +744,7 @@ button, input, select { font: inherit; }
 
 .back-link {
   font-size: 13px;
-  color: var(--accent-blue);
+  color: var(--accent);
   display: inline-flex;
   align-items: center;
   gap: 4px;
