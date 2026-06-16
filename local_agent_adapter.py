@@ -23,6 +23,7 @@ import subprocess
 import sys
 import uuid
 from datetime import datetime, timezone
+from typing import Optional
 
 import httpx
 import websockets
@@ -43,6 +44,40 @@ def _compact_stderr(stderr: str) -> str:
     return "\n".join(lines[-5:])[-1000:]
 
 
+def _strip_mention(content: str, agent_name: str) -> str:
+    """Remove the leading mention and normalize lightweight chat text."""
+    return content.replace(f"@{agent_name}", "").strip().lower()
+
+
+def _quick_reply(agent_name: str, content: str) -> Optional[str]:
+    """Return instant replies for small talk that should not boot the AI CLI."""
+    text = _strip_mention(content, agent_name)
+    compact = "".join(text.split())
+    if not compact:
+        return f"我在，{agent_name} 在线。"
+
+    greeting_words = ["你好", "在吗", "在线", "hello", "hi", "hey"]
+    identity_words = ["你是谁", "介绍", "身份", "who are you", "你是"]
+    status_words = ["状态", "进度", "完成了吗", "项目状态"]
+
+    if any(word in compact for word in greeting_words):
+        return f"我在，{agent_name} 在线。需要我看代码或推进任务时，直接把任务发给我。"
+
+    if any(word in compact for word in identity_words):
+        return (
+            f"我是 {agent_name}，这个项目房间里的代码协作 Agent。"
+            "我负责读取仓库、实现功能、跑测试，并把结果同步到 GitHub。"
+        )
+
+    if any(word in compact for word in status_words):
+        return (
+            "我在线。当前 Codex 负责的 Agent、Knowledge、Repository、Approval 前端和聊天保留期功能已完成；"
+            "复杂检查请明确指定模块，我会再调用本地 Codex 深入分析。"
+        )
+
+    return None
+
+
 class LocalAgentAdapter:
     """Connects a local AI to the project room via WebSocket + A2A."""
 
@@ -54,6 +89,7 @@ class LocalAgentAdapter:
         agent_id: str,
         command: list[str],
         a2a_port: int,
+        ai_timeout: int,
     ):
         self.server = server.rstrip("/")
         self.room = room
@@ -61,6 +97,7 @@ class LocalAgentAdapter:
         self.agent_id = agent_id
         self.command = command
         self.a2a_port = a2a_port
+        self.ai_timeout = ai_timeout
         self.ws_url = (
             f"{server.replace('http', 'ws')}/ws/chat/{room}"
         )
@@ -164,12 +201,17 @@ class LocalAgentAdapter:
         # Show typing indicator
         await ws.send(json.dumps({"type": "typing", "sender_id": self.agent_id}))
 
-        # Call local AI
-        print(f"  💬 Processing: {content[:80]}...")
-        response = await asyncio.to_thread(
-            self._call_local_ai,
-            f"{self.agent_name}, 项目房间消息: {content}",
-        )
+        quick_response = _quick_reply(self.agent_name, content)
+        if quick_response is not None:
+            print(f"  ⚡ Quick reply: {content[:80]}...")
+            response = quick_response
+        else:
+            # Call local AI
+            print(f"  💬 Processing: {content[:80]}...")
+            response = await asyncio.to_thread(
+                self._call_local_ai,
+                self._build_prompt(content),
+            )
 
         # Send response
         await ws.send(json.dumps({
@@ -181,6 +223,14 @@ class LocalAgentAdapter:
             "msg_type": "text",
         }))
         print(f"  ✅ Response sent ({len(response)} chars)")
+
+    def _build_prompt(self, content: str) -> str:
+        """Keep the chat prompt intentionally small for faster CLI responses."""
+        return (
+            f"你是 {self.agent_name}，Multi-Agent Project Room 的代码协作 Agent。"
+            "请优先用中文简短回复，默认 1-3 句；只有用户明确要求实现/检查/修改代码时才展开。"
+            f"\n聊天室消息：{content}"
+        )
 
     # ── Local AI ──────────────────────────────────────
 
@@ -194,7 +244,7 @@ class LocalAgentAdapter:
                 self.command + [prompt],
                 capture_output=True,
                 text=True,
-                timeout=120,
+                timeout=self.ai_timeout,
             )
             output = result.stdout.strip()
             if result.stderr:
@@ -206,7 +256,7 @@ class LocalAgentAdapter:
                 return f"[{self.agent_name}] AI command produced no stdout.\n{error}"
             return "(No response)"
         except subprocess.TimeoutExpired:
-            return f"[{self.agent_name}] ⏰ AI timed out after 120s."
+            return f"[{self.agent_name}] ⏰ AI timed out after {self.ai_timeout}s."
         except FileNotFoundError:
             return f"[{self.agent_name}] ❌ Command not found: {self.command[0]}"
         except Exception as e:
@@ -217,7 +267,6 @@ class LocalAgentAdapter:
     def stop(self):
         """Graceful shutdown."""
         self._running = False
-
 
 # ── CLI ────────────────────────────────────────────────
 
@@ -260,6 +309,10 @@ Examples:
         "--port", type=int, default=8765,
         help="Local port for A2A HTTP server (default: 8765)",
     )
+    parser.add_argument(
+        "--ai-timeout", type=int, default=120,
+        help="Seconds to wait for the local AI command (default: 120)",
+    )
 
     args = parser.parse_args()
     args.command = args.command.split()
@@ -272,6 +325,7 @@ Examples:
         agent_id=agent_id,
         command=args.command,
         a2a_port=args.port,
+        ai_timeout=args.ai_timeout,
     )
 
     try:
