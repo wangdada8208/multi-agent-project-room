@@ -19,7 +19,10 @@ async def list_messages(
     """Get paginated messages for a room (newest last)."""
     room = await db.get(Room, room_id)
     if room is None:
-        raise HTTPException(status_code=404, detail="Room not found")
+        # Room doesn't exist yet — auto-create so it's ready for first message
+        room = await chat_service.get_or_create_room(
+            db, room_id, name=f"Room {room_id[:8]}"
+        )
 
     messages = await chat_service.list_messages(db, room_id, page=page, limit=limit)
     return {"messages": [m.to_dict() for m in messages]}
