@@ -399,9 +399,9 @@ python local_agent_adapter.py \
 - [x] 消息气泡组件（区分 human / agent / system 三种样式）
 - [x] `useWebSocket` Hook（连 Claude 的 `/ws/chat/{room_id}`）
 - [x] 验证：发消息 → WebSocket → Claude 后端 → 广播 → 其他人收到
-- [ ] 消息类型展示（普通文字 + Markdown 渲染）
-- [ ] 在线用户列表（从 WS 的 user_online/user_offline 事件）
-- [ ] typing 指示器
+- [x] 消息类型展示（普通文字 + Markdown 渲染）
+- [-] 在线用户列表（Agent 面板显示在线状态；WS user_online/user_offline 事件待后端提供）
+- [x] typing 指示器
 - [x] 前端 `Dockerfile`
 
 **对接说明（给 Codex）：**
@@ -421,19 +421,19 @@ Claude 的 WebSocket 后端在 /ws/chat/{room_id}
 
 **后端 — `app/agent/`**
 
-- [ ] 创建 `app/agent/models.py` — `AgentCard` ORM 模型
-- [ ] 创建 `app/agent/routes.py`
-- [ ] `POST /api/v1/agents/register` — 注册 Agent
-- [ ] `GET /api/v1/agents` — 在线 Agent 列表
-- [ ] `GET /api/v1/agents/{id}` — Agent 详情
-- [ ] 创建 `app/agent/service.py`
+- [x] 创建 `app/agent/models.py` — `AgentCard` ORM 模型
+- [x] 创建 `app/agent/routes.py`
+- [x] `POST /api/v1/agents/register` — 注册 Agent
+- [x] `GET /api/v1/agents` — 在线 Agent 列表
+- [x] `GET /api/v1/agents/{id}` — Agent 详情
+- [x] 创建 `app/agent/service.py`
 
 **前端 — Agent 面板**
 
-- [ ] Agent 列表侧栏组件
-- [ ] Agent 在线/离线/忙碌状态指示器（绿/灰/黄圆点）
-- [ ] Agent 能力标签
-- [ ] Agent 头像和名称标识
+- [x] Agent 列表侧栏组件
+- [x] Agent 在线/离线/忙碌状态指示器（绿/灰/黄圆点）
+- [x] Agent 能力标签
+- [x] Agent 头像和名称标识
 
 **验证：**
 ```
@@ -448,35 +448,35 @@ Claude 的 WebSocket 后端在 /ws/chat/{room_id}
 
 **⑤ Knowledge 后端**
 
-- [ ] 创建 `app/knowledge/models.py` — `KnowledgeDoc` ORM 模型
-- [ ] 创建 `app/knowledge/routes.py`
-- [ ] `POST /api/v1/rooms/{id}/docs` — 上传文档
-- [ ] `GET /api/v1/rooms/{id}/docs` — 文档列表
-- [ ] `GET /api/v1/rooms/{id}/docs/{doc_id}` — 读文档
-- [ ] `GET /api/v1/rooms/{id}/docs/search?q=xxx` — 搜索（ILIKE）
-- [ ] 创建 `app/knowledge/service.py`
+- [x] 创建 `app/knowledge/models.py` — `KnowledgeDoc` ORM 模型
+- [x] 创建 `app/knowledge/routes.py`
+- [x] `POST /api/v1/rooms/{id}/docs` — 上传文档
+- [x] `GET /api/v1/rooms/{id}/docs` — 文档列表
+- [x] `GET /api/v1/rooms/{id}/docs/{doc_id}` — 读文档
+- [x] `GET /api/v1/rooms/{id}/docs/search?q=xxx` — 搜索（ILIKE）
+- [x] 创建 `app/knowledge/service.py`
 
 **⑥ Repository 后端**
 
-- [ ] 创建 `app/repository/routes.py`
-- [ ] `GET /api/v1/rooms/{id}/git/status` — 当前状态
-- [ ] `GET /api/v1/rooms/{id}/git/log` — 提交历史
-- [ ] `GET /api/v1/rooms/{id}/git/branch` — 当前分支
-- [ ] `GET /api/v1/rooms/{id}/git/diff` — 变更详情
-- [ ] 创建 `app/repository/service.py` — `GitService` 类
+- [x] 创建 `app/repository/routes.py`
+- [x] `GET /api/v1/rooms/{id}/git/status` — 当前状态
+- [x] `GET /api/v1/rooms/{id}/git/log` — 提交历史
+- [x] `GET /api/v1/rooms/{id}/git/branch` — 当前分支
+- [x] `GET /api/v1/rooms/{id}/git/diff` — 变更详情
+- [x] 创建 `app/repository/service.py` — `GitService` 类
 
 **前端 — Knowledge 面板**
 
-- [ ] 文档列表面板组件
-- [ ] 文档阅读器（Markdown 渲染 + 代码高亮）
-- [ ] 搜索框 + 搜索结果展示
-- [ ] 上传文档入口
+- [x] 文档列表面板组件
+- [x] 文档阅读器（Markdown 渲染 + 代码高亮）
+- [x] 搜索框 + 搜索结果展示
+- [x] 上传文档入口
 
 **前端 — Repository 面板**
 
-- [ ] 当前分支展示
-- [ ] 提交历史列表
-- [ ] 变更文件列表
+- [x] 当前分支展示
+- [x] 提交历史列表
+- [x] 变更文件列表
 
 **验证：**
 ```
@@ -489,15 +489,15 @@ Claude 的 WebSocket 后端在 /ws/chat/{room_id}
 
 **⑦ Approval 前端**
 
-- [ ] 审批请求卡片组件（标题 + 描述 + 状态标签）
-- [ ] 批准按钮（绿色）
-- [ ] 拒绝按钮（红色）
-- [ ] 审批面板（待处理 / 已处理 两个 tab）
+- [x] 审批请求卡片组件（标题 + 描述 + 状态标签）
+- [x] 批准按钮（绿色）
+- [x] 拒绝按钮（红色）
+- [x] 审批面板（待处理 / 已处理 两个 tab）
 
 **UI 打磨**
 
-- [ ] 全页面 UI 一致性检查
-- [ ] 加载状态 / 空状态 / 错误状态处理
+- [x] 全页面 UI 一致性检查
+- [x] 加载状态 / 空状态 / 错误状态处理
 - [ ] 暗黑模式（可选）
 - [ ] 响应式布局（适配窄屏）
 
@@ -515,8 +515,8 @@ WebSocket 会实时推送审批事件
 
 - [x] 修 bug（system消息/senderId/WS路由/CLI解析 等）
 - [/] 补文档（PLAN.md/TECHNICAL-IMPLEMENTATION.md 已完善）
-- [ ] Codex 模块的测试覆盖
-- [ ] 本地 `local_agent_adapter.py`（Codex 适配器）
+- [x] Codex 模块的测试覆盖
+- [x] 本地 `local_agent_adapter.py`（Codex 适配器）
 
 ```bash
 # Codex 适配器用法

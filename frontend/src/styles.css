@@ -195,10 +195,17 @@ button, input, select { font: inherit; }
 
 /* ── 聊天室 ── */
 
+.room-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 20px;
+  height: calc(100vh - 64px);
+}
+
 .chat-page {
   display: grid;
   grid-template-rows: auto 1fr auto;
-  height: calc(100vh - 64px);
+  min-height: 0;
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: 16px;
@@ -325,6 +332,33 @@ button, input, select { font: inherit; }
   margin: 0;
 }
 
+.markdown-content {
+  display: grid;
+  gap: 4px;
+}
+
+.markdown-content h1,
+.markdown-content h2,
+.markdown-content h3 {
+  font-family: var(--font-heading);
+  margin: 4px 0;
+}
+
+.markdown-content h1 { font-size: 18px; }
+.markdown-content h2 { font-size: 16px; }
+.markdown-content h3 { font-size: 15px; }
+
+.markdown-content li {
+  margin-left: 18px;
+}
+
+.typing-line {
+  padding: 0 24px 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+  background: var(--bg-card);
+}
+
 .message-input-area {
   display: flex;
   gap: 10px;
@@ -382,6 +416,272 @@ button, input, select { font: inherit; }
   color: var(--text-primary);
   font-size: 13px;
   outline: none;
+}
+
+/* ── 协作侧栏 ── */
+
+.collab-panel {
+  min-height: 0;
+  overflow-y: auto;
+  display: grid;
+  gap: 14px;
+  align-content: start;
+}
+
+.side-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 16px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+}
+
+.panel-head,
+.approval-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.side-title {
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 16px;
+  color: var(--text-primary);
+}
+
+.side-sub,
+.muted {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin: 4px 0 0;
+}
+
+.mini-button {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-sidebar);
+  color: var(--text-secondary);
+  font-size: 12px;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+
+.mini-button.primary {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+
+.agent-list,
+.doc-list,
+.change-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.agent-item {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 10px;
+  align-items: center;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-sidebar);
+}
+
+.agent-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+
+.agent-dot.online { background: var(--accent-green); }
+.agent-dot.busy { background: #d97706; }
+.agent-dot.offline { background: var(--text-muted); }
+
+.agent-name,
+.doc-title {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.tag-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.tag {
+  font-size: 10px;
+  color: var(--accent);
+  background: var(--accent-light);
+  border-radius: 999px;
+  padding: 2px 6px;
+}
+
+.panel-input,
+.doc-create textarea {
+  width: 100%;
+  margin-top: 10px;
+  padding: 9px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-sidebar);
+  color: var(--text-primary);
+  font-size: 13px;
+  outline: none;
+}
+
+.doc-create textarea {
+  min-height: 78px;
+  resize: vertical;
+}
+
+.doc-create {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.doc-item,
+.commit-card,
+.approval-card {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px;
+  background: var(--bg-sidebar);
+}
+
+.doc-item {
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+}
+
+.doc-reader {
+  margin-top: 10px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px;
+  background: #fffaf0;
+}
+
+.doc-reader pre {
+  white-space: pre-wrap;
+  margin: 8px 0 0;
+  color: var(--text-secondary);
+  font: 12px/1.6 var(--font-body);
+  max-height: 160px;
+  overflow: auto;
+}
+
+.doc-snippet,
+.approval-card p {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 4px 0 0;
+}
+
+.repo-branch {
+  margin-top: 10px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.commit-card {
+  margin-top: 10px;
+}
+
+.commit-card span {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--accent-blue);
+  font-size: 12px;
+}
+
+.commit-card p {
+  margin: 4px 0 0;
+  font-size: 13px;
+}
+
+.change-item {
+  display: grid;
+  grid-template-columns: 34px 1fr;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.change-item span {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.change-item code {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.commit-list {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.commit-row {
+  display: grid;
+  grid-template-columns: 58px 1fr;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.commit-row span {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--accent-blue);
+}
+
+.commit-row p {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.approval-status {
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 11px;
+  background: var(--border);
+  color: var(--text-secondary);
+}
+
+.approval-status.pending { background: #fef3c7; color: #b45309; }
+.approval-status.approved { background: var(--accent-green-light); color: var(--accent-green); }
+.approval-status.rejected { background: #fee2e2; color: #dc2626; }
+
+.approval-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.approval-actions button {
+  border: 0;
+  border-radius: 8px;
+  padding: 6px 10px;
+  color: white;
+  background: var(--accent-green);
+  cursor: pointer;
+}
+
+.approval-actions button.danger {
+  background: #dc2626;
 }
 
 /* ── 创建房间 ── */
@@ -457,8 +757,15 @@ button, input, select { font: inherit; }
   .main-panel {
     padding: 16px;
   }
-  .chat-page {
+  .room-workspace {
+    grid-template-columns: 1fr;
     height: calc(100vh - 32px);
+  }
+  .chat-page {
+    min-height: 560px;
     border-radius: 12px;
+  }
+  .collab-panel {
+    display: none;
   }
 }

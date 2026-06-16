@@ -2,6 +2,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useWebSocket } from "../hooks/useWebSocket";
+import { AgentPanel } from "../components/agent/AgentPanel";
+import { KnowledgePanel } from "../components/knowledge/KnowledgePanel";
+import { RepositoryPanel } from "../components/repository/RepositoryPanel";
+import { ApprovalPanel } from "../components/approval/ApprovalPanel";
 import { useAuthStore } from "../stores/authStore";
 import { useChatStore } from "../stores/chatStore";
 import { useRoomStore } from "../stores/roomStore";
@@ -40,6 +44,7 @@ export function RoomPage() {
   const { sendMessage } = useWebSocket(roomId);
   const messages = useChatStore((state) => state.messages);
   const connectionStatus = useChatStore((state) => state.connectionStatus);
+  const typingUsers = useChatStore((state) => state.typingUsers);
   const setMessages = useChatStore((state) => state.setMessages);
   const displayName = useAuthStore((state) => state.displayName);
   const setActiveRoomId = useRoomStore((state) => state.setActiveRoomId);
@@ -63,31 +68,45 @@ export function RoomPage() {
   }
 
   return (
-    <section className="chat-page">
-      <header className="chat-header">
-        <div>
-          <Link to="/rooms" className="back-link">← 返回房间列表</Link>
-          <div className="room-name">房间 {roomId.slice(0, 12)}</div>
-          <div className="room-sub">{displayName}</div>
-        </div>
-        <span className={`status-badge ${connectionStatus}`}>
-          <span className="dot" />
-          {statusLabel[connectionStatus] || connectionStatus}
-        </span>
-      </header>
+    <div className="room-workspace">
+      <section className="chat-page">
+        <header className="chat-header">
+          <div>
+            <Link to="/rooms" className="back-link">← 返回房间列表</Link>
+            <div className="room-name">房间 {roomId.slice(0, 12)}</div>
+            <div className="room-sub">{displayName}</div>
+          </div>
+          <span className={`status-badge ${connectionStatus}`}>
+            <span className="dot" />
+            {statusLabel[connectionStatus] || connectionStatus}
+          </span>
+        </header>
 
-      {messagesQuery.isError && (
-        <div className="empty-state">
-          <p style={{ color: "#dc2626" }}>加载消息失败，请检查连接。</p>
-        </div>
-      )}
+        {messagesQuery.isError && (
+          <div className="empty-state">
+            <p style={{ color: "#dc2626" }}>加载消息失败，请检查连接。</p>
+          </div>
+        )}
 
-      <MessageList messages={messages} userId={senderId} />
-      <MessageInputArea
-        disabled={connectionStatus !== "open"}
-        onSend={handleSend}
-      />
-    </section>
+        <MessageList messages={messages} userId={senderId} />
+        {typingUsers.length > 0 && (
+          <div className="typing-line">
+            {typingUsers.slice(-3).join("、")} 正在输入...
+          </div>
+        )}
+        <MessageInputArea
+          disabled={connectionStatus !== "open"}
+          onSend={handleSend}
+        />
+      </section>
+
+      <aside className="collab-panel">
+        <AgentPanel />
+        <KnowledgePanel roomId={roomId} />
+        <RepositoryPanel roomId={roomId} />
+        <ApprovalPanel roomId={roomId} />
+      </aside>
+    </div>
   );
 }
 
@@ -132,10 +151,26 @@ function MessageList({ messages, userId }: { messages: ChatMessage[]; userId: st
                   </span>
                 </div>
               )}
-              <p>{msg.content}</p>
+              <MessageContent content={msg.content} />
             </div>
           </div>
         );
+      })}
+    </div>
+  );
+}
+
+function MessageContent({ content }: { content: string }) {
+  const lines = content.split("\n");
+  return (
+    <div className="markdown-content">
+      {lines.map((line, index) => {
+        if (line.startsWith("### ")) return <h3 key={index}>{line.slice(4)}</h3>;
+        if (line.startsWith("## ")) return <h2 key={index}>{line.slice(3)}</h2>;
+        if (line.startsWith("# ")) return <h1 key={index}>{line.slice(2)}</h1>;
+        if (line.startsWith("- ")) return <li key={index}>{line.slice(2)}</li>;
+        if (line.trim() === "") return <br key={index} />;
+        return <p key={index}>{line}</p>;
       })}
     </div>
   );
