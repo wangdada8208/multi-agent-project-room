@@ -1,0 +1,118 @@
+"""Test local adapter dialogue handling."""
+
+import json
+import sys
+from pathlib import Path
+
+import pytest
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from local_agent_adapter import LocalAgentAdapter
+
+
+class FakeWebSocket:
+    def __init__(self):
+        self.sent = []
+
+    async def send(self, payload: str):
+        self.sent.append(json.loads(payload))
+
+
+@pytest.mark.asyncio
+async def test_agent_dialogue_message_triggers_without_mention(monkeypatch):
+    """Active dialogue messages should trigger even when @Codex is absent."""
+    adapter = LocalAgentAdapter(
+        server="http://test",
+        room="room-1",
+        agent_name="Codex",
+        agent_id="codex-local",
+        command=["codex"],
+        a2a_port=8765,
+        ai_timeout=120,
+    )
+    ws = FakeWebSocket()
+    sent_dialogue = {}
+
+    monkeypatch.setattr(adapter, "_call_local_ai", lambda prompt: "我接上了。")
+
+    async def fake_send_dialogue_message(dialogue_id, target_agent, content):
+        sent_dialogue.update(
+            {
+                "dialogue_id": dialogue_id,
+                "target_agent": target_agent,
+                "content": content,
+            }
+        )
+
+    monkeypatch.setattr(adapter, "_send_dialogue_message", fake_send_dialogue_message)
+
+    await adapter._handle_message(
+        {
+            "type": "agent_dialogue_message",
+            "dialogue": {
+                "dialogue_id": "dlg-1",
+                "participants": ["Codex", "Claude"],
+                "status": "active",
+                "current_turn": 1,
+                "max_turns": 8,
+            },
+            "message": {
+                "id": "msg-1",
+                "content": "我们继续看接口。",
+                "sender_id": "claude-local",
+                "sender_name": "Claude",
+                "sender_type": "agent",
+                "target_agent": "Codex",
+            },
+        },
+        ws,
+    )
+
+    assert sent_dialogue == {
+        "dialogue_id": "dlg-1",
+        "target_agent": "Claude",
+        "content": "我接上了。",
+    }
+    assert ws.sent == [{"type": "typing", "sender_id": "codex-local"}]
+
+
+@pytest.mark.asyncio
+async def test_unrelated_agent_message_without_mention_is_ignored(monkeypatch):
+    """Plain chat messages still require @Agent unless they are dialogue events."""
+    adapter = LocalAgentAdapter(
+        server="http://test",
+        room="room-1",
+        agent_name="Codex",
+        agent_id="codex-local",
+        command=["codex"],
+        a2a_port=8765,
+        ai_timeout=120,
+    )
+    ws = FakeWebSocket()
+    called = False
+
+    async def fake_send_dialogue_message(dialogue_id, target_agent, content):
+        nonlocal called
+        called = True
+
+    monkeypatch.setattr(adapter, "_send_dialogue_message", fake_send_dialogue_message)
+
+    await adapter._handle_message(
+        {
+            "type": "message",
+            "message": {
+                "id": "msg-2",
+                "content": "我们继续看接口。",
+                "sender_id": "claude-local",
+                "sender_name": "Claude",
+                "sender_type": "agent",
+            },
+        },
+        ws,
+    )
+
+    assert called is False
+    assert ws.sent == []

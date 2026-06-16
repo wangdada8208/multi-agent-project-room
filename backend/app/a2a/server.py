@@ -5,6 +5,9 @@ All A2A methods are routed through POST /a2a.
 Agent Card is served at GET /a2a/.well-known/agent-card.
 """
 
+import uuid
+from datetime import datetime, timedelta, timezone
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
@@ -14,6 +17,7 @@ from app.a2a import task_manager as tm
 from app.a2a.discovery import AgentDiscovery
 from app.chat import service as chat_service
 from app.core.database import async_session
+from app.ws.connection_manager import connection_manager
 
 router = APIRouter(prefix="/a2a", tags=["a2a"])
 settings = get_settings()
@@ -48,6 +52,7 @@ async def get_agent_card():
 # ── JSON-RPC unified entry ────────────────────────────
 
 METHODS: dict[str, callable] = {}
+DIALOGUES: dict[str, dict] = {}
 
 
 def rpc_method(name: str):
@@ -56,6 +61,79 @@ def rpc_method(name: str):
         METHODS[name] = fn
         return fn
     return wrapper
+
+
+def _now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _serialize_dialogue(dialogue: dict) -> dict:
+    data = dialogue.copy()
+    for key in ("created_at", "expires_at", "ended_at"):
+        value = data.get(key)
+        if isinstance(value, datetime):
+            data[key] = value.isoformat()
+    return data
+
+
+def _normalize_participants(participants: list[str], initiator: str) -> list[str]:
+    seen: set[str] = set()
+    normalized: list[str] = []
+    for name in [initiator, *participants]:
+        clean = str(name).strip()
+        if not clean or clean.lower() in seen:
+            continue
+        seen.add(clean.lower())
+        normalized.append(clean)
+    return normalized
+
+
+def _dialogue_peer(dialogue: dict, sender_name: str, target_agent: str | None) -> str:
+    if target_agent:
+        return target_agent
+    for participant in dialogue["participants"]:
+        if participant.lower() != sender_name.lower():
+            return participant
+    raise ValueError("target_agent is required for single-participant dialogues")
+
+
+async def _save_room_message(
+    room_id: str,
+    sender_id: str,
+    sender_name: str,
+    content: str,
+    dialogue_id: str,
+) -> dict:
+    try:
+        async with async_session() as db:
+            await chat_service.get_or_create_room(
+                db, room_id, name=f"Room {room_id[:8]}"
+            )
+            message = await chat_service.save_message(
+                db=db,
+                room_id=room_id,
+                sender_id=sender_id,
+                sender_type="agent",
+                sender_name=sender_name,
+                content=content,
+                msg_type="text",
+                parent_id=dialogue_id,
+            )
+            return message.to_dict()
+    except Exception as e:
+        print(f"dialogue message persistence failed: {e}")
+        return {
+            "id": str(uuid.uuid4()),
+            "room_id": room_id,
+            "sender_id": sender_id,
+            "sender_type": "agent",
+            "sender_name": sender_name,
+            "content": content,
+            "msg_type": "text",
+            "parent_id": dialogue_id,
+            "created_at": _now().isoformat(),
+            "persistence": "failed",
+        }
 
 
 @router.post("")
@@ -144,14 +222,153 @@ async def rpc_message_send(params: dict) -> dict:
         raise HTTPException(status_code=400, detail="room_id and content are required")
 
     async with async_session() as db:
+        await chat_service.get_or_create_room(
+            db, room_id, name=f"Room {room_id[:8]}"
+        )
         message = await chat_service.save_message(
             db=db, room_id=room_id, sender_id=sender_id,
             sender_type=sender_type, content=content, msg_type=msg_type,
         )
 
-    # Broadcast via WebSocket (connection_manager broadcasts independently
-    # on the ws_handler side; this just persists the message)
+    await connection_manager.broadcast(
+        room_id,
+        {"type": "message", "message": message.to_dict()},
+    )
     return {"status": "sent", "message_id": message.id}
+
+
+@rpc_method("dialogues/start")
+async def rpc_dialogues_start(params: dict) -> dict:
+    """Start a Hub-relayed agent dialogue."""
+    room_id = str(params.get("room_id", "")).strip()
+    initiator = str(params.get("initiator_agent", "")).strip()
+    participants = params.get("participants") or []
+    if not room_id or not initiator:
+        raise HTTPException(
+            status_code=400, detail="room_id and initiator_agent are required"
+        )
+    if not isinstance(participants, list):
+        raise HTTPException(status_code=400, detail="participants must be a list")
+
+    duration_seconds = int(params.get("duration_seconds") or 30)
+    max_turns = int(params.get("max_turns") or 8)
+    duration_seconds = max(5, min(duration_seconds, 300))
+    max_turns = max(1, min(max_turns, 40))
+    now = _now()
+    dialogue_id = str(params.get("dialogue_id") or uuid.uuid4())
+    dialogue = {
+        "dialogue_id": dialogue_id,
+        "room_id": room_id,
+        "initiator_agent": initiator,
+        "participants": _normalize_participants(participants, initiator),
+        "status": "active",
+        "current_turn": 0,
+        "max_turns": max_turns,
+        "created_at": now,
+        "expires_at": now + timedelta(seconds=duration_seconds),
+        "ended_at": None,
+        "reason": None,
+    }
+    if len(dialogue["participants"]) < 2:
+        raise HTTPException(
+            status_code=400, detail="dialogue requires at least two participants"
+        )
+    DIALOGUES[dialogue_id] = dialogue
+    return _serialize_dialogue(dialogue)
+
+
+@rpc_method("dialogues/send")
+async def rpc_dialogues_send(params: dict) -> dict:
+    """Relay a message inside an active dialogue."""
+    dialogue_id = str(params.get("dialogue_id", "")).strip()
+    content = str(params.get("content", "")).strip()
+    sender_id = str(params.get("sender_id", "")).strip()
+    sender_name = str(params.get("sender_name", "")).strip()
+    if not dialogue_id or not content or not sender_id or not sender_name:
+        raise HTTPException(
+            status_code=400,
+            detail="dialogue_id, content, sender_id, and sender_name are required",
+        )
+
+    dialogue = DIALOGUES.get(dialogue_id)
+    if not dialogue or dialogue["status"] != "active":
+        raise ValueError("Dialogue is not active")
+    if _now() >= dialogue["expires_at"]:
+        dialogue["status"] = "ended"
+        dialogue["ended_at"] = _now()
+        dialogue["reason"] = "expired"
+        raise ValueError("Dialogue is not active")
+    if dialogue["current_turn"] >= dialogue["max_turns"]:
+        dialogue["status"] = "ended"
+        dialogue["ended_at"] = _now()
+        dialogue["reason"] = "max_turns_reached"
+        raise ValueError("Dialogue is not active")
+    if sender_name.lower() not in {
+        participant.lower() for participant in dialogue["participants"]
+    }:
+        raise ValueError("Sender is not a dialogue participant")
+
+    target_agent = _dialogue_peer(
+        dialogue, sender_name, params.get("target_agent")
+    )
+    if target_agent.lower() not in {
+        participant.lower() for participant in dialogue["participants"]
+    }:
+        raise ValueError("target_agent is not a dialogue participant")
+
+    dialogue["current_turn"] += 1
+    if dialogue["current_turn"] >= dialogue["max_turns"]:
+        dialogue["status"] = "ending"
+
+    message_payload = await _save_room_message(
+        room_id=dialogue["room_id"],
+        sender_id=sender_id,
+        sender_name=sender_name,
+        content=content,
+        dialogue_id=dialogue_id,
+    )
+    message_payload["dialogue_id"] = dialogue_id
+    message_payload["target_agent"] = target_agent
+
+    await connection_manager.broadcast(
+        dialogue["room_id"],
+        {"type": "message", "message": message_payload},
+    )
+    await connection_manager.broadcast(
+        dialogue["room_id"],
+        {
+            "type": "agent_dialogue_message",
+            "dialogue": _serialize_dialogue(dialogue),
+            "message": message_payload,
+        },
+    )
+    return {
+        "status": "sent",
+        "dialogue_id": dialogue_id,
+        "message_id": message_payload["id"],
+        "target_agent": target_agent,
+        "current_turn": dialogue["current_turn"],
+        "dialogue_status": dialogue["status"],
+    }
+
+
+@rpc_method("dialogues/end")
+async def rpc_dialogues_end(params: dict) -> dict:
+    """End an active dialogue."""
+    dialogue_id = str(params.get("dialogue_id", "")).strip()
+    if not dialogue_id:
+        raise HTTPException(status_code=400, detail="dialogue_id is required")
+    dialogue = DIALOGUES.get(dialogue_id)
+    if not dialogue:
+        raise ValueError("Dialogue not found")
+    dialogue["status"] = "ended"
+    dialogue["ended_at"] = _now()
+    dialogue["reason"] = params.get("reason") or "ended"
+    await connection_manager.broadcast(
+        dialogue["room_id"],
+        {"type": "agent_dialogue_ended", "dialogue": _serialize_dialogue(dialogue)},
+    )
+    return _serialize_dialogue(dialogue)
 
 
 @rpc_method("agent/list")

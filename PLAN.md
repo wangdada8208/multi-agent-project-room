@@ -805,6 +805,11 @@ python3 local_agent_adapter.py \
 - Codex 运行适配器前需要装依赖: `pip3 install httpx websockets`
 - 连接后 @Claude 或 @Codex 即可触发 AI 响应
 - 也可通过 A2A 互相派任务: `POST /a2a tasks/send`
+- 已支持 A2A Relay Dialogue：用户只需发起一次，例如
+  `@Codex 和 Claude 持续讨论 30 秒：介绍一下当前项目状态`，
+  后续两个 Agent 会通过 Hub 中继的 `dialogues/start` / `dialogues/send`
+  继续对话，无需每条消息都带 `@对方`。
+- 可选参数：`--auto-dialogue-seconds 30`、`--max-dialogue-turns 8`
 
 ---
 

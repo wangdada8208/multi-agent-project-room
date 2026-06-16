@@ -109,6 +109,57 @@ def _agent_route_reply(agent_name: str, content: str) -> Optional[str]:
     return normalized
 
 
+def _is_dialogue_request(agent_name: str, content: str) -> bool:
+    """Return true when a user asks this agent to start peer dialogue."""
+    target = _target_agent(agent_name, content)
+    if target is None:
+        return False
+    text = _strip_mention(content, agent_name)
+    compact = "".join(text.split())
+    dialogue_words = [
+        "持续对话", "连续对话", "互相", "对话", "聊天", "聊聊",
+        "讨论", "协作", "沟通", "交流", "一起", "配合",
+        "dialogue", "conversation", "talk", "discuss",
+    ]
+    return any(word in compact for word in dialogue_words)
+
+
+def _requested_seconds(content: str, default_seconds: int) -> int:
+    """Extract a simple Chinese/English second duration from user text."""
+    match = re.search(r"(\d{1,3})\s*(秒|s|sec|seconds?)", content, re.IGNORECASE)
+    if not match:
+        return default_seconds
+    return max(5, min(int(match.group(1)), 300))
+
+
+def _dialogue_seed_message(agent_name: str, content: str) -> str:
+    """Build the first peer message for a dialogue session."""
+    target = _target_agent(agent_name, content)
+    if not target:
+        return f"我们开始一次简短协作，请先说说你的判断。"
+    text = re.sub(rf"@?{re.escape(agent_name)}", "", content, flags=re.IGNORECASE)
+    text = re.sub(rf"@?{re.escape(target)}", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"\d{1,3}\s*(秒|s|sec|seconds?)", "", text, flags=re.IGNORECASE)
+    for phrase in [
+        "从你开始", "你先开始", "唤醒", "持续对话", "连续对话",
+        "对话", "聊天", "聊聊", "讨论", "协作", "沟通", "交流",
+        "让", "和", "与", "一起", "进行",
+    ]:
+        text = text.replace(phrase, "")
+    text = text.strip(" ，,。:：")
+    if text:
+        return f"我们围绕“{text}”快速对齐，请你先给出你的判断。"
+    return f"我们开始一次简短协作，请你先给出你的判断。"
+
+
+def _is_dialogue_stop(content: str) -> bool:
+    compact = "".join(content.lower().split())
+    return any(
+        word in compact
+        for word in ["结束", "停止", "不用回复", "我这边结束", "[[end]]", "end"]
+    )
+
+
 def _quick_reply(agent_name: str, content: str) -> Optional[str]:
     """Return instant replies for small talk that should not boot the AI CLI."""
     text = _strip_mention(content, agent_name)
@@ -154,6 +205,8 @@ class LocalAgentAdapter:
         command: list[str],
         a2a_port: int,
         ai_timeout: int,
+        auto_dialogue_seconds: int = 30,
+        max_dialogue_turns: int = 8,
     ):
         self.server = server.rstrip("/")
         self.room = room
@@ -162,12 +215,15 @@ class LocalAgentAdapter:
         self.command = command
         self.a2a_port = a2a_port
         self.ai_timeout = ai_timeout
+        self.auto_dialogue_seconds = auto_dialogue_seconds
+        self.max_dialogue_turns = max_dialogue_turns
         self.started_at = datetime.now(timezone.utc)
         self.ws_url = (
             f"{server.replace('http', 'ws')}/ws/chat/{room}"
         )
         self._running = True
         self._processed_ids: set[str] = set()  # Track processed message IDs
+        self._dialogues: dict[str, dict] = {}
         self.http = httpx.AsyncClient(base_url=self.server, timeout=30)
 
     # ── Main ──────────────────────────────────────────
@@ -299,6 +355,17 @@ class LocalAgentAdapter:
         """Process an incoming WebSocket message."""
         msg_type = data.get("type")
 
+        if msg_type == "agent_dialogue_message":
+            await self._handle_dialogue_message(data, ws)
+            return
+
+        if msg_type == "agent_dialogue_ended":
+            dialogue = data.get("dialogue", {})
+            dialogue_id = dialogue.get("dialogue_id")
+            if dialogue_id:
+                self._dialogues.pop(dialogue_id, None)
+            return
+
         # Only process chat messages
         if msg_type != "message":
             return
@@ -320,6 +387,32 @@ class LocalAgentAdapter:
         mention = f"@{self.agent_name}"
         if mention not in content and msg.get("msg_type") != "task":
             return
+
+        if _is_dialogue_stop(content):
+            await self._end_all_dialogues("stopped by user")
+            await ws.send(json.dumps({
+                "type": "message",
+                "content": "已停止当前 Agent 连续对话。",
+                "sender_id": self.agent_id,
+                "sender_name": self.agent_name,
+                "sender_type": "agent",
+                "msg_type": "text",
+            }))
+            return
+
+        if _is_dialogue_request(self.agent_name, content):
+            started = await self._start_dialogue_from_request(content)
+            if started:
+                await ws.send(json.dumps({"type": "typing", "sender_id": self.agent_id}))
+                await ws.send(json.dumps({
+                    "type": "message",
+                    "content": started,
+                    "sender_id": self.agent_id,
+                    "sender_name": self.agent_name,
+                    "sender_type": "agent",
+                    "msg_type": "text",
+                }))
+                return
 
         # Show typing indicator
         await ws.send(json.dumps({"type": "typing", "sender_id": self.agent_id}))
@@ -346,6 +439,153 @@ class LocalAgentAdapter:
             "msg_type": "text",
         }))
         print(f"  ✅ Response sent ({len(response)} chars)")
+
+    async def _start_dialogue_from_request(self, content: str) -> Optional[str]:
+        """Create a Hub dialogue and send the first peer-directed message."""
+        target = _target_agent(self.agent_name, content)
+        if not target:
+            return None
+        duration_seconds = _requested_seconds(content, self.auto_dialogue_seconds)
+        payload = {
+            "jsonrpc": "2.0",
+            "method": "dialogues/start",
+            "params": {
+                "room_id": self.room,
+                "initiator_agent": self.agent_name,
+                "participants": [self.agent_name, target],
+                "duration_seconds": duration_seconds,
+                "max_turns": self.max_dialogue_turns,
+            },
+            "id": str(uuid.uuid4()),
+        }
+        try:
+            resp = await self.http.post("/a2a", json=payload)
+            data = resp.json()
+            dialogue = data.get("result")
+            if not dialogue:
+                error = data.get("error", {}).get("message", "unknown error")
+                return f"启动与 {target} 的连续对话失败：{error}"
+            dialogue_id = dialogue["dialogue_id"]
+            self._dialogues[dialogue_id] = dialogue
+            await self._send_dialogue_message(
+                dialogue_id,
+                target,
+                _dialogue_seed_message(self.agent_name, content),
+            )
+            return (
+                f"已启动与 {target} 的连续对话，最长 {duration_seconds} 秒，"
+                f"最多 {dialogue.get('max_turns', self.max_dialogue_turns)} 轮。"
+            )
+        except Exception as e:
+            return f"启动与 {target} 的连续对话失败：{e}"
+
+    async def _handle_dialogue_message(self, data: dict, ws):
+        """Handle a Hub-relayed dialogue message without requiring @mentions."""
+        dialogue = data.get("dialogue") or {}
+        msg = data.get("message") or {}
+        dialogue_id = dialogue.get("dialogue_id") or msg.get("dialogue_id")
+        if not dialogue_id:
+            return
+        if dialogue.get("status") not in (None, "active"):
+            self._dialogues.pop(dialogue_id, None)
+            return
+        participants = dialogue.get("participants") or []
+        if self.agent_name.lower() not in {str(p).lower() for p in participants}:
+            return
+        target_agent = msg.get("target_agent")
+        if target_agent and target_agent.lower() != self.agent_name.lower():
+            return
+        sender_id = msg.get("sender_id", "")
+        sender_name = msg.get("sender_name", "")
+        if sender_id == self.agent_id or sender_name.lower() == self.agent_name.lower():
+            return
+        msg_id = msg.get("id", "")
+        if msg_id and msg_id in self._processed_ids:
+            return
+        if msg_id:
+            self._processed_ids.add(msg_id)
+
+        self._dialogues[dialogue_id] = dialogue
+        content = msg.get("content", "")
+        if _is_dialogue_stop(content):
+            await self._end_dialogue(dialogue_id, "peer ended dialogue")
+            return
+
+        await ws.send(json.dumps({"type": "typing", "sender_id": self.agent_id}))
+        print(f"  🔁 Dialogue {dialogue_id[:8]} from {sender_name}: {content[:80]}...")
+        response = await asyncio.to_thread(
+            self._call_local_ai,
+            self._build_dialogue_prompt(sender_name or "peer", content, dialogue),
+        )
+        response = self._trim_dialogue_response(response)
+        if _is_dialogue_stop(response):
+            await self._send_dialogue_message(dialogue_id, sender_name, response)
+            await self._end_dialogue(dialogue_id, "agent ended dialogue")
+            return
+        await self._send_dialogue_message(dialogue_id, sender_name, response)
+
+    async def _send_dialogue_message(
+        self,
+        dialogue_id: str,
+        target_agent: str,
+        content: str,
+    ):
+        """Send a dialogue message through the Hub relay."""
+        payload = {
+            "jsonrpc": "2.0",
+            "method": "dialogues/send",
+            "params": {
+                "dialogue_id": dialogue_id,
+                "room_id": self.room,
+                "sender_id": self.agent_id,
+                "sender_name": self.agent_name,
+                "target_agent": target_agent,
+                "content": content,
+            },
+            "id": str(uuid.uuid4()),
+        }
+        resp = await self.http.post("/a2a", json=payload)
+        data = resp.json()
+        if data.get("error"):
+            print(f"  ⚠️  Dialogue send failed: {data['error'].get('message')}")
+            self._dialogues.pop(dialogue_id, None)
+
+    async def _end_dialogue(self, dialogue_id: str, reason: str):
+        """Ask the Hub to end one dialogue."""
+        self._dialogues.pop(dialogue_id, None)
+        payload = {
+            "jsonrpc": "2.0",
+            "method": "dialogues/end",
+            "params": {"dialogue_id": dialogue_id, "reason": reason},
+            "id": str(uuid.uuid4()),
+        }
+        try:
+            await self.http.post("/a2a", json=payload)
+        except Exception as e:
+            print(f"  ⚠️  Dialogue end failed: {e}")
+
+    async def _end_all_dialogues(self, reason: str):
+        """End every active dialogue known to this adapter."""
+        dialogue_ids = list(self._dialogues)
+        for dialogue_id in dialogue_ids:
+            await self._end_dialogue(dialogue_id, reason)
+
+    def _build_dialogue_prompt(self, peer_name: str, content: str, dialogue: dict) -> str:
+        """Prompt for fast peer-to-peer dialogue turns."""
+        return (
+            f"你是 {self.agent_name}，正在和 {peer_name} 进行一个短时 Agent 对话。"
+            "请直接接上对方的话，中文回复 1-3 句，保持具体、快速、可执行。"
+            "不要声称自己没有聊天室或 WebSocket 工具；不要写 @ 名字。"
+            "如果你认为对话应结束，在最后写“我这边结束”。"
+            f"\n当前轮次：{dialogue.get('current_turn', 0)}/{dialogue.get('max_turns', self.max_dialogue_turns)}"
+            f"\n{peer_name}：{content}"
+        )
+
+    def _trim_dialogue_response(self, response: str) -> str:
+        """Keep relay dialogue short enough to feel live."""
+        lines = [line.strip() for line in response.splitlines() if line.strip()]
+        compact = " ".join(lines)
+        return compact[:600] or f"收到，我这边继续配合。"
 
     def _build_prompt(self, content: str) -> str:
         """Keep the chat prompt intentionally small for faster CLI responses."""
@@ -436,6 +676,14 @@ Examples:
         "--ai-timeout", type=int, default=120,
         help="Seconds to wait for the local AI command (default: 120)",
     )
+    parser.add_argument(
+        "--auto-dialogue-seconds", type=int, default=30,
+        help="Default seconds for agent-to-agent dialogue sessions (default: 30)",
+    )
+    parser.add_argument(
+        "--max-dialogue-turns", type=int, default=8,
+        help="Max relayed dialogue turns before the Hub stops the session (default: 8)",
+    )
 
     args = parser.parse_args()
     args.command = args.command.split()
@@ -449,6 +697,8 @@ Examples:
         command=args.command,
         a2a_port=args.port,
         ai_timeout=args.ai_timeout,
+        auto_dialogue_seconds=args.auto_dialogue_seconds,
+        max_dialogue_turns=args.max_dialogue_turns,
     )
 
     try:
