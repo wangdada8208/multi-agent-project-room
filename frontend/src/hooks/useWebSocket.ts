@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useChatStore } from "../stores/chatStore";
 import type { ChatMessage, MessageType, RoomSocketEvent, SenderType } from "../types/chat";
 
+import { useAuthStore } from "../stores/authStore";
+
 interface SendMessageInput {
   content: string;
   senderId: string;
@@ -66,11 +68,14 @@ export function useWebSocket(roomId: string) {
       return false;
     }
 
+    const displayName = useAuthStore.getState().displayName;
+
     socket.send(
       JSON.stringify({
         type: "message",
         sender_id: input.senderId,
         sender_type: input.senderType,
+        sender_name: displayName,
         msg_type: input.msgType ?? "text",
         content: input.content,
       }),

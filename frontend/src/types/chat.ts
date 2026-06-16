@@ -20,6 +20,7 @@ export interface ChatMessage {
   room_id: string;
   sender_id: string;
   sender_type: SenderType;
+  sender_name?: string | null;
   content: string;
   msg_type: MessageType;
   created_at: string;

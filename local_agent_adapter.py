@@ -117,6 +117,7 @@ class LocalAgentAdapter:
                         "type": "message",
                         "content": f"🤖 Agent {self.agent_name} connected.",
                         "sender_id": self.agent_id,
+                        "sender_name": self.agent_name,
                         "sender_type": "agent",
                         "msg_type": "system",
                     }))
@@ -175,6 +176,7 @@ class LocalAgentAdapter:
             "type": "message",
             "content": response,
             "sender_id": self.agent_id,
+            "sender_name": self.agent_name,
             "sender_type": "agent",
             "msg_type": "text",
         }))

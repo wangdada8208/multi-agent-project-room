@@ -21,6 +21,7 @@ async def save_message(
     room_id: str,
     sender_id: str,
     sender_type: str = "human",
+    sender_name: str | None = None,
     content: str = "",
     msg_type: MessageType = "text",
     parent_id: str | None = None,
@@ -28,20 +29,26 @@ async def save_message(
     """Persist a message and return it."""
     user = await db.get(User, sender_id)
     if user is None:
+        display_name = sender_name or sender_id[:128]
         db.add(
             User(
                 id=sender_id,
                 username=sender_id[:64],
-                display_name=sender_id[:128],
+                display_name=display_name[:128],
                 user_type=sender_type if sender_type in {"human", "agent"} else "human",
             )
         )
-        await db.flush()
+    elif sender_name:
+        # Update display_name if provided
+        user.display_name = sender_name[:128]
+
+    await db.flush()
 
     message = Message(
         room_id=room_id,
         sender_id=sender_id,
         sender_type=sender_type,
+        sender_name=sender_name,
         content=content,
         msg_type=msg_type,
         parent_id=parent_id,

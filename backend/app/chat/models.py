@@ -26,6 +26,9 @@ class Message(Base):
     msg_type: Mapped[str] = mapped_column(
         String(32), nullable=False, default="text"
     )  # text | system | task | proposal | report | approval_request
+    sender_name: Mapped[Optional[str]] = mapped_column(
+        String(128), nullable=True, default=None
+    )
     parent_id: Mapped[Optional[str]] = mapped_column(
         String(36), ForeignKey("messages.id"), nullable=True
     )
@@ -41,6 +44,7 @@ class Message(Base):
             "room_id": self.room_id,
             "sender_id": self.sender_id,
             "sender_type": self.sender_type,
+            "sender_name": self.sender_name,
             "content": self.content,
             "msg_type": self.msg_type,
             "parent_id": self.parent_id,

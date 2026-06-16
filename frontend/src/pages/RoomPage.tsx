@@ -88,7 +88,15 @@ export function RoomPage() {
           </div>
         )}
 
-        <MessageList messages={messages} userId={senderId} />
+        {messagesQuery.isLoading && (
+          <div className="empty-state">
+            <p>加载消息历史中...</p>
+          </div>
+        )}
+
+        {!messagesQuery.isLoading && (
+          <MessageList messages={messages} userId={senderId} />
+        )}
         {typingUsers.length > 0 && (
           <div className="typing-line">
             {typingUsers.slice(-3).join("、")} 正在输入...
@@ -132,6 +140,7 @@ function MessageList({ messages, userId }: { messages: ChatMessage[]; userId: st
         const isOwn = msg.sender_id === userId;
         const isAgent = msg.sender_type === "agent";
         const isSystem = msg.msg_type === "system";
+        const senderDisplay = msg.sender_name || msg.sender_id.slice(0, 8);
         return (
           <div key={msg.id} className={`message-row${isOwn ? " own" : ""}`}>
             <div className={`message-bubble${isAgent ? " agent" : ""}${isSystem ? " system" : ""}`}>
@@ -139,7 +148,7 @@ function MessageList({ messages, userId }: { messages: ChatMessage[]; userId: st
                 <div className="message-meta">
                   <span className="sender">
                     {isAgent ? "🤖 " : ""}
-                    {msg.sender_id === userId ? "我" : msg.sender_id.slice(0, 8)}
+                    {isOwn ? "我" : senderDisplay}
                   </span>
                   <span>
                     {msg.created_at

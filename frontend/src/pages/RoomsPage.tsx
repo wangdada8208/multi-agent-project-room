@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useRoomStore } from "../stores/roomStore";
 import type { Room } from "../types/chat";
 
@@ -14,6 +14,7 @@ export function RoomsPage() {
   const [newName, setNewName] = useState("");
   const [newDesc, setNewDesc] = useState("");
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
 
   const roomsQuery = useQuery({ queryKey: ["rooms"], queryFn: fetchRooms });
   const setRooms = useRoomStore((state) => state.setRooms);
@@ -25,10 +26,13 @@ export function RoomsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: newName || "新房间", description: newDesc }),
       }).then((r) => r.json()),
-    onSuccess: () => {
+    onSuccess: (data) => {
       setNewName("");
       setNewDesc("");
       queryClient.invalidateQueries({ queryKey: ["rooms"] });
+      // Auto-navigate to the new room
+      const roomId = data?.room?.id;
+      if (roomId) navigate(`/rooms/${roomId}`);
     },
   });
 

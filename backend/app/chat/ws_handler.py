@@ -53,19 +53,19 @@ async def handle_chat(websocket: WebSocket, room_id: str) -> None:
                     continue
 
                 async with async_session() as db:
-                    # Ensure room exists
+                    # Auto-create room if it doesn't exist
                     room = await db.get(Room, room_id)
                     if room is None:
-                        await websocket.send_json(
-                            {"type": "error", "message": "Room not found"}
+                        room = await chat_service.get_or_create_room(
+                            db, room_id, name=f"Room {room_id[:8]}"
                         )
-                        continue
 
                     message = await chat_service.save_message(
                         db=db,
                         room_id=room_id,
                         sender_id=str(raw.get("sender_id", "anonymous")),
                         sender_type=raw.get("sender_type", "human"),
+                        sender_name=raw.get("sender_name"),
                         content=content,
                         msg_type=raw.get("msg_type", "text"),
                         parent_id=raw.get("parent_id"),
