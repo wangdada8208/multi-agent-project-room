@@ -102,6 +102,7 @@ class LocalAgentAdapter:
             f"{server.replace('http', 'ws')}/ws/chat/{room}"
         )
         self._running = True
+        self._processed_ids: set[str] = set()  # Track processed message IDs
         self.http = httpx.AsyncClient(base_url=self.server, timeout=30)
 
     # ── Main ──────────────────────────────────────────
@@ -136,6 +137,44 @@ class LocalAgentAdapter:
 
     # ── WebSocket ─────────────────────────────────────
 
+    async def _catch_up_missed_messages(self, ws):
+        """Fetch recent messages on reconnect and process any missed @mentions."""
+        try:
+            resp = await self.http.get(
+                f"/api/v1/rooms/{self.room}/messages?limit=20"
+            )
+            if resp.status_code != 200:
+                return
+            data = resp.json()
+            messages = data.get("messages", [])
+            if not messages:
+                return
+
+            mention = f"@{self.agent_name}"
+            pending = 0
+            for msg in messages:
+                msg_id = msg.get("id", "")
+                if msg_id in self._processed_ids:
+                    continue
+                content = msg.get("content", "")
+                sender_id = msg.get("sender_id", "")
+                msg_type = msg.get("msg_type", "text")
+                if sender_id == self.agent_id:
+                    self._processed_ids.add(msg_id)
+                    continue
+                if mention not in content and msg_type != "task":
+                    self._processed_ids.add(msg_id)
+                    continue
+                # Found a missed @mention
+                pending += 1
+                print(f"  📋 Catching up missed @{self.agent_name} from {msg.get('sender_name') or sender_id[:8]}")
+                ws_data = {"type": "message", "message": msg}
+                await self._handle_message(ws_data, ws)
+            if pending:
+                print(f"  ✅ Caught up on {pending} missed message(s)")
+        except Exception as e:
+            print(f"  ⚠️  Catch-up error: {e}")
+
     async def _ws_loop(self):
         """Connect to chat room WebSocket with auto-reconnect."""
         retry = 1
@@ -158,6 +197,9 @@ class LocalAgentAdapter:
                         "sender_type": "agent",
                         "msg_type": "system",
                     }))
+
+                    # Catch up on messages missed while disconnected
+                    await self._catch_up_missed_messages(ws)
 
                     async for raw in ws:
                         if not self._running:
@@ -192,6 +234,11 @@ class LocalAgentAdapter:
         # Ignore own messages
         if sender_id == self.agent_id:
             return
+
+        # Track this message as processed
+        msg_id = msg.get("id") or data.get("id", "")
+        if msg_id:
+            self._processed_ids.add(msg_id)
 
         # Check if mentioned
         mention = f"@{self.agent_name}"
