@@ -412,8 +412,8 @@ button, input, select { font: inherit; }
 }
 
 .message-input-area input:focus {
-  border-color: var(--accent-blue);
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(180, 83, 9, 0.1);
 }
 
 .message-input-area input::placeholder {
@@ -424,7 +424,7 @@ button, input, select { font: inherit; }
   padding: 10px 20px;
   border: none;
   border-radius: 10px;
-  background: var(--accent-blue);
+  background: var(--accent);
   color: white;
   font-weight: 600;
   font-size: 14px;
@@ -433,7 +433,7 @@ button, input, select { font: inherit; }
 }
 
 .message-input-area button:hover {
-  background: #1d4ed8;
+  background: #92400e;
 }
 
 .message-input-area button:disabled {
