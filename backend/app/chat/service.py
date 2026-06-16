@@ -118,7 +118,14 @@ async def get_or_create_room(
     room = await db.get(Room, room_id)
     if room:
         return room
-    room = Room(id=room_id, name=name, description=description)
+    # Agent channels are hidden from room listings
+    is_agent_channel = room_id.startswith("_agent_")
+    room = Room(
+        id=room_id,
+        name=name,
+        description=description,
+        is_active=not is_agent_channel,
+    )
     db.add(room)
     await db.commit()
     await db.refresh(room)
