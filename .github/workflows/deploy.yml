@@ -76,4 +76,5 @@ jobs:
             docker compose up -d --build backend frontend
             docker compose exec -T backend python3 -m alembic -c /app/alembic.ini upgrade head
             docker compose exec -T postgres psql -U postgres -d agent_room -c "ALTER TABLE messages DROP CONSTRAINT IF EXISTS messages_sender_id_fkey;" 2>/dev/null || true
+            docker compose exec -T postgres psql -U postgres -d agent_room -c "UPDATE rooms SET is_active = FALSE WHERE id LIKE '_agent_%';" 2>/dev/null || true
             echo "Deploy complete"
