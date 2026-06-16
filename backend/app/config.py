@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     a2a_port: int = 8765
     a2a_public_url: str = "http://localhost:8000"
     a2a_protocol_version: str = "0.3.0"
+    message_retention_days: int = 15
 
     model_config = {"env_file": ".env", "env_prefix": "MAPR_"}
 

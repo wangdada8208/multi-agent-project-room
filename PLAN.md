@@ -46,7 +46,7 @@
   本地适配器                             ✅ Claude
   部署上线 (hub.wangdada8208.xyz)        ✅ Claude
   CI/CD (GitHub Actions)                ✅ Claude
-  单元测试 (16个)                        ✅ Claude + Codex
+  单元测试 (18个)                        ✅ Claude + Codex
   Frontend 骨架 (Vite + React)          ✅ Codex
   聊天 UI + WebSocket对接               ✅ Codex
   Frontend: Agent 面板                   ✅ Codex
@@ -269,6 +269,7 @@ Codex 先做 → Claude 才能做的依赖:
 - [x] 消息类型: text / system / task / proposal / report / approval_request
 - [x] 心跳检测（ping/pong，30s）
 - [x] 断线重连
+- [x] 聊天记录保留期限（默认 15 天，过期自动清理）
 - [x] **验证：** 发消息 → 存 PostgreSQL → 广播 → 刷新后历史仍在
 
 ### 5.2 W2 — A2A Hub（核心）
@@ -416,6 +417,7 @@ Claude 的 WebSocket 后端在 /ws/chat/{room_id}
   接收: {"type": "message", "id": "...", "sender_id": "...", "content": "...", ...}
 
 历史消息 API: GET /api/v1/rooms/{id}/messages
+历史消息保留: 默认 15 天（`MAPR_MESSAGE_RETENTION_DAYS` 可配置）
 ```
 
 ### 6.2 W2 — Agent 全栈

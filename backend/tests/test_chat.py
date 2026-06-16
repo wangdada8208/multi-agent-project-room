@@ -2,9 +2,12 @@
 
 import pytest
 import uuid
+from datetime import datetime, timedelta, timezone
 from httpx import AsyncClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.chat.models import Message
 from app.models.room import Room
 from app.models.user import User
 from app.chat.service import save_message, list_messages
@@ -82,3 +85,71 @@ async def test_message_types(db: AsyncSession):
             sender_type="human", content=f"Type: {msg_type}", msg_type=msg_type,
         )
         assert msg.msg_type == msg_type
+
+
+@pytest.mark.asyncio
+async def test_message_retention_removes_expired_messages(db: AsyncSession):
+    """Messages older than the retention window are deleted and not returned."""
+    user = User(id=str(uuid.uuid4()), username="retention", display_name="Retention")
+    room = Room(name="Retention")
+    db.add(user)
+    db.add(room)
+    await db.commit()
+
+    old_msg = Message(
+        room_id=room.id,
+        sender_id=user.id,
+        sender_type="human",
+        content="expired",
+        msg_type="text",
+        created_at=datetime.now(timezone.utc) - timedelta(days=16),
+    )
+    fresh_msg = Message(
+        room_id=room.id,
+        sender_id=user.id,
+        sender_type="human",
+        content="fresh",
+        msg_type="text",
+        created_at=datetime.now(timezone.utc) - timedelta(days=1),
+    )
+    db.add_all([old_msg, fresh_msg])
+    await db.commit()
+
+    messages = await list_messages(db=db, room_id=room.id)
+    assert [message.content for message in messages] == ["fresh"]
+
+    result = await db.execute(select(Message).where(Message.id == old_msg.id))
+    assert result.scalars().first() is None
+
+
+@pytest.mark.asyncio
+async def test_message_history_returns_latest_page_oldest_first(db: AsyncSession):
+    """Refresh history should show the newest retained messages, oldest to newest."""
+    user = User(id=str(uuid.uuid4()), username="latest", display_name="Latest")
+    room = Room(name="Latest")
+    db.add(user)
+    db.add(room)
+    await db.commit()
+
+    now = datetime.now(timezone.utc)
+    db.add_all(
+        [
+            Message(
+                room_id=room.id,
+                sender_id=user.id,
+                sender_type="human",
+                content=f"message-{index}",
+                msg_type="text",
+                created_at=now + timedelta(minutes=index),
+            )
+            for index in range(5)
+        ]
+    )
+    await db.commit()
+
+    messages = await list_messages(db=db, room_id=room.id, page=1, limit=3)
+    assert [message.content for message in messages] == [
+        "message-2",
+        "message-3",
+        "message-4",
+    ]

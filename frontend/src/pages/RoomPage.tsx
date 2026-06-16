@@ -23,7 +23,7 @@ function getOrCreateSenderId(): string {
 }
 
 async function fetchMessages(roomId: string): Promise<ChatMessage[]> {
-  const res = await fetch(`/api/v1/rooms/${roomId}/messages`);
+  const res = await fetch(`/api/v1/rooms/${roomId}/messages?limit=200`);
   const data = await res.json();
   return data.messages ?? data.data ?? [];
 }

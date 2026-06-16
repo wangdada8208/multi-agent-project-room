@@ -1,19 +1,39 @@
 from __future__ import annotations
 """Chat service: message persistence and retrieval."""
 
+from datetime import datetime, timedelta, timezone
 from typing import Literal
 
 from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.chat.models import Message
+from app.config import get_settings
 from app.models.room import Room
 from app.models.user import User
 
+settings = get_settings()
 
 MessageType = Literal[
     "text", "system", "task", "proposal", "report", "approval_request"
 ]
+
+
+def retention_cutoff() -> datetime:
+    """Messages older than this UTC timestamp are expired."""
+    return datetime.now(timezone.utc) - timedelta(days=settings.message_retention_days)
+
+
+async def cleanup_expired_messages(db: AsyncSession) -> int:
+    """Delete messages older than the configured retention period."""
+    stmt = (
+        delete(Message)
+        .where(Message.created_at < retention_cutoff())
+        .execution_options(synchronize_session=False)
+    )
+    result = await db.execute(stmt)
+    await db.commit()
+    return result.rowcount or 0
 
 
 async def save_message(
@@ -27,6 +47,8 @@ async def save_message(
     parent_id: str | None = None,
 ) -> Message:
     """Persist a message and return it."""
+    await cleanup_expired_messages(db)
+
     user = await db.get(User, sender_id)
     if user is None:
         display_name = sender_name or sender_id[:128]
@@ -65,16 +87,25 @@ async def list_messages(
     page: int = 1,
     limit: int = 50,
 ) -> list[Message]:
-    """Get paginated messages for a room, newest last."""
+    """Get retained messages for a room.
+
+    Page 1 returns the newest retained messages, ordered oldest → newest for
+    chat display. Older pages walk backward through history.
+    """
+    await cleanup_expired_messages(db)
+
     stmt = (
         select(Message)
-        .where(Message.room_id == room_id)
-        .order_by(Message.created_at.asc())
+        .where(
+            Message.room_id == room_id,
+            Message.created_at >= retention_cutoff(),
+        )
+        .order_by(Message.created_at.desc())
         .offset((page - 1) * limit)
         .limit(limit)
     )
     result = await db.execute(stmt)
-    return list(result.scalars().all())
+    return list(reversed(result.scalars().all()))
 
 
 async def get_or_create_room(

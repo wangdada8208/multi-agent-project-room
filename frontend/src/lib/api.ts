@@ -81,7 +81,7 @@ export async function createRoom(name: string, description?: string): Promise<Ro
 }
 
 export async function fetchMessages(roomId: string): Promise<ChatMessage[]> {
-  const response = await fetch(`/api/v1/rooms/${roomId}/messages`);
+  const response = await fetch(`/api/v1/rooms/${roomId}/messages?limit=200`);
 
   if (!response.ok) {
     throw new Error("Failed to load messages");

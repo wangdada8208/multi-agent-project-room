@@ -25,4 +25,7 @@ async def list_messages(
         )
 
     messages = await chat_service.list_messages(db, room_id, page=page, limit=limit)
-    return {"messages": [m.to_dict() for m in messages]}
+    return {
+        "messages": [m.to_dict() for m in messages],
+        "retention_days": chat_service.settings.message_retention_days,
+    }
