@@ -209,9 +209,11 @@ class LocalAgentAdapter:
         max_dialogue_turns: int = 8,
     ):
         self.server = server.rstrip("/")
-        self.room = room
         self.agent_name = agent_name
         self.agent_id = agent_id
+        # Default to agent channel if no room specified
+        self.room = room if room else f"_agent_{agent_name.lower()}"
+        self.is_agent_channel = self.room.startswith("_agent_")
         self.command = command
         self.a2a_port = a2a_port
         self.ai_timeout = ai_timeout
@@ -258,6 +260,44 @@ class LocalAgentAdapter:
 
     # ── WebSocket ─────────────────────────────────────
 
+    async def _handle_agent_task(self, data: dict, ws):
+        """Process an agent_task forwarded from any room."""
+        message_id = data.get("message_id", "")
+        if message_id in self._processed_ids:
+            return
+        self._processed_ids.add(message_id)
+
+        content = data.get("content", "")
+        origin_room = data.get("origin_room", "")
+        sender_name = data.get("sender_name", "someone")
+
+        # Show typing indicator
+        await ws.send(json.dumps({"type": "typing", "sender_id": self.agent_id}))
+
+        # Quick reply or full AI
+        quick_response = _quick_reply(self.agent_name, content)
+        if quick_response is not None:
+            print(f"  ⚡ Quick reply from {sender_name}: {content[:60]}...")
+            response = quick_response
+        else:
+            print(f"  💬 Processing task from room {origin_room} ({sender_name}): {content[:60]}...")
+            response = await asyncio.to_thread(
+                self._call_local_ai,
+                self._build_prompt(content),
+            )
+
+        # Send response with target_room for cross-room routing
+        await ws.send(json.dumps({
+            "type": "message",
+            "content": response,
+            "sender_id": self.agent_id,
+            "sender_name": self.agent_name,
+            "sender_type": "agent",
+            "msg_type": "text",
+            "target_room": origin_room,
+        }))
+        print(f"  ✅ Response sent to room {origin_room} ({len(response)} chars)")
+
     async def _catch_up_missed_messages(self, ws):
         """Fetch recent messages on reconnect and process any missed @mentions."""
         try:
@@ -269,6 +309,42 @@ class LocalAgentAdapter:
             data = resp.json()
             messages = data.get("messages", [])
             if not messages:
+                return
+
+            if self.is_agent_channel:
+                # Agent channel: process task-type messages (forwarded @mentions)
+                pending = 0
+                for msg in messages:
+                    msg_id = msg.get("id", "")
+                    if msg_id in self._processed_ids:
+                        continue
+                    if msg.get("msg_type") != "task":
+                        self._processed_ids.add(msg_id)
+                        continue
+                    sender_id = msg.get("sender_id", "")
+                    if sender_id == self.agent_id:
+                        self._processed_ids.add(msg_id)
+                        continue
+
+                    try:
+                        task_data = json.loads(msg.get("content", "{}"))
+                    except (json.JSONDecodeError, TypeError):
+                        self._processed_ids.add(msg_id)
+                        continue
+
+                    pending += 1
+                    print(f"  📋 Catching up missed @{self.agent_name} from {task_data.get('original_sender', '?')}")
+                    ws_data = {
+                        "type": "agent_task",
+                        "message_id": task_data.get("original_id", msg_id),
+                        "content": task_data.get("original_content", ""),
+                        "sender_id": msg.get("sender_id", ""),
+                        "sender_name": task_data.get("original_sender", ""),
+                        "origin_room": task_data.get("origin_room", ""),
+                    }
+                    await self._handle_agent_task(ws_data, ws)
+                if pending:
+                    print(f"  ✅ Caught up on {pending} missed task(s)")
                 return
 
             mention = f"@{self.agent_name}"
@@ -320,15 +396,16 @@ class LocalAgentAdapter:
                     print(f"  ✅ Connected to room '{self.room}'")
                     retry = 1  # Reset backoff on success
 
-                    # Send join message
-                    await ws.send(json.dumps({
-                        "type": "message",
-                        "content": f"🤖 Agent {self.agent_name} connected.",
-                        "sender_id": self.agent_id,
-                        "sender_name": self.agent_name,
-                        "sender_type": "agent",
-                        "msg_type": "system",
-                    }))
+                    # Send join message (skip in agent channel mode)
+                    if not self.is_agent_channel:
+                        await ws.send(json.dumps({
+                            "type": "message",
+                            "content": f"🤖 Agent {self.agent_name} connected.",
+                            "sender_id": self.agent_id,
+                            "sender_name": self.agent_name,
+                            "sender_type": "agent",
+                            "msg_type": "system",
+                        }))
 
                     # Catch up on messages missed while disconnected
                     await self._catch_up_missed_messages(ws)
@@ -354,6 +431,15 @@ class LocalAgentAdapter:
     async def _handle_message(self, data: dict, ws):
         """Process an incoming WebSocket message."""
         msg_type = data.get("type")
+
+        # Handle agent_task (cross-room @mentions forwarded by backend)
+        if msg_type == "agent_task":
+            await self._handle_agent_task(data, ws)
+            return
+
+        # Skip regular chat messages in agent channel mode
+        if self.is_agent_channel:
+            return
 
         if msg_type == "agent_dialogue_message":
             await self._handle_dialogue_message(data, ws)
@@ -656,7 +742,8 @@ Examples:
         "--server", required=True, help="Server URL (e.g., http://localhost:8000)"
     )
     parser.add_argument(
-        "--room", default="demo-room", help="Room ID to join (default: demo-room)"
+        "--room", default=None,
+        help="Room ID to join (default: auto-connect to _agent_{name} channel)"
     )
     parser.add_argument(
         "--agent-name", default="Agent", help="Agent name for @mentions"
