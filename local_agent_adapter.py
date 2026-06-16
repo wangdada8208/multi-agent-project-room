@@ -162,6 +162,7 @@ class LocalAgentAdapter:
         self.command = command
         self.a2a_port = a2a_port
         self.ai_timeout = ai_timeout
+        self.started_at = datetime.now(timezone.utc)
         self.ws_url = (
             f"{server.replace('http', 'ws')}/ws/chat/{room}"
         )
@@ -220,6 +221,17 @@ class LocalAgentAdapter:
                 msg_id = msg.get("id", "")
                 if msg_id in self._processed_ids:
                     continue
+                created_at = msg.get("created_at")
+                if created_at:
+                    try:
+                        created_time = datetime.fromisoformat(
+                            created_at.replace("Z", "+00:00")
+                        )
+                        if created_time < self.started_at:
+                            self._processed_ids.add(msg_id)
+                            continue
+                    except ValueError:
+                        pass
                 content = msg.get("content", "")
                 sender_id = msg.get("sender_id", "")
                 msg_type = msg.get("msg_type", "text")
