@@ -47,7 +47,7 @@ def _compact_stderr(stderr: str) -> str:
 
 def _strip_mention(content: str, agent_name: str) -> str:
     """Remove the leading mention and normalize lightweight chat text."""
-    return content.replace(f"@{agent_name}", "").strip().lower()
+    return re.sub(rf"@{re.escape(agent_name)}\b", "", content, flags=re.IGNORECASE).strip().lower()
 
 
 def _target_agent(agent_name: str, content: str) -> Optional[str]:
@@ -343,6 +343,7 @@ class LocalAgentAdapter:
                         "origin_room": task_data.get("origin_room", ""),
                     }
                     await self._handle_agent_task(ws_data, ws)
+                    self._processed_ids.add(msg_id)  # Also mark the task DB msg to avoid re-scan
                 if pending:
                     print(f"  ✅ Caught up on {pending} missed task(s)")
                 return
