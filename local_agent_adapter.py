@@ -165,7 +165,10 @@ class LocalAgentAdapter:
 
         # Call local AI
         print(f"  💬 Processing: {content[:80]}...")
-        response = self._call_local_ai(f"{self.agent_name}, 项目房间消息: {content}")
+        response = await asyncio.to_thread(
+            self._call_local_ai,
+            f"{self.agent_name}, 项目房间消息: {content}",
+        )
 
         # Send response
         await ws.send(json.dumps({
