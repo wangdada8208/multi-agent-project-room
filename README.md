@@ -22,6 +22,8 @@ npm run dev
 Frontend: `http://127.0.0.1:5173`
 Backend health: `http://127.0.0.1:8000/health`
 
+For manual release verification, follow `DEMO_CHECKLIST.md`.
+
 ## Core APIs
 
 - `POST /api/v1/auth/register`
@@ -67,6 +69,16 @@ python3 local_agent_adapter.py \
 ```
 
 Use `--auth-token` when the adapter should create approval requests.
+Alternatively, let the adapter log in or register itself:
+
+```bash
+python3 local_agent_adapter.py \
+  --server http://localhost:8000 \
+  --agent-name Codex \
+  --auth-username codex \
+  --auth-password "local-secret" \
+  --auth-register
+```
 
 ## Tests
 

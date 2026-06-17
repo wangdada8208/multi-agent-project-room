@@ -16,6 +16,8 @@ Usage:
         --command "codex"
 """
 
+from __future__ import annotations
+
 import argparse
 import asyncio
 import json
@@ -208,6 +210,10 @@ class LocalAgentAdapter:
         auto_dialogue_seconds: int = 30,
         max_dialogue_turns: int = 8,
         auth_token: str | None = None,
+        auth_username: str | None = None,
+        auth_password: str | None = None,
+        auth_display_name: str | None = None,
+        auth_register: bool = False,
     ):
         self.server = server.rstrip("/")
         self.agent_name = agent_name
@@ -220,6 +226,12 @@ class LocalAgentAdapter:
         self.ai_timeout = ai_timeout
         self.auto_dialogue_seconds = auto_dialogue_seconds
         self.max_dialogue_turns = max_dialogue_turns
+        self.auth_token = auth_token
+        self.auth_username = auth_username
+        self.auth_password = auth_password
+        self.auth_display_name = auth_display_name
+        self.auth_register = auth_register
+        self.authenticated = False
         self.started_at = datetime.now(timezone.utc)
         self.ws_url = (
             f"{server.replace('http', 'ws')}/ws/chat/{room}"
@@ -230,14 +242,74 @@ class LocalAgentAdapter:
         self.http = httpx.AsyncClient(base_url=self.server, timeout=30)
         if auth_token:
             self.http.headers["Authorization"] = f"Bearer {auth_token}"
+            self.authenticated = True
 
     # ── Main ──────────────────────────────────────────
 
     async def run(self):
         """Connect to room, register via A2A, then listen for messages."""
         print(f"🤖 [{self.agent_name}] Starting adapter...")
+        await self._authenticate()
         await self._register_via_a2a()
         await self._ws_loop()
+
+    # ── Auth ──────────────────────────────────────────
+
+    async def _authenticate(self):
+        """Authenticate for approval creation when credentials are provided."""
+        if self.auth_token:
+            print("  🔐 Auth token provided; approval creation enabled")
+            return
+
+        if not self.auth_username or not self.auth_password:
+            print("  🔓 No auth credentials provided; approval creation disabled")
+            return
+
+        login_payload = {
+            "username": self.auth_username,
+            "password": self.auth_password,
+        }
+        try:
+            resp = await self.http.post("/api/v1/auth/login", json=login_payload)
+            if resp.status_code == 200:
+                self._set_auth_from_response(resp.json())
+                print(f"  🔐 Logged in as '{self.auth_username}'; approval creation enabled")
+                return
+
+            if resp.status_code not in (401, 404) or not self.auth_register:
+                print(
+                    "  ⚠️  Auth login failed; approval creation disabled "
+                    f"(status={resp.status_code})"
+                )
+                return
+
+            register_payload = {
+                "username": self.auth_username,
+                "password": self.auth_password,
+                "display_name": self.auth_display_name or self.agent_name,
+                "user_type": "agent",
+            }
+            register_resp = await self.http.post(
+                "/api/v1/auth/register", json=register_payload
+            )
+            if register_resp.status_code == 200:
+                self._set_auth_from_response(register_resp.json())
+                print(f"  🔐 Registered agent user '{self.auth_username}'; approval creation enabled")
+                return
+
+            print(
+                "  ⚠️  Auth registration failed; approval creation disabled "
+                f"(status={register_resp.status_code})"
+            )
+        except Exception as e:
+            print(f"  ⚠️  Auth failed; approval creation disabled: {e}")
+
+    def _set_auth_from_response(self, data: dict):
+        token = data.get("access_token")
+        if not token:
+            return
+        self.http.headers["Authorization"] = f"Bearer {token}"
+        self.authenticated = True
 
     # ── A2A Registration ──────────────────────────────
 
@@ -788,6 +860,10 @@ Examples:
   # Custom room and port
   python local_agent_adapter.py --server https://hub.example.com \\
       --room my-room --agent-name Claude --port 9000
+
+  # Auto-login for approval creation
+  python local_agent_adapter.py --server https://hub.example.com \\
+      --agent-name Codex --auth-username codex --auth-password "secret" --auth-register
         """,
     )
     parser.add_argument(
@@ -827,6 +903,22 @@ Examples:
         "--auth-token", default=None,
         help="Bearer token used when the adapter needs to create approvals",
     )
+    parser.add_argument(
+        "--auth-username", default=None,
+        help="Username used to log in for approval creation",
+    )
+    parser.add_argument(
+        "--auth-password", default=None,
+        help="Password used to log in for approval creation",
+    )
+    parser.add_argument(
+        "--auth-display-name", default=None,
+        help="Display name used when --auth-register creates an agent user",
+    )
+    parser.add_argument(
+        "--auth-register", action="store_true",
+        help="Register an agent user if auth login fails with 401/404",
+    )
 
     args = parser.parse_args()
     args.command = args.command.split()
@@ -843,6 +935,10 @@ Examples:
         auto_dialogue_seconds=args.auto_dialogue_seconds,
         max_dialogue_turns=args.max_dialogue_turns,
         auth_token=args.auth_token,
+        auth_username=args.auth_username,
+        auth_password=args.auth_password,
+        auth_display_name=args.auth_display_name,
+        auth_register=args.auth_register,
     )
 
     try:

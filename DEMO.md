@@ -52,3 +52,16 @@ python3 local_agent_adapter.py \
   --agent-name Codex \
   --auth-token "<bearer-token>"
 ```
+
+Or let the adapter log in or create an agent user automatically:
+
+```bash
+python3 local_agent_adapter.py \
+  --server http://localhost:8000 \
+  --agent-name Codex \
+  --auth-username codex \
+  --auth-password "local-secret" \
+  --auth-register
+```
+
+For a full five-minute verification pass, use `DEMO_CHECKLIST.md`.
