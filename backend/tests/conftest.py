@@ -16,12 +16,21 @@ if str(BACKEND_DIR) not in sys.path:
 
 from app.main import app
 from app.core.database import Base, get_db, async_session as production_session
+from app.a2a import task_manager as a2a_task_manager
+from app.a2a import server as a2a_server
+from app.a2a import discovery as a2a_discovery
+from app.chat import ws_handler as chat_ws_handler
 
 # Use SQLite for tests (fast, no external deps)
 TEST_DATABASE_URL = "sqlite+aiosqlite:///./test.db"
 
 engine = create_async_engine(TEST_DATABASE_URL, echo=False)
 test_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+a2a_task_manager.async_session = test_session
+a2a_server.async_session = test_session
+a2a_discovery.async_session = test_session
+chat_ws_handler.async_session = test_session
 
 
 @pytest.fixture(scope="session")
@@ -60,6 +69,27 @@ async def client() -> AsyncGenerator[AsyncClient, None]:
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
+
+
+@pytest_asyncio.fixture
+async def auth_headers(client: AsyncClient) -> dict[str, str]:
+    """Register a human test user and return auth headers."""
+    username = "tester"
+    resp = await client.post(
+        "/api/v1/auth/register",
+        json={
+            "username": username,
+            "password": "secret123",
+            "display_name": "Test User",
+        },
+    )
+    if resp.status_code == 409:
+        resp = await client.post(
+            "/api/v1/auth/login",
+            json={"username": username, "password": "secret123"},
+        )
+    token = resp.json()["access_token"]
+    return {"Authorization": f"Bearer {token}"}
 
 
 @pytest_asyncio.fixture

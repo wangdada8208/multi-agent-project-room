@@ -1,14 +1,9 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { createRoom, fetchRooms } from "../lib/api";
 import { useRoomStore } from "../stores/roomStore";
 import type { Room } from "../types/chat";
-
-async function fetchRooms(): Promise<Room[]> {
-  const res = await fetch("/api/v1/rooms");
-  const data = await res.json();
-  return data.rooms ?? data.data ?? [];
-}
 
 export function RoomsPage() {
   const [newName, setNewName] = useState("");
@@ -21,18 +16,12 @@ export function RoomsPage() {
 
   const createMutation = useMutation({
     mutationFn: () =>
-      fetch("/api/v1/rooms", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: newName || "新房间", description: newDesc }),
-      }).then((r) => r.json()),
-    onSuccess: (data) => {
+      createRoom(newName || "新房间", newDesc),
+    onSuccess: (room) => {
       setNewName("");
       setNewDesc("");
       queryClient.invalidateQueries({ queryKey: ["rooms"] });
-      // Auto-navigate to the new room
-      const roomId = data?.room?.id;
-      if (roomId) navigate(`/rooms/${roomId}`);
+      navigate(`/rooms/${room.id}`);
     },
   });
 

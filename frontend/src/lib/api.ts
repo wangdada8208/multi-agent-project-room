@@ -1,4 +1,5 @@
-import type { ChatMessage, Room } from "../types/chat";
+import { useAuthStore, type AuthUser } from "../stores/authStore";
+import type { ChatMessage, Room, RoomTask } from "../types/chat";
 
 export interface AgentSummary {
   id: string;
@@ -51,11 +52,62 @@ export interface Approval {
   description: string;
   status: "pending" | "approved" | "rejected";
   risk_level: "low" | "medium" | "high";
+  metadata?: {
+    task_id?: string;
+    requested_action?: string;
+    risk_summary?: string;
+    [key: string]: unknown;
+  } | null;
   created_at: string;
 }
 
+async function apiFetch(input: RequestInfo | URL, init: RequestInit = {}) {
+  const token = useAuthStore.getState().token;
+  const headers = new Headers(init.headers);
+  if (!headers.has("Content-Type") && init.body) {
+    headers.set("Content-Type", "application/json");
+  }
+  if (token) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+  return fetch(input, { ...init, headers });
+}
+
+export async function register(input: {
+  username: string;
+  password: string;
+  display_name: string;
+  user_type?: "human" | "agent";
+}): Promise<{ user: AuthUser; access_token: string }> {
+  const response = await apiFetch("/api/v1/auth/register", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) throw new Error(await response.text());
+  return response.json();
+}
+
+export async function login(input: {
+  username: string;
+  password: string;
+}): Promise<{ user: AuthUser; access_token: string }> {
+  const response = await apiFetch("/api/v1/auth/login", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) throw new Error("登录失败，请检查用户名和密码");
+  return response.json();
+}
+
+export async function fetchMe(): Promise<AuthUser> {
+  const response = await apiFetch("/api/v1/auth/me");
+  if (!response.ok) throw new Error("Failed to load current user");
+  const payload = (await response.json()) as { user: AuthUser };
+  return payload.user;
+}
+
 export async function fetchRooms(): Promise<Room[]> {
-  const response = await fetch("/api/v1/rooms");
+  const response = await apiFetch("/api/v1/rooms");
 
   if (!response.ok) {
     throw new Error("Failed to load rooms");
@@ -66,9 +118,8 @@ export async function fetchRooms(): Promise<Room[]> {
 }
 
 export async function createRoom(name: string, description?: string): Promise<Room> {
-  const response = await fetch("/api/v1/rooms", {
+  const response = await apiFetch("/api/v1/rooms", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ name, description }),
   });
 
@@ -81,7 +132,7 @@ export async function createRoom(name: string, description?: string): Promise<Ro
 }
 
 export async function fetchMessages(roomId: string): Promise<ChatMessage[]> {
-  const response = await fetch(`/api/v1/rooms/${roomId}/messages?limit=200`);
+  const response = await apiFetch(`/api/v1/rooms/${roomId}/messages?limit=200`);
 
   if (!response.ok) {
     throw new Error("Failed to load messages");
@@ -95,7 +146,7 @@ export async function fetchMessages(roomId: string): Promise<ChatMessage[]> {
 }
 
 export async function fetchAgents(): Promise<AgentSummary[]> {
-  const response = await fetch("/api/v1/agents");
+  const response = await apiFetch("/api/v1/agents");
   if (!response.ok) throw new Error("Failed to load agents");
   const payload = (await response.json()) as { agents?: AgentSummary[]; data?: AgentSummary[] };
   return payload.agents ?? payload.data ?? [];
@@ -106,9 +157,8 @@ export async function registerAgent(input: {
   url?: string;
   capabilities: string[];
 }): Promise<AgentSummary> {
-  const response = await fetch("/api/v1/agents/register", {
+  const response = await apiFetch("/api/v1/agents/register", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
   });
   if (!response.ok) throw new Error("Failed to register agent");
@@ -117,16 +167,15 @@ export async function registerAgent(input: {
 }
 
 export async function fetchDocs(roomId: string): Promise<KnowledgeDocSummary[]> {
-  const response = await fetch(`/api/v1/rooms/${roomId}/docs`);
+  const response = await apiFetch(`/api/v1/rooms/${roomId}/docs`);
   if (!response.ok) throw new Error("Failed to load docs");
   const payload = (await response.json()) as { docs?: KnowledgeDocSummary[] };
   return payload.docs ?? [];
 }
 
 export async function createDoc(roomId: string, input: { title: string; content: string }): Promise<KnowledgeDoc> {
-  const response = await fetch(`/api/v1/rooms/${roomId}/docs`, {
+  const response = await apiFetch(`/api/v1/rooms/${roomId}/docs`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
   });
   if (!response.ok) throw new Error("Failed to create doc");
@@ -135,7 +184,7 @@ export async function createDoc(roomId: string, input: { title: string; content:
 }
 
 export async function fetchDoc(roomId: string, docId: string): Promise<KnowledgeDoc> {
-  const response = await fetch(`/api/v1/rooms/${roomId}/docs/${docId}`);
+  const response = await apiFetch(`/api/v1/rooms/${roomId}/docs/${docId}`);
   if (!response.ok) throw new Error("Failed to load doc");
   const payload = (await response.json()) as { doc: KnowledgeDoc };
   return payload.doc;
@@ -143,39 +192,45 @@ export async function fetchDoc(roomId: string, docId: string): Promise<Knowledge
 
 export async function searchDocs(roomId: string, query: string): Promise<KnowledgeSearchResult[]> {
   if (!query.trim()) return [];
-  const response = await fetch(`/api/v1/rooms/${roomId}/docs/search?q=${encodeURIComponent(query)}`);
+  const response = await apiFetch(`/api/v1/rooms/${roomId}/docs/search?q=${encodeURIComponent(query)}`);
   if (!response.ok) throw new Error("Failed to search docs");
   const payload = (await response.json()) as { results?: KnowledgeSearchResult[] };
   return payload.results ?? [];
 }
 
 export async function fetchGitStatus(roomId: string): Promise<GitStatus> {
-  const response = await fetch(`/api/v1/rooms/${roomId}/git/status`);
+  const response = await apiFetch(`/api/v1/rooms/${roomId}/git/status`);
   if (!response.ok) throw new Error("Failed to load git status");
   return response.json() as Promise<GitStatus>;
 }
 
 export async function fetchGitLog(roomId: string): Promise<GitCommit[]> {
-  const response = await fetch(`/api/v1/rooms/${roomId}/git/log?limit=5`);
+  const response = await apiFetch(`/api/v1/rooms/${roomId}/git/log?limit=5`);
   if (!response.ok) throw new Error("Failed to load git log");
   const payload = (await response.json()) as { commits?: GitCommit[] };
   return payload.commits ?? [];
 }
 
 export async function fetchApprovals(roomId: string): Promise<Approval[]> {
-  const response = await fetch(`/api/v1/rooms/${roomId}/approvals`);
+  const response = await apiFetch(`/api/v1/rooms/${roomId}/approvals`);
   if (!response.ok) throw new Error("Failed to load approvals");
   const payload = (await response.json()) as { approvals?: Approval[] };
   return payload.approvals ?? [];
 }
 
 export async function decideApproval(approvalId: string, decision: "approved" | "rejected"): Promise<Approval> {
-  const response = await fetch(`/api/v1/approvals/${approvalId}/approve`, {
+  const response = await apiFetch(`/api/v1/approvals/${approvalId}/approve`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ decision }),
   });
   if (!response.ok) throw new Error("Failed to decide approval");
   const payload = (await response.json()) as { approval: Approval };
   return payload.approval;
+}
+
+export async function fetchTasks(roomId: string): Promise<RoomTask[]> {
+  const response = await apiFetch(`/api/v1/rooms/${roomId}/tasks`);
+  if (!response.ok) throw new Error("Failed to load tasks");
+  const payload = (await response.json()) as { tasks?: RoomTask[] };
+  return payload.tasks ?? [];
 }

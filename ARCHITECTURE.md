@@ -30,6 +30,16 @@ WebSocket
 
 ## **Modules**
 
+### **Auth Module**
+
+Responsibilities:
+
+- Lightweight username/password registration and login
+- Bearer token issuance
+- Current user resolution for protected APIs
+
+------
+
 ### **Chat Module**
 
 Responsibilities:
@@ -37,6 +47,7 @@ Responsibilities:
 - Room management
 - Message persistence
 - WebSocket broadcast
+- Presence events: `presence_snapshot`, `user_online`, `user_offline`
 
 ------
 
@@ -76,6 +87,17 @@ Responsibilities:
 - Create approval requests
 - Track approvals
 - Authorize execution
+- Link human decisions to A2A task status
+
+------
+
+### **A2A Task Module**
+
+Responsibilities:
+
+- Submit and query agent tasks
+- Track room/source message/approval linkage
+- Broadcast `task_update` events into rooms
 
 ------
 
@@ -89,11 +111,11 @@ Chat Room
 
 ↓
 
-Agents Read Context
+@Agent Mention Creates A2A Task
 
 ↓
 
-Agents Discuss
+Agent Works Or Requests Approval
 
 ↓
 

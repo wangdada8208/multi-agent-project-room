@@ -28,6 +28,12 @@ export function ApprovalPanel({ roomId }: { roomId: string }) {
             <span className={`approval-status ${approval.status}`}>{approval.status}</span>
           </div>
           <p>{approval.description || "无描述"}</p>
+          {approval.metadata?.risk_summary && (
+            <p className="approval-meta">{approval.metadata.risk_summary}</p>
+          )}
+          {approval.metadata?.task_id && (
+            <small>关联任务: {approval.metadata.task_id.slice(0, 8)}</small>
+          )}
           {approval.status === "pending" && (
             <div className="approval-actions">
               <button onClick={() => decideMutation.mutate({ id: approval.id, decision: "approved" })}>批准</button>

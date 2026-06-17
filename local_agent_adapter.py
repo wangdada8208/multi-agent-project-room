@@ -207,6 +207,7 @@ class LocalAgentAdapter:
         ai_timeout: int,
         auto_dialogue_seconds: int = 30,
         max_dialogue_turns: int = 8,
+        auth_token: str | None = None,
     ):
         self.server = server.rstrip("/")
         self.agent_name = agent_name
@@ -227,6 +228,8 @@ class LocalAgentAdapter:
         self._processed_ids: set[str] = set()  # Track processed message IDs
         self._dialogues: dict[str, dict] = {}
         self.http = httpx.AsyncClient(base_url=self.server, timeout=30)
+        if auth_token:
+            self.http.headers["Authorization"] = f"Bearer {auth_token}"
 
     # ── Main ──────────────────────────────────────────
 
@@ -263,6 +266,7 @@ class LocalAgentAdapter:
     async def _handle_agent_task(self, data: dict, ws):
         """Process an agent_task forwarded from any room."""
         message_id = data.get("message_id", "")
+        task_id = data.get("task_id")
         if message_id in self._processed_ids:
             return
         self._processed_ids.add(message_id)
@@ -287,6 +291,7 @@ class LocalAgentAdapter:
             )
 
         # Send response with target_room for cross-room routing
+        await self._maybe_create_approval(origin_room, task_id, content, response)
         await ws.send(json.dumps({
             "type": "message",
             "content": response,
@@ -295,6 +300,8 @@ class LocalAgentAdapter:
             "sender_type": "agent",
             "msg_type": "text",
             "target_room": origin_room,
+            "parent_id": message_id,
+            "task_id": task_id,
         }))
         print(f"  ✅ Response sent to room {origin_room} ({len(response)} chars)")
 
@@ -337,6 +344,7 @@ class LocalAgentAdapter:
                     ws_data = {
                         "type": "agent_task",
                         "message_id": task_data.get("original_id", msg_id),
+                        "task_id": task_data.get("task_id"),
                         "content": task_data.get("original_content", ""),
                         "sender_id": msg.get("sender_id", ""),
                         "sender_name": task_data.get("original_sender", ""),
@@ -406,6 +414,13 @@ class LocalAgentAdapter:
                             "sender_name": self.agent_name,
                             "sender_type": "agent",
                             "msg_type": "system",
+                        }))
+                    else:
+                        await ws.send(json.dumps({
+                            "type": "identify",
+                            "sender_id": self.agent_id,
+                            "sender_name": self.agent_name,
+                            "sender_type": "agent",
                         }))
 
                     # Catch up on messages missed while disconnected
@@ -517,6 +532,8 @@ class LocalAgentAdapter:
             )
 
         # Send response
+        task_id = msg.get("task_id") or data.get("task_id")
+        await self._maybe_create_approval(self.room, task_id, content, response)
         await ws.send(json.dumps({
             "type": "message",
             "content": response,
@@ -524,8 +541,42 @@ class LocalAgentAdapter:
             "sender_name": self.agent_name,
             "sender_type": "agent",
             "msg_type": "text",
+            "parent_id": msg_id,
+            "task_id": task_id,
         }))
         print(f"  ✅ Response sent ({len(response)} chars)")
+
+    async def _maybe_create_approval(
+        self,
+        room_id: str,
+        task_id: str | None,
+        request_content: str,
+        response: str,
+    ) -> None:
+        """Create an approval when the agent response explicitly asks for one."""
+        if not task_id or not room_id:
+            return
+        compact = "".join((request_content + response).lower().split())
+        if not any(word in compact for word in ["需要审批", "请求审批", "approval", "approve"]):
+            return
+        payload = {
+            "title": f"{self.agent_name} 请求人工审批",
+            "description": response[:1000],
+            "risk_level": "medium",
+            "task_id": task_id,
+            "requested_action": request_content[:300],
+            "risk_summary": "Agent 标记该任务需要人工确认后继续。",
+        }
+        try:
+            resp = await self.http.post(f"/api/v1/rooms/{room_id}/approvals", json=payload)
+            if resp.status_code in (200, 201):
+                print(f"  📋 Approval created for task {task_id}")
+            elif resp.status_code == 401:
+                print("  ⚠️  Approval skipped: provide --auth-token to create approvals")
+            else:
+                print(f"  ⚠️  Approval create failed: {resp.status_code} {resp.text[:120]}")
+        except Exception as e:
+            print(f"  ⚠️  Approval create error: {e}")
 
     async def _start_dialogue_from_request(self, content: str) -> Optional[str]:
         """Create a Hub dialogue and send the first peer-directed message."""
@@ -772,6 +823,10 @@ Examples:
         "--max-dialogue-turns", type=int, default=8,
         help="Max relayed dialogue turns before the Hub stops the session (default: 8)",
     )
+    parser.add_argument(
+        "--auth-token", default=None,
+        help="Bearer token used when the adapter needs to create approvals",
+    )
 
     args = parser.parse_args()
     args.command = args.command.split()
@@ -787,6 +842,7 @@ Examples:
         ai_timeout=args.ai_timeout,
         auto_dialogue_seconds=args.auto_dialogue_seconds,
         max_dialogue_turns=args.max_dialogue_turns,
+        auth_token=args.auth_token,
     )
 
     try:

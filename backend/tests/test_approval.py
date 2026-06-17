@@ -11,16 +11,17 @@ from app.approval.service import create_approval, list_approvals, decide_approva
 
 
 @pytest.mark.asyncio
-async def test_approval_flow(client: AsyncClient):
+async def test_approval_flow(client: AsyncClient, auth_headers: dict[str, str]):
     """Full approval lifecycle via API."""
     # Create room first
-    resp = await client.post("/api/v1/rooms", json={"name": "Approval Test"})
+    resp = await client.post("/api/v1/rooms", json={"name": "Approval Test"}, headers=auth_headers)
     room_id = resp.json()["room"]["id"]
 
     # Create approval
     resp = await client.post(
         f"/api/v1/rooms/{room_id}/approvals",
         json={"title": "Approve this", "description": "Please approve", "risk_level": "low"},
+        headers=auth_headers,
     )
     assert resp.status_code == 200
     approval = resp.json()["approval"]
@@ -28,7 +29,7 @@ async def test_approval_flow(client: AsyncClient):
     approval_id = approval["id"]
 
     # List approvals
-    resp = await client.get(f"/api/v1/rooms/{room_id}/approvals")
+    resp = await client.get(f"/api/v1/rooms/{room_id}/approvals", headers=auth_headers)
     assert resp.status_code == 200
     assert len(resp.json()["approvals"]) == 1
 
@@ -36,6 +37,7 @@ async def test_approval_flow(client: AsyncClient):
     resp = await client.post(
         f"/api/v1/approvals/{approval_id}/approve",
         json={"decision": "approved"},
+        headers=auth_headers,
     )
     assert resp.status_code == 200
     assert resp.json()["approval"]["status"] == "approved"
@@ -44,12 +46,14 @@ async def test_approval_flow(client: AsyncClient):
     resp = await client.post(
         f"/api/v1/rooms/{room_id}/approvals",
         json={"title": "Reject this", "description": "Please reject"},
+        headers=auth_headers,
     )
     approval_id2 = resp.json()["approval"]["id"]
 
     resp = await client.post(
         f"/api/v1/approvals/{approval_id2}/approve",
         json={"decision": "rejected"},
+        headers=auth_headers,
     )
     assert resp.status_code == 200
     assert resp.json()["approval"]["status"] == "rejected"

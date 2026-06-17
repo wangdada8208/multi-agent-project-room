@@ -4,7 +4,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
-from sqlalchemy import String, Text, DateTime, JSON
+from sqlalchemy import String, Text, DateTime, JSON, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column
 from app.core.database import Base
 
@@ -27,6 +27,15 @@ class A2ATask(Base):
     )
     # submitted | working | completed | failed | canceled | input_required
     result: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    room_id: Mapped[Optional[str]] = mapped_column(
+        String(36), ForeignKey("rooms.id"), nullable=True, index=True
+    )
+    source_message_id: Mapped[Optional[str]] = mapped_column(
+        String(36), ForeignKey("messages.id"), nullable=True
+    )
+    approval_id: Mapped[Optional[str]] = mapped_column(
+        String(36), ForeignKey("approvals.id"), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
@@ -43,6 +52,9 @@ class A2ATask(Base):
             "query": self.query,
             "status": self.status,
             "result": self.result,
+            "room_id": self.room_id,
+            "source_message_id": self.source_message_id,
+            "approval_id": self.approval_id,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "completed_at": self.completed_at.isoformat() if self.completed_at else None,
         }

@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.agent_card import AgentCardRecord
+
+logger = logging.getLogger(__name__)
 
 
 def _agent_to_dict(record: AgentCardRecord) -> dict:
@@ -65,6 +68,7 @@ async def register_agent(
 
     await db.commit()
     await db.refresh(record)
+    logger.info("agent registered name=%s id=%s", name, record.id)
     return _agent_to_dict(record)
 
 

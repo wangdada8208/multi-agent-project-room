@@ -14,34 +14,41 @@ from app.chat.service import save_message, list_messages
 
 
 @pytest.mark.asyncio
-async def test_create_and_list_rooms(client: AsyncClient):
+async def test_create_and_list_rooms(client: AsyncClient, auth_headers: dict[str, str]):
     """Create a room then list it."""
-    resp = await client.get("/api/v1/rooms")
+    resp = await client.get("/api/v1/rooms", headers=auth_headers)
     assert resp.status_code == 200
     assert len(resp.json()["rooms"]) == 0
 
     resp = await client.post(
         "/api/v1/rooms",
         json={"name": "Test Room", "description": "A test room"},
+        headers=auth_headers,
     )
     assert resp.status_code == 200
     room = resp.json()["room"]
     assert room["name"] == "Test Room"
     room_id = room["id"]
 
-    resp = await client.get("/api/v1/rooms")
+    resp = await client.get("/api/v1/rooms", headers=auth_headers)
     assert len(resp.json()["rooms"]) == 1
 
-    resp = await client.get(f"/api/v1/rooms/{room_id}")
+    resp = await client.get(f"/api/v1/rooms/{room_id}", headers=auth_headers)
     assert resp.status_code == 200
     assert resp.json()["room"]["name"] == "Test Room"
 
 
 @pytest.mark.asyncio
-async def test_room_not_found(client: AsyncClient):
+async def test_room_not_found(client: AsyncClient, auth_headers: dict[str, str]):
     """Getting a non-existent room returns 404."""
-    resp = await client.get("/api/v1/rooms/non-existent")
+    resp = await client.get("/api/v1/rooms/non-existent", headers=auth_headers)
     assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_rooms_require_auth(client: AsyncClient):
+    resp = await client.get("/api/v1/rooms")
+    assert resp.status_code == 401
 
 
 @pytest.mark.asyncio

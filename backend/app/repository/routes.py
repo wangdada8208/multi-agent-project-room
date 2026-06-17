@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
+from app.core.security import get_current_user
+from app.models.user import User
 from app.repository.service import GitService
 
 router = APIRouter(prefix="/api/v1/rooms/{room_id}/git", tags=["repository"])
@@ -14,7 +16,10 @@ def _service() -> GitService:
 
 
 @router.get("/status")
-async def git_status(room_id: str) -> dict:
+async def git_status(
+    room_id: str,
+    current_user: User = Depends(get_current_user),
+) -> dict:
     try:
         return _service().status()
     except RuntimeError as exc:
@@ -22,7 +27,10 @@ async def git_status(room_id: str) -> dict:
 
 
 @router.get("/branch")
-async def git_branch(room_id: str) -> dict:
+async def git_branch(
+    room_id: str,
+    current_user: User = Depends(get_current_user),
+) -> dict:
     try:
         return _service().branch()
     except RuntimeError as exc:
@@ -30,7 +38,11 @@ async def git_branch(room_id: str) -> dict:
 
 
 @router.get("/log")
-async def git_log(room_id: str, limit: int = Query(10, ge=1, le=50)) -> dict:
+async def git_log(
+    room_id: str,
+    limit: int = Query(10, ge=1, le=50),
+    current_user: User = Depends(get_current_user),
+) -> dict:
     try:
         return {"commits": _service().log(limit=limit)}
     except RuntimeError as exc:
@@ -38,7 +50,10 @@ async def git_log(room_id: str, limit: int = Query(10, ge=1, le=50)) -> dict:
 
 
 @router.get("/diff")
-async def git_diff(room_id: str) -> dict:
+async def git_diff(
+    room_id: str,
+    current_user: User = Depends(get_current_user),
+) -> dict:
     try:
         return _service().diff()
     except RuntimeError as exc:

@@ -1,12 +1,16 @@
 from __future__ import annotations
 """Approval service — create, list, approve, reject."""
 
+import logging
 from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.approval.models import Approval
+from app.a2a import task_manager as tm
 from app.ws.connection_manager import connection_manager
+
+logger = logging.getLogger(__name__)
 
 
 async def create_approval(
@@ -31,6 +35,7 @@ async def create_approval(
     db.add(approval)
     await db.commit()
     await db.refresh(approval)
+    logger.info("approval created id=%s room=%s requestor=%s", approval.id, room_id, requestor_id)
 
     # Broadcast approval_update event
     approval_data = approval.to_dict()
@@ -43,6 +48,9 @@ async def create_approval(
         room_id,
         {'type': 'system', 'content': f'📋 审批请求: {title} ({risk_level})'},
     )
+    task_id = (metadata or {}).get("task_id")
+    if task_id:
+        await tm.link_approval(str(task_id), approval.id)
 
     return approval
 
@@ -88,6 +96,7 @@ async def decide_approval(
     approval.decided_at = datetime.now(timezone.utc)
     await db.commit()
     await db.refresh(approval)
+    logger.info("approval decided id=%s decision=%s decider=%s", approval_id, decision, decider_id)
 
     # Broadcast approval_update event
     approval_data = approval.to_dict()
@@ -103,5 +112,11 @@ async def decide_approval(
         room_id_local,
         {'type': 'system', 'content': f'{emoji} {status_text}: {approval.title}'},
     )
+    task_id = (approval.approval_meta or {}).get("task_id")
+    if task_id:
+        if decision == "approved":
+            await tm.link_approval(str(task_id), approval.id, status="working")
+        else:
+            await tm.cancel_task(str(task_id))
 
     return approval

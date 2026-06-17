@@ -58,9 +58,10 @@
   后端: Repository Git API              ✅ Codex
 
 剩余完善:
-  WS 在线用户事件                         [-] 后端事件待补
-  暗黑模式 / 窄屏响应式                    [ ] 可选 UI 打磨
-  Claude 模块日志 / README / 覆盖率        [ ] Claude 收尾
+  WS 在线用户事件                         ✅ 已补 presence 事件
+  暗黑模式 / 窄屏响应式                    ✅ 已补基础 UI 打磨
+  Claude 模块日志 / README / 覆盖率        ✅ 已补日志、README、测试
+  轻量账户身份 + 任务审批报告闭环           ✅ 已完成产品化切片
 ```
 
 ### 1.3 核心原则
@@ -343,16 +344,16 @@ Codex 先做 → Claude 才能做的依赖:
 
 - [x] W1 模块加单元测试（13 个测试）
 - [-] W2 A2A 模块加错误处理 + 重试（基础错误处理已完成）
-- [ ] 所有 Claude 模块加日志
-- [ ] 写 Claude 模块的 README
+- [x] 所有 Claude 模块加日志
+- [x] 写 Claude 模块的 README
 
 ### 5.4 W4 — 联调 + 部署
 
-- [-] A2A Hub ↔ Agent 模块联调（依赖 Codex 的 Agent 模块完成）
+- [x] A2A Hub ↔ Agent 模块联调（@mention 触发 task_update）
 - [-] A2A Hub ↔ Knowledge 联调（依赖 Codex 的 Knowledge 模块）
 - [-] A2A Hub ↔ Repository 联调（依赖 Codex 的 Repository 模块）
 - [x] A2A Hub ↔ Approval 联调
-- [-] 端到端测试（本地适配器已通过，跨 Agent 需 Codex 适配器上线）
+- [x] 端到端测试（自动化覆盖 Auth / A2A Task / Approval 核心链路）
 - [x] 服务器环境准备（Ubuntu + Docker）
 - [x] 完整 `docker-compose.yml`（含前端）
 - [x] Nginx + Let's Encrypt HTTPS 配置
@@ -371,7 +372,7 @@ python local_agent_adapter.py \
 
 - [x] 修 bug（system消息/senderId/WS路由/CLI解析 等）
 - [/] 补文档（PLAN.md/TECHNICAL-IMPLEMENTATION.md 已完善）
-- [ ] Claude 模块的测试覆盖
+- [x] Claude 模块的测试覆盖
 
 ---
 
@@ -404,7 +405,7 @@ python local_agent_adapter.py \
 - [x] `useWebSocket` Hook（连 Claude 的 `/ws/chat/{room_id}`）
 - [x] 验证：发消息 → WebSocket → Claude 后端 → 广播 → 其他人收到
 - [x] 消息类型展示（普通文字 + Markdown 渲染）
-- [-] 在线用户列表（Agent 面板显示在线状态；WS user_online/user_offline 事件待后端提供）
+- [x] 在线用户列表（WS presence_snapshot / user_online / user_offline）
 - [x] typing 指示器
 - [x] 前端 `Dockerfile`
 
@@ -503,8 +504,8 @@ Claude 的 WebSocket 后端在 /ws/chat/{room_id}
 
 - [x] 全页面 UI 一致性检查
 - [x] 加载状态 / 空状态 / 错误状态处理
-- [ ] 暗黑模式（可选）
-- [ ] 响应式布局（适配窄屏）
+- [x] 暗黑模式（可选）
+- [x] 响应式布局（适配窄屏）
 
 **对接 Claude 的 Approval API：**
 

@@ -1,53 +1,54 @@
-# **Demo**
+# Demo
 
-This demo is a small first slice of the Multi-Agent Project Room.
+This demo shows the current Multi-Agent Project Room MVP as a collaborative
+software development room, not the early in-memory prototype.
 
-It implements:
+## What It Demonstrates
 
-- FastAPI app entrypoint
-- `GET /health`
-- Room list API
-- Message history API
-- WebSocket room chat at `/ws/chat/{room_id}`
-- A browser demo page at `/`
-- In-memory room and message storage
+- Lightweight human account registration and login
+- Room creation with persisted PostgreSQL/SQLite-backed data
+- WebSocket chat with message history
+- Presence events for online humans and agents
+- Agent registration and @mention task routing
+- A2A JSON-RPC task submission and status lookup
+- Approval requests linked to tasks
+- Knowledge, repository, agent, approval, and task side panels
 
-It intentionally does not implement PostgreSQL yet.
+## Local Run
 
-The real MVP should replace the in-memory `RoomStore` with SQLAlchemy models, async sessions, and Alembic migrations.
-
-------
-
-# **Run**
+Backend:
 
 ```bash
-cd "/Users/moxiao/Desktop/AI 协作项目"
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r backend/requirements.txt
-./scripts/start.sh
+uvicorn app.main:app --app-dir backend --reload
 ```
 
-Open:
+Frontend:
 
-```text
-http://127.0.0.1:8000
+```bash
+cd frontend
+npm install
+npm run dev
 ```
 
-Health check:
+Open `http://127.0.0.1:5173`, create an account, create a room, and send a
+message mentioning a registered agent such as `@Codex`.
 
-```text
-http://127.0.0.1:8000/health
+## Adapter
+
+```bash
+python3 local_agent_adapter.py \
+  --server http://localhost:8000 \
+  --agent-name Codex
 ```
 
-------
+If the adapter needs to create approvals, pass a user token:
 
-# **Try**
-
-Open the demo page in two browser windows.
-
-Send a message from one window.
-
-The other window should receive it in real time through WebSocket.
-
-Change the sender type from `Human` to `Agent` to simulate an agent participant.
+```bash
+python3 local_agent_adapter.py \
+  --server http://localhost:8000 \
+  --agent-name Codex \
+  --auth-token "<bearer-token>"
+```

@@ -9,14 +9,17 @@ State machine:
 """
 
 import uuid
+import logging
 from datetime import datetime, timezone
 from sqlalchemy import select
 from app.core.database import async_session
 from app.a2a.models import A2ATask
 from app.a2a.client import A2AClientPool
 from app.a2a.discovery import AgentDiscovery
+from app.ws.connection_manager import connection_manager
 
 client_pool = A2AClientPool()
+logger = logging.getLogger(__name__)
 
 
 async def submit_task(
@@ -24,9 +27,13 @@ async def submit_task(
     target_agent: str | None = None,
     source_agent: str = "hub",
     task_id: str | None = None,
+    room_id: str | None = None,
+    source_message_id: str | None = None,
+    requestor_id: str | None = None,
 ) -> dict:
     """Submit a task. Routes to remote agent if target is specified."""
     tid = task_id or str(uuid.uuid4())
+    logger.info("task submitted id=%s target=%s room=%s", tid, target_agent, room_id)
 
     # Persist initial state
     async with async_session() as db:
@@ -36,9 +43,13 @@ async def submit_task(
             target_agent=target_agent,
             query=query,
             status="submitted",
+            room_id=room_id,
+            source_message_id=source_message_id,
         )
         db.add(db_task)
         await db.commit()
+        await db.refresh(db_task)
+        await _broadcast_task_update(db_task)
 
     # Route to remote agent
     if target_agent and target_agent != "local":
@@ -56,6 +67,8 @@ async def submit_task(
                     if db_task.status == "completed":
                         db_task.completed_at = datetime.now(timezone.utc)
                     await db.commit()
+                    await db.refresh(db_task)
+                    await _broadcast_task_update(db_task)
             return {
                 "id": tid,
                 "status": db_task.status if hasattr(locals(), 'db_task') else "submitted",
@@ -68,6 +81,8 @@ async def submit_task(
         if db_task:
             db_task.status = "working"
             await db.commit()
+            await db.refresh(db_task)
+            await _broadcast_task_update(db_task)
 
     return {"id": tid, "status": "working", "result": None}
 
@@ -82,6 +97,9 @@ async def complete_task(task_id: str, result_data: list[dict]) -> dict:
         db_task.result = result_data
         db_task.completed_at = datetime.now(timezone.utc)
         await db.commit()
+        await db.refresh(db_task)
+        await _broadcast_task_update(db_task)
+        logger.info("task completed id=%s", task_id)
     return {"id": task_id, "status": "completed", "result": result_data}
 
 
@@ -95,6 +113,9 @@ async def fail_task(task_id: str, error: str) -> dict:
         db_task.result = {"error": error}
         db_task.completed_at = datetime.now(timezone.utc)
         await db.commit()
+        await db.refresh(db_task)
+        await _broadcast_task_update(db_task)
+        logger.info("task failed id=%s error=%s", task_id, error)
     return {"id": task_id, "status": "failed", "error": error}
 
 
@@ -118,6 +139,40 @@ async def list_tasks(
         return [t.to_dict() for t in result.scalars().all()]
 
 
+async def list_room_tasks(
+    room_id: str,
+    page: int = 1,
+    limit: int = 50,
+    status: str | None = None,
+) -> list[dict]:
+    """List tasks for a room, optionally filtered by status."""
+    async with async_session() as db:
+        stmt = (
+            select(A2ATask)
+            .where(A2ATask.room_id == room_id)
+            .order_by(A2ATask.created_at.desc())
+        )
+        if status:
+            stmt = stmt.where(A2ATask.status == status)
+        stmt = stmt.offset((page - 1) * limit).limit(limit)
+        result = await db.execute(stmt)
+        return [t.to_dict() for t in result.scalars().all()]
+
+
+async def link_approval(task_id: str, approval_id: str, status: str = "input_required") -> dict | None:
+    """Attach an approval to a task and optionally move it to input_required."""
+    async with async_session() as db:
+        db_task = await db.get(A2ATask, task_id)
+        if not db_task:
+            return None
+        db_task.approval_id = approval_id
+        db_task.status = status
+        await db.commit()
+        await db.refresh(db_task)
+        await _broadcast_task_update(db_task)
+        return db_task.to_dict()
+
+
 async def cancel_task(task_id: str) -> dict:
     """Cancel a running task."""
     async with async_session() as db:
@@ -129,4 +184,16 @@ async def cancel_task(task_id: str) -> dict:
         db_task.status = "canceled"
         db_task.completed_at = datetime.now(timezone.utc)
         await db.commit()
+        await db.refresh(db_task)
+        await _broadcast_task_update(db_task)
+        logger.info("task canceled id=%s", task_id)
     return {"id": task_id, "status": "canceled"}
+
+
+async def _broadcast_task_update(task: A2ATask) -> None:
+    if not task.room_id:
+        return
+    await connection_manager.broadcast(
+        task.room_id,
+        {"type": "task_update", "task": task.to_dict()},
+    )

@@ -14,6 +14,7 @@ Cross-room @mention flow:
 """
 
 import json
+import logging
 import re
 
 from fastapi import WebSocket, WebSocketDisconnect
@@ -21,9 +22,12 @@ from sqlalchemy import select
 
 from app.core.database import async_session
 from app.chat import service as chat_service
+from app.a2a import task_manager as tm
 from app.ws.connection_manager import connection_manager
 from app.models.room import Room
 from app.models.agent_card import AgentCardRecord
+
+logger = logging.getLogger(__name__)
 
 
 def _find_mentioned_agents(content: str, agent_names: set[str]) -> list[str]:
@@ -59,10 +63,18 @@ async def _check_mentions_and_forward(
         return
 
     for agent_name in mentioned:
+        task = await tm.submit_task(
+            query=content,
+            target_agent=agent_name,
+            source_agent=message.sender_name or message.sender_id,
+            room_id=source_room_id,
+            source_message_id=message.id,
+        )
         agent_channel = f"_agent_{agent_name.lower()}"
         task_content = json.dumps({
             "origin_room": source_room_id,
             "original_id": message.id,
+            "task_id": task["id"],
             "original_content": content,
             "original_sender": message.sender_name or message.sender_id,
         }, ensure_ascii=False)
@@ -80,6 +92,7 @@ async def _check_mentions_and_forward(
 
         await connection_manager.broadcast(agent_channel, {
             "type": "agent_task",
+            "task_id": task["id"],
             "message_id": message.id,
             "content": content,
             "sender_id": message.sender_id,
@@ -95,6 +108,13 @@ async def handle_chat(websocket: WebSocket, room_id: str) -> None:
         app.add_websocket_route("/ws/chat/{room_id}", handle_chat)
     """
     await connection_manager.connect(room_id, websocket)
+    logger.info("ws connected room=%s", room_id)
+    await websocket.send_json(
+        {
+            "type": "presence_snapshot",
+            "participants": connection_manager.presence_snapshot(room_id),
+        }
+    )
 
     await connection_manager.broadcast(
         room_id,
@@ -111,6 +131,21 @@ async def handle_chat(websocket: WebSocket, room_id: str) -> None:
                 await websocket.send_json({"type": "pong"})
                 continue
 
+            # ── Presence identity ──
+            if msg_type == "identify":
+                participant = await connection_manager.identify(room_id, websocket, raw)
+                await connection_manager.broadcast(
+                    room_id,
+                    {"type": "user_online", "participant": participant},
+                )
+                await websocket.send_json(
+                    {
+                        "type": "presence_snapshot",
+                        "participants": connection_manager.presence_snapshot(room_id),
+                    }
+                )
+                continue
+
             # ── Typing indicator ──
             if msg_type == "typing":
                 await connection_manager.broadcast(
@@ -121,6 +156,7 @@ async def handle_chat(websocket: WebSocket, room_id: str) -> None:
 
             # ── Chat message ──
             if msg_type == "message":
+                participant = await connection_manager.identify(room_id, websocket, raw)
                 content = str(raw.get("content", "")).strip()
                 if not content:
                     await websocket.send_json(
@@ -155,6 +191,17 @@ async def handle_chat(websocket: WebSocket, room_id: str) -> None:
                     {"type": "message", "message": message.to_dict()},
                 )
 
+                task_id = raw.get("task_id")
+                if task_id and raw.get("sender_type") == "agent":
+                    await tm.complete_task(
+                        str(task_id),
+                        [{
+                            "type": raw.get("msg_type", "report"),
+                            "content": content,
+                            "message_id": message.id,
+                        }],
+                    )
+
                 # @mention detection — skip for agent channel traffic
                 # (prevents infinite loops when agents mention each other)
                 if not room_id.startswith("_agent_"):
@@ -163,13 +210,25 @@ async def handle_chat(websocket: WebSocket, room_id: str) -> None:
                     )
 
     except WebSocketDisconnect:
-        connection_manager.disconnect(room_id, websocket)
+        participant = connection_manager.disconnect(room_id, websocket)
+        logger.info("ws disconnected room=%s participant=%s", room_id, participant)
+        if participant:
+            await connection_manager.broadcast(
+                room_id,
+                {"type": "user_offline", "participant": participant},
+            )
         await connection_manager.broadcast(
             room_id,
             {"type": "system", "content": "A participant left the room."},
         )
     except Exception as e:
-        connection_manager.disconnect(room_id, websocket)
+        participant = connection_manager.disconnect(room_id, websocket)
+        logger.exception("ws error room=%s", room_id)
+        if participant:
+            await connection_manager.broadcast(
+                room_id,
+                {"type": "user_offline", "participant": participant},
+            )
         await connection_manager.broadcast(
             room_id,
             {"type": "system", "content": f"Connection error: {str(e)}"},

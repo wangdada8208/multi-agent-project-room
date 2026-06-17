@@ -6,10 +6,11 @@ import { AgentPanel } from "../components/agent/AgentPanel";
 import { KnowledgePanel } from "../components/knowledge/KnowledgePanel";
 import { RepositoryPanel } from "../components/repository/RepositoryPanel";
 import { ApprovalPanel } from "../components/approval/ApprovalPanel";
+import { fetchMessages, fetchTasks } from "../lib/api";
 import { useAuthStore } from "../stores/authStore";
 import { useChatStore } from "../stores/chatStore";
 import { useRoomStore } from "../stores/roomStore";
-import type { ChatMessage, SenderType } from "../types/chat";
+import type { ChatMessage, PresenceParticipant, RoomTask, SenderType } from "../types/chat";
 
 const SENDER_ID_KEY = "mapr-sender-id";
 
@@ -20,12 +21,6 @@ function getOrCreateSenderId(): string {
     localStorage.setItem(SENDER_ID_KEY, id);
   }
   return id;
-}
-
-async function fetchMessages(roomId: string): Promise<ChatMessage[]> {
-  const res = await fetch(`/api/v1/rooms/${roomId}/messages?limit=200`);
-  const data = await res.json();
-  return data.messages ?? data.data ?? [];
 }
 
 const statusLabel: Record<string, string> = {
@@ -45,8 +40,12 @@ export function RoomPage() {
   const messages = useChatStore((state) => state.messages);
   const connectionStatus = useChatStore((state) => state.connectionStatus);
   const typingUsers = useChatStore((state) => state.typingUsers);
+  const participants = useChatStore((state) => state.participants);
+  const tasks = useChatStore((state) => state.tasks);
   const setMessages = useChatStore((state) => state.setMessages);
+  const setTasks = useChatStore((state) => state.setTasks);
   const displayName = useAuthStore((state) => state.displayName);
+  const user = useAuthStore((state) => state.user);
   const setActiveRoomId = useRoomStore((state) => state.setActiveRoomId);
 
   const messagesQuery = useQuery({
@@ -59,12 +58,23 @@ export function RoomPage() {
     if (messagesQuery.data) setMessages(messagesQuery.data);
   }, [messagesQuery.data, setMessages]);
 
+  const tasksQuery = useQuery({
+    queryKey: ["rooms", roomId, "tasks"],
+    queryFn: () => fetchTasks(roomId),
+    enabled: !!roomId,
+    refetchInterval: 15000,
+  });
+
+  useEffect(() => {
+    if (tasksQuery.data) setTasks(tasksQuery.data);
+  }, [tasksQuery.data, setTasks]);
+
   useEffect(() => {
     setActiveRoomId(roomId);
   }, [roomId, setActiveRoomId]);
 
   function handleSend(content: string, senderType: SenderType) {
-    return sendMessage({ content, senderId, senderType });
+    return sendMessage({ content, senderId: user?.id ?? senderId, senderType });
   }
 
   return (
@@ -109,12 +119,62 @@ export function RoomPage() {
       </section>
 
       <aside className="collab-panel">
+        <PresencePanel participants={participants} />
+        <TaskPanel tasks={tasks} />
         <AgentPanel />
         <KnowledgePanel roomId={roomId} />
         <RepositoryPanel roomId={roomId} />
         <ApprovalPanel roomId={roomId} />
       </aside>
     </div>
+  );
+}
+
+function PresencePanel({ participants }: { participants: PresenceParticipant[] }) {
+  const humans = participants.filter((item) => item.sender_type === "human");
+  const agents = participants.filter((item) => item.sender_type === "agent");
+  return (
+    <section className="side-card">
+      <div className="side-title">在线成员</div>
+      <div className="presence-grid">
+        {[...humans, ...agents].map((participant) => (
+          <div className="presence-item" key={participant.sender_id}>
+            <span className={`agent-dot ${participant.sender_type === "agent" ? "busy" : "online"}`} />
+            <span>{participant.sender_name}</span>
+            <small>{participant.sender_type === "agent" ? "Agent" : "Human"}</small>
+          </div>
+        ))}
+        {participants.length === 0 && <p className="muted">等待成员进入房间...</p>}
+      </div>
+    </section>
+  );
+}
+
+const taskStatusLabel: Record<string, string> = {
+  submitted: "已提交",
+  working: "处理中",
+  input_required: "待审批",
+  completed: "已完成",
+  failed: "失败",
+  canceled: "已取消",
+};
+
+function TaskPanel({ tasks }: { tasks: RoomTask[] }) {
+  return (
+    <section className="side-card">
+      <div className="side-title">任务</div>
+      {tasks.slice(0, 6).map((task) => (
+        <div className="task-card" key={task.id}>
+          <div className="task-top">
+            <strong>{task.target_agent || task.source_agent}</strong>
+            <span className={`task-status ${task.status}`}>{taskStatusLabel[task.status] || task.status}</span>
+          </div>
+          <p>{task.query}</p>
+          {task.approval_id && <small>审批: {task.approval_id.slice(0, 8)}</small>}
+        </div>
+      ))}
+      {tasks.length === 0 && <p className="muted">暂无任务，@Agent 后会出现在这里。</p>}
+    </section>
   );
 }
 

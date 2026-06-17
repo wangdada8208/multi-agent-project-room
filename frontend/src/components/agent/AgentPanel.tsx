@@ -1,8 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { fetchAgents, registerAgent } from "../../lib/api";
+import { useChatStore } from "../../stores/chatStore";
 
 export function AgentPanel() {
   const queryClient = useQueryClient();
+  const participants = useChatStore((state) => state.participants);
+  const onlineAgents = new Set(
+    participants
+      .filter((participant) => participant.sender_type === "agent")
+      .map((participant) => participant.sender_name.toLowerCase()),
+  );
   const agentsQuery = useQuery({ queryKey: ["agents"], queryFn: fetchAgents });
   const registerMutation = useMutation({
     mutationFn: () =>
@@ -28,9 +35,12 @@ export function AgentPanel() {
       <div className="agent-list">
         {(agentsQuery.data ?? []).map((agent) => (
           <div className="agent-item" key={agent.id}>
-            <span className={`agent-dot ${agent.status}`} />
+            <span className={`agent-dot ${onlineAgents.has(agent.name.toLowerCase()) ? "online" : agent.status}`} />
             <div>
               <div className="agent-name">{agent.name}</div>
+              <div className="agent-meta">
+                {onlineAgents.has(agent.name.toLowerCase()) ? "当前房间在线" : agent.last_seen_at ? `最近注册 ${new Date(agent.last_seen_at).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}` : "未连接"}
+              </div>
               <div className="tag-row">
                 {(agent.capabilities ?? []).slice(0, 4).map((capability) => (
                   <span className="tag" key={capability}>{capability}</span>

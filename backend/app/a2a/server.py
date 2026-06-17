@@ -174,6 +174,9 @@ async def rpc_tasks_send(params: dict) -> dict:
         query=query,
         target_agent=target,
         task_id=task_id,
+        room_id=params.get("room_id"),
+        source_message_id=params.get("source_message_id"),
+        requestor_id=params.get("requestor_id"),
     )
 
 

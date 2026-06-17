@@ -20,6 +20,22 @@
   --font-body: "Inter", "Noto Sans SC", ui-sans-serif, system-ui, sans-serif;
 }
 
+:root[data-theme="dark"] {
+  --bg-page: #171717;
+  --bg-card: #22211f;
+  --bg-sidebar: #1c1b19;
+  --text-primary: #f4f1ea;
+  --text-secondary: #c7c0b7;
+  --text-muted: #8f887f;
+  --border: #393632;
+  --accent: #d97706;
+  --accent-light: #3b2a13;
+  --accent-green: #34d399;
+  --accent-green-light: #11352a;
+  --accent-blue: #60a5fa;
+  --accent-blue-light: #122943;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -106,6 +122,11 @@ button, input, select { font: inherit; }
   color: var(--text-secondary);
   padding-top: 16px;
   border-top: 1px solid var(--border);
+}
+
+.sidebar-actions {
+  display: grid;
+  gap: 8px;
 }
 
 .main-panel {
@@ -298,7 +319,7 @@ button, input, select { font: inherit; }
 }
 
 .message-bubble.agent {
-  background: #fff7ed;
+  background: var(--accent-light);
   border-color: var(--accent);
 }
 
@@ -533,6 +554,74 @@ button, input, select { font: inherit; }
   font-weight: 700;
 }
 
+.agent-meta {
+  color: var(--text-muted);
+  font-size: 11px;
+  margin-top: 2px;
+}
+
+.presence-grid {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.presence-item {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 8px;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-sidebar);
+  padding: 8px 10px;
+  font-size: 13px;
+}
+
+.presence-item small {
+  color: var(--text-muted);
+}
+
+.task-card {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px;
+  background: var(--bg-sidebar);
+  margin-top: 10px;
+}
+
+.task-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.task-card p {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 6px 0;
+  overflow-wrap: anywhere;
+}
+
+.task-status {
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  background: var(--border);
+  white-space: nowrap;
+}
+
+.task-status.working,
+.task-status.submitted { background: var(--accent-blue-light); color: var(--accent-blue); }
+.task-status.input_required { background: #fef3c7; color: #b45309; }
+.task-status.completed { background: var(--accent-green-light); color: var(--accent-green); }
+.task-status.failed,
+.task-status.canceled { background: #fee2e2; color: #dc2626; }
+
 .tag-row {
   display: flex;
   flex-wrap: wrap;
@@ -592,7 +681,7 @@ button, input, select { font: inherit; }
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 10px;
-  background: #fffaf0;
+  background: var(--bg-card);
 }
 
 .doc-reader pre {
@@ -688,6 +777,19 @@ button, input, select { font: inherit; }
 .approval-status.approved { background: var(--accent-green-light); color: var(--accent-green); }
 .approval-status.rejected { background: #fee2e2; color: #dc2626; }
 
+.approval-meta {
+  border-left: 3px solid var(--accent);
+  padding-left: 8px;
+}
+
+.link-button {
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 13px;
+}
+
 .approval-actions {
   display: flex;
   gap: 8px;
@@ -782,13 +884,28 @@ button, input, select { font: inherit; }
   }
   .room-workspace {
     grid-template-columns: 1fr;
-    height: calc(100vh - 32px);
+    height: auto;
   }
   .chat-page {
     min-height: 560px;
     border-radius: 12px;
   }
   .collab-panel {
-    display: none;
+    display: grid;
+    overflow: visible;
+  }
+  .message-input-area {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    padding: 12px;
+  }
+  .mention-buttons {
+    grid-column: 1 / -1;
+    overflow-x: auto;
+  }
+  .chat-header {
+    align-items: flex-start;
+    gap: 12px;
+    flex-direction: column;
   }
 }

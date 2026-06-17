@@ -8,7 +8,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
+from app.core.security import get_current_user
 from app.models.room import Room
+from app.models.user import User
 
 router = APIRouter(prefix="/api/v1/rooms", tags=["rooms"])
 
@@ -19,7 +21,10 @@ class CreateRoomRequest(BaseModel):
 
 
 @router.get("")
-async def list_rooms(db: AsyncSession = Depends(get_db)) -> dict:
+async def list_rooms(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
     result = await db.execute(
         select(Room).where(Room.is_active == True).order_by(Room.created_at.desc())
     )
@@ -31,8 +36,13 @@ async def list_rooms(db: AsyncSession = Depends(get_db)) -> dict:
 async def create_room(
     payload: CreateRoomRequest,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ) -> dict:
-    room = Room(name=payload.name, description=payload.description)
+    room = Room(
+        name=payload.name,
+        description=payload.description,
+        created_by=current_user.id,
+    )
     db.add(room)
     await db.commit()
     await db.refresh(room)
@@ -43,6 +53,7 @@ async def create_room(
 async def get_room(
     room_id: str,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ) -> dict:
     room = await db.get(Room, room_id)
     if room is None:
