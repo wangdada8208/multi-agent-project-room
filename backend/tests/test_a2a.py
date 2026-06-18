@@ -3,6 +3,8 @@
 import pytest
 from httpx import AsyncClient
 
+from app.a2a import task_manager as tm
+
 
 @pytest.mark.asyncio
 async def test_agent_card_endpoint(client: AsyncClient):
@@ -127,3 +129,21 @@ async def test_a2a_unknown_method(client: AsyncClient):
     assert resp.status_code == 200
     assert resp.json()["error"] is not None
     assert resp.json()["error"]["code"] == -32601
+
+
+@pytest.mark.asyncio
+async def test_submit_task_can_skip_remote_routing():
+    """Chat @mentions should create a working task for WS relay, not call localhost A2A."""
+    result = await tm.submit_task(
+        query="@Codex hello",
+        target_agent="Codex",
+        source_agent="Tester",
+        room_id="demo-room",
+        route_remote=False,
+    )
+
+    assert result["status"] == "working"
+    task = await tm.get_task(result["id"])
+    assert task is not None
+    assert task["target_agent"] == "Codex"
+    assert task["status"] == "working"

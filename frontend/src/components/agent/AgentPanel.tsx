@@ -10,7 +10,11 @@ export function AgentPanel() {
       .filter((participant) => participant.sender_type === "agent")
       .map((participant) => participant.sender_name.toLowerCase()),
   );
-  const agentsQuery = useQuery({ queryKey: ["agents"], queryFn: fetchAgents });
+  const agentsQuery = useQuery({
+    queryKey: ["agents"],
+    queryFn: fetchAgents,
+    refetchInterval: 5000,
+  });
   const registerMutation = useMutation({
     mutationFn: () =>
       registerAgent({
@@ -33,22 +37,33 @@ export function AgentPanel() {
         </button>
       </div>
       <div className="agent-list">
-        {(agentsQuery.data ?? []).map((agent) => (
-          <div className="agent-item" key={agent.id}>
-            <span className={`agent-dot ${onlineAgents.has(agent.name.toLowerCase()) ? "online" : agent.status}`} />
-            <div>
-              <div className="agent-name">{agent.name}</div>
-              <div className="agent-meta">
-                {onlineAgents.has(agent.name.toLowerCase()) ? "当前房间在线" : agent.last_seen_at ? `最近注册 ${new Date(agent.last_seen_at).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}` : "未连接"}
-              </div>
-              <div className="tag-row">
-                {(agent.capabilities ?? []).slice(0, 4).map((capability) => (
-                  <span className="tag" key={capability}>{capability}</span>
-                ))}
+        {(agentsQuery.data ?? []).map((agent) => {
+          const isInCurrentRoom = onlineAgents.has(agent.name.toLowerCase());
+          const isRegisteredOnline = agent.status === "online";
+          const statusClass = isInCurrentRoom || isRegisteredOnline ? "online" : agent.status;
+          const statusText = isInCurrentRoom
+            ? "当前房间在线"
+            : isRegisteredOnline
+              ? "Agent 通道在线"
+              : agent.last_seen_at
+                ? `最近注册 ${new Date(agent.last_seen_at).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}`
+                : "未连接";
+
+          return (
+            <div className="agent-item" key={agent.id}>
+              <span className={`agent-dot ${statusClass}`} />
+              <div>
+                <div className="agent-name">{agent.name}</div>
+                <div className="agent-meta">{statusText}</div>
+                <div className="tag-row">
+                  {(agent.capabilities ?? []).slice(0, 4).map((capability) => (
+                    <span className="tag" key={capability}>{capability}</span>
+                  ))}
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
         {agentsQuery.isLoading && <p className="muted">正在加载 Agent...</p>}
         {!agentsQuery.isLoading && (agentsQuery.data ?? []).length === 0 && (
           <p className="muted">暂无 Agent，先注册 Codex 或启动适配器。</p>

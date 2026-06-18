@@ -234,7 +234,7 @@ class LocalAgentAdapter:
         self.authenticated = False
         self.started_at = datetime.now(timezone.utc)
         self.ws_url = (
-            f"{server.replace('http', 'ws')}/ws/chat/{room}"
+            f"{server.replace('http', 'ws')}/ws/chat/{self.room}"
         )
         self._running = True
         self._processed_ids: set[str] = set()  # Track processed message IDs

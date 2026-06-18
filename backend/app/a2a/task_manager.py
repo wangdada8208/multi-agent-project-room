@@ -30,6 +30,7 @@ async def submit_task(
     room_id: str | None = None,
     source_message_id: str | None = None,
     requestor_id: str | None = None,
+    route_remote: bool = True,
 ) -> dict:
     """Submit a task. Routes to remote agent if target is specified."""
     tid = task_id or str(uuid.uuid4())
@@ -52,7 +53,7 @@ async def submit_task(
         await _broadcast_task_update(db_task)
 
     # Route to remote agent
-    if target_agent and target_agent != "local":
+    if route_remote and target_agent and target_agent != "local":
         agents = await AgentDiscovery.list_available()
         target = next((a for a in agents if a["name"] == target_agent), None)
         if target and target.get("url"):

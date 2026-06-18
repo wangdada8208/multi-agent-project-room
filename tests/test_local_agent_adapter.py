@@ -21,6 +21,22 @@ class FakeWebSocket:
         self.sent.append(json.loads(payload))
 
 
+def test_default_room_connects_to_agent_channel():
+    """Omitting --room should connect the adapter to its private agent channel."""
+    adapter = LocalAgentAdapter(
+        server="https://hub.example.com",
+        room=None,
+        agent_name="Codex",
+        agent_id="codex-local",
+        command=["codex"],
+        a2a_port=8765,
+        ai_timeout=120,
+    )
+
+    assert adapter.room == "_agent_codex"
+    assert adapter.ws_url == "wss://hub.example.com/ws/chat/_agent_codex"
+
+
 @pytest.mark.asyncio
 async def test_agent_dialogue_message_triggers_without_mention(monkeypatch):
     """Active dialogue messages should trigger even when @Codex is absent."""

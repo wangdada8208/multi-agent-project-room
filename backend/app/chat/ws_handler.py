@@ -69,6 +69,7 @@ async def _check_mentions_and_forward(
             source_agent=message.sender_name or message.sender_id,
             room_id=source_room_id,
             source_message_id=message.id,
+            route_remote=False,
         )
         agent_channel = f"_agent_{agent_name.lower()}"
         task_content = json.dumps({

@@ -3,6 +3,7 @@ import { useChatStore } from "../stores/chatStore";
 import type { ChatMessage, MessageType, RoomSocketEvent, SenderType } from "../types/chat";
 
 import { useAuthStore } from "../stores/authStore";
+import { websocketUrl } from "../lib/api";
 
 interface SendMessageInput {
   content: string;
@@ -12,8 +13,7 @@ interface SendMessageInput {
 }
 
 function getWebSocketUrl(roomId: string): string {
-  const protocol = window.location.protocol === "https:" ? "wss" : "ws";
-  return `${protocol}://${window.location.host}/ws/chat/${roomId}`;
+  return websocketUrl(`/ws/chat/${roomId}`);
 }
 
 export function useWebSocket(roomId: string) {

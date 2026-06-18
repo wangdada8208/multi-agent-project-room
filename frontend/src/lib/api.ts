@@ -1,6 +1,23 @@
 import { useAuthStore, type AuthUser } from "../stores/authStore";
 import type { ChatMessage, Room, RoomTask } from "../types/chat";
 
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/$/, "");
+
+export function apiUrl(path: string): string {
+  if (/^https?:\/\//.test(path)) return path;
+  return `${API_BASE_URL}${path}`;
+}
+
+export function websocketUrl(path: string): string {
+  const explicitWsBase = (import.meta.env.VITE_WS_BASE_URL ?? "").replace(/\/$/, "");
+  if (explicitWsBase) return `${explicitWsBase}${path}`;
+  if (API_BASE_URL) {
+    return `${API_BASE_URL.replace(/^http/, "ws")}${path}`;
+  }
+  const protocol = window.location.protocol === "https:" ? "wss" : "ws";
+  return `${protocol}://${window.location.host}${path}`;
+}
+
 export interface AgentSummary {
   id: string;
   name: string;
@@ -70,7 +87,8 @@ async function apiFetch(input: RequestInfo | URL, init: RequestInit = {}) {
   if (token) {
     headers.set("Authorization", `Bearer ${token}`);
   }
-  return fetch(input, { ...init, headers });
+  const request = typeof input === "string" ? apiUrl(input) : input;
+  return fetch(request, { ...init, headers });
 }
 
 export async function register(input: {
