@@ -3,18 +3,32 @@ import { useEffect, useState } from "react";
 import { useRoomStore } from "../../stores/roomStore";
 import { useAuthStore } from "../../stores/authStore";
 
+const THEME_KEY = "mapr-theme";
+
+type Theme = "light" | "dark";
+
+function getInitialTheme(): Theme {
+  const savedTheme = localStorage.getItem(THEME_KEY);
+  if (savedTheme === "light" || savedTheme === "dark") return savedTheme;
+  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
+
 export function AppLayout() {
   const rooms = useRoomStore((state) => state.rooms);
   const activeRoomId = useRoomStore((state) => state.activeRoomId);
   const displayName = useAuthStore((state) => state.displayName);
   const logout = useAuthStore((state) => state.logout);
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
-  const [darkMode, setDarkMode] = useState(() => localStorage.getItem("mapr-theme") === "dark");
+  const [theme, setTheme] = useState<Theme>(getInitialTheme);
 
   useEffect(() => {
-    document.documentElement.dataset.theme = darkMode ? "dark" : "light";
-    localStorage.setItem("mapr-theme", darkMode ? "dark" : "light");
-  }, [darkMode]);
+    document.documentElement.dataset.theme = theme;
+    localStorage.setItem(THEME_KEY, theme);
+  }, [theme]);
+
+  function toggleTheme() {
+    setTheme((current) => (current === "dark" ? "light" : "dark"));
+  }
 
   return (
     <div className="app-shell">
@@ -48,8 +62,8 @@ export function AppLayout() {
         </div>
 
         <div className="sidebar-actions">
-          <button className="mini-button" onClick={() => setDarkMode((value) => !value)}>
-            {darkMode ? "浅色" : "深色"}
+          <button className="mini-button" onClick={toggleTheme}>
+            {theme === "dark" ? "浅色" : "深色"}
           </button>
           {isAuthenticated && (
             <button className="mini-button" onClick={logout}>
