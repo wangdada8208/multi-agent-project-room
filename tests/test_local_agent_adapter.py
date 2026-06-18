@@ -1,6 +1,7 @@
 """Test local adapter dialogue handling."""
 
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -35,6 +36,34 @@ def test_default_room_connects_to_agent_channel():
 
     assert adapter.room == "_agent_codex"
     assert adapter.ws_url == "wss://hub.example.com/ws/chat/_agent_codex"
+
+
+def test_call_local_ai_returns_friendly_usage_limit(monkeypatch):
+    """CLI usage-limit failures should not leak raw stderr into chat."""
+    adapter = LocalAgentAdapter(
+        server="https://hub.example.com",
+        room=None,
+        agent_name="Codex",
+        agent_id="codex-local",
+        command=["codex"],
+        a2a_port=8765,
+        ai_timeout=120,
+    )
+
+    def fake_run(*args, **kwargs):
+        return subprocess.CompletedProcess(
+            args=args[0],
+            returncode=1,
+            stdout="",
+            stderr="ERROR: You've hit your usage limit. Upgrade to Pro.",
+        )
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    response = adapter._call_local_ai("hello")
+
+    assert "额度限制" in response
+    assert "Upgrade to Pro" not in response
 
 
 @pytest.mark.asyncio

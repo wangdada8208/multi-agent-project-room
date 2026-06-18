@@ -47,6 +47,26 @@ def _compact_stderr(stderr: str) -> str:
     return "\n".join(lines[-5:])[-1000:]
 
 
+def _friendly_ai_failure(agent_name: str, stderr: str) -> Optional[str]:
+    """Turn common local CLI failures into short room-safe messages."""
+    compact = " ".join(stderr.lower().split())
+    if any(
+        phrase in compact
+        for phrase in [
+            "usage limit",
+            "hit your limit",
+            "rate limit",
+            "too many requests",
+            "insufficient quota",
+        ]
+    ):
+        return (
+            f"[{agent_name}] 我在线，但本地 AI 命令现在触发了额度限制，"
+            "暂时不能调用深度模型。简单问候我会直接回复；复杂任务等额度恢复后再继续。"
+        )
+    return None
+
+
 def _strip_mention(content: str, agent_name: str) -> str:
     """Remove the leading mention and normalize lightweight chat text."""
     return re.sub(rf"@{re.escape(agent_name)}\b", "", content, flags=re.IGNORECASE).strip().lower()
@@ -825,6 +845,9 @@ class LocalAgentAdapter:
             if output:
                 return output[:2000]
             if result.stderr:
+                friendly = _friendly_ai_failure(self.agent_name, result.stderr)
+                if friendly:
+                    return friendly
                 error = _compact_stderr(result.stderr)
                 return f"[{self.agent_name}] AI command produced no stdout.\n{error}"
             return "(No response)"
