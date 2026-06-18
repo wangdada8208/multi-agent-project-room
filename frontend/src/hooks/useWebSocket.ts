@@ -16,8 +16,17 @@ function getWebSocketUrl(roomId: string): string {
   return websocketUrl(`/ws/chat/${roomId}`);
 }
 
+const RECONNECT_BASE_DELAY_MS = 1000;
+const RECONNECT_MAX_DELAY_MS = 10000;
+
+function getReconnectDelay(attempt: number): number {
+  return Math.min(RECONNECT_BASE_DELAY_MS * 2 ** Math.max(attempt - 1, 0), RECONNECT_MAX_DELAY_MS);
+}
+
 export function useWebSocket(roomId: string) {
   const socketRef = useRef<WebSocket | null>(null);
+  const reconnectTimerRef = useRef<number | null>(null);
+  const reconnectAttemptRef = useRef(0);
   const addMessage = useChatStore((state) => state.addMessage);
   const markTyping = useChatStore((state) => state.markTyping);
   const setParticipants = useChatStore((state) => state.setParticipants);
@@ -27,68 +36,119 @@ export function useWebSocket(roomId: string) {
   const setConnectionStatus = useChatStore((state) => state.setConnectionStatus);
 
   useEffect(() => {
-    setConnectionStatus("connecting");
+    let disposed = false;
 
-    const socket = new WebSocket(getWebSocketUrl(roomId));
-    socketRef.current = socket;
-
-    socket.addEventListener("open", () => {
-      setConnectionStatus("open");
-      const auth = useAuthStore.getState();
-      if (auth.user) {
-        socket.send(JSON.stringify({
-          type: "identify",
-          sender_id: auth.user.id,
-          sender_name: auth.user.display_name,
-          sender_type: auth.user.user_type,
-        }));
+    const clearReconnectTimer = () => {
+      if (reconnectTimerRef.current !== null) {
+        window.clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
       }
-    });
-    socket.addEventListener("close", () => setConnectionStatus("closed"));
-    socket.addEventListener("error", () => setConnectionStatus("error"));
-    socket.addEventListener("message", (event) => {
-      const payload = JSON.parse(event.data);
+    };
 
-      if (payload.type === "message" && payload.message) {
-        addMessage(payload.message);
-      }
+    const scheduleReconnect = (socket: WebSocket) => {
+      if (disposed || reconnectTimerRef.current !== null) return;
+      if (socketRef.current === socket) socketRef.current = null;
 
-      if (payload.type === "system" && payload.content) {
-        addMessage({
-          id: `sys-${Date.now()}`,
-          room_id: roomId,
-          sender_id: "system",
-          sender_type: "system",
-          content: payload.content,
-          msg_type: "system",
-          created_at: new Date().toISOString(),
-        });
-      }
+      reconnectAttemptRef.current += 1;
+      const delay = getReconnectDelay(reconnectAttemptRef.current);
+      reconnectTimerRef.current = window.setTimeout(() => {
+        reconnectTimerRef.current = null;
+        if (!disposed) connect();
+      }, delay);
+    };
 
-      if (payload.type === "typing") {
-        markTyping(payload.sender_id);
-      }
+    const connect = () => {
+      clearReconnectTimer();
+      setConnectionStatus("connecting");
 
-      if (payload.type === "presence_snapshot") {
-        setParticipants(payload.participants ?? []);
-      }
+      const socket = new WebSocket(getWebSocketUrl(roomId));
+      socketRef.current = socket;
 
-      if (payload.type === "user_online" && payload.participant) {
-        upsertParticipant(payload.participant);
-      }
+      socket.addEventListener("open", () => {
+        if (disposed || socketRef.current !== socket) return;
+        reconnectAttemptRef.current = 0;
+        setConnectionStatus("open");
+        const auth = useAuthStore.getState();
+        if (auth.user) {
+          socket.send(JSON.stringify({
+            type: "identify",
+            sender_id: auth.user.id,
+            sender_name: auth.user.display_name,
+            sender_type: auth.user.user_type,
+          }));
+        }
+      });
 
-      if (payload.type === "user_offline" && payload.participant) {
-        removeParticipant(payload.participant.sender_id);
-      }
+      socket.addEventListener("close", () => {
+        if (disposed || socketRef.current !== socket) return;
+        setConnectionStatus("closed");
+        scheduleReconnect(socket);
+      });
 
-      if (payload.type === "task_update" && payload.task) {
-        upsertTask(payload.task);
-      }
-    });
+      socket.addEventListener("error", () => {
+        if (disposed || socketRef.current !== socket) return;
+        setConnectionStatus("error");
+        scheduleReconnect(socket);
+        socket.close();
+      });
+
+      socket.addEventListener("message", (event) => {
+        let payload: RoomSocketEvent;
+        try {
+          payload = JSON.parse(event.data);
+        } catch (error) {
+          console.warn("Failed to parse room socket event", error);
+          return;
+        }
+
+        if (payload.type === "message" && payload.message) {
+          addMessage(payload.message);
+        }
+
+        if (payload.type === "system" && payload.content) {
+          addMessage({
+            id: `sys-${Date.now()}`,
+            room_id: roomId,
+            sender_id: "system",
+            sender_type: "system",
+            content: payload.content,
+            msg_type: "system",
+            created_at: new Date().toISOString(),
+          });
+        }
+
+        if (payload.type === "typing") {
+          markTyping(payload.sender_id);
+        }
+
+        if (payload.type === "presence_snapshot") {
+          setParticipants(payload.participants ?? []);
+        }
+
+        if (payload.type === "user_online" && payload.participant) {
+          upsertParticipant(payload.participant);
+        }
+
+        if (payload.type === "user_offline" && payload.participant) {
+          removeParticipant(payload.participant.sender_id);
+        }
+
+        if (payload.type === "task_update" && payload.task) {
+          upsertTask(payload.task);
+        }
+      });
+    };
+
+    connect();
 
     return () => {
-      socket.close();
-      socketRef.current = null;
+      disposed = true;
+      clearReconnectTimer();
+      const socket = socketRef.current;
+      if (socket) {
+        socketRef.current = null;
+        socket.close();
+      }
     };
   }, [addMessage, markTyping, removeParticipant, roomId, setConnectionStatus, setParticipants, upsertParticipant, upsertTask]);
 
