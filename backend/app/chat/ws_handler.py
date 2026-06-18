@@ -81,6 +81,11 @@ async def _check_mentions_and_forward(
         }, ensure_ascii=False)
 
         async with async_session() as db:
+            await chat_service.get_or_create_room(
+                db,
+                agent_channel,
+                name=f"Agent Channel {agent_name}",
+            )
             await chat_service.save_message(
                 db=db,
                 room_id=agent_channel,
