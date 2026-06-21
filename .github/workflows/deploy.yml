@@ -58,23 +58,18 @@ jobs:
 
   deploy:
     needs: test
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, multi-agent]
     if: github.ref == 'refs/heads/main'
 
     steps:
-      - uses: actions/checkout@v6
-
-      - name: Deploy to server
-        uses: appleboy/ssh-action@v1.2.2
-        with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SERVER_SSH_KEY }}
-          script: |
-            cd /opt/multi-agent-project-room
-            git pull origin main
-            docker compose up -d --build backend frontend
-            docker compose exec -T backend python3 -m alembic -c /app/alembic.ini upgrade head
-            docker compose exec -T postgres psql -U postgres -d agent_room -c "ALTER TABLE messages DROP CONSTRAINT IF EXISTS messages_sender_id_fkey;" 2>/dev/null || true
-            docker compose exec -T postgres psql -U postgres -d agent_room -c "UPDATE rooms SET is_active = FALSE WHERE id LIKE '_agent_%';" 2>/dev/null || true
-            echo "Deploy complete"
+      - name: 部署到服务器
+        run: |
+          cd /opt/multi-agent-project-room
+          git pull origin main
+          docker compose up -d --build backend frontend
+          docker compose exec -T backend python3 -m alembic -c /app/alembic.ini upgrade head
+          docker compose exec -T postgres psql -U postgres -d agent_room \
+            -c "ALTER TABLE messages DROP CONSTRAINT IF EXISTS messages_sender_id_fkey;" 2>/dev/null || true
+          docker compose exec -T postgres psql -U postgres -d agent_room \
+            -c "UPDATE rooms SET is_active = FALSE WHERE id LIKE '_agent_%';" 2>/dev/null || true
+          echo "Deploy complete"
