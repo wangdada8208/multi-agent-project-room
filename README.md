@@ -22,7 +22,8 @@ npm run dev
 Frontend: `http://127.0.0.1:5173`
 Backend health: `http://127.0.0.1:8000/health`
 
-For manual release verification, follow `DEMO_CHECKLIST.md`.
+For manual release verification, follow `ACCEPTANCE_CHECKLIST.md`. For
+production operations and adapter troubleshooting, follow `RUNBOOK.md`.
 
 ## Core APIs
 

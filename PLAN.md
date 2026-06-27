@@ -208,7 +208,7 @@ W3      ⑦ Approval 后端                    ⑤ Knowledge 全栈
 W4      联调 A2A ↔ 所有模块                 ⑦ Approval 前端
         部署上线                           UI 打磨
 ────────────────────────────────────────────────────────────────
-W5      修 bug + 写文档
+W5      修 bug + 写文档 + 验收闭环       稳定化与验收闭环
 ```
 
 ### 4.2 依赖关系
@@ -754,15 +754,15 @@ W4      联调 + 部署 ✅                     ⑦ Approval 前端 + UI ✅
 W5      修 bug + 写文档
 ```
 
-### 本周（W3）具体任务
+### 当前 W5 具体任务
 
 ```
-Claude — 本周任务               Codex — 本周任务
+Claude — 当前任务               Codex — 当前任务
 ─────────────────────────       ─────────────────────────
-□ Approval 审批 API              □ Frontend: Vite + Tailwind + shadcn/ui
-□ Approval 状态管理               □ Frontend: 聊天组件 + useWebSocket
-□ Approval WebSocket 通知         □ Frontend: Agent 面板
-□ 收尾前面模块的测试               □ Agent API + 模型
+□ A2A 错误处理 + 重试增强          □ ACCEPTANCE_CHECKLIST.md 验收闭环
+□ Knowledge/Repository 联调        □ Adapter 单实例与运行手册
+□ 任务超时/失败态完善              □ CLAUDE.md / RUNBOOK.md 状态更新
+□ 生产运行观察与部署文档            □ ROADMAP.md 后续路线维护
 ```
 
 ---

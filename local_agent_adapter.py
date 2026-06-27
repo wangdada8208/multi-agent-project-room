@@ -20,13 +20,16 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import fcntl
+import hashlib
 import json
 import re
 import subprocess
 import sys
 import uuid
 from datetime import datetime, timezone
-from typing import Optional
+from pathlib import Path
+from typing import Optional, TextIO
 
 import httpx
 import websockets
@@ -65,6 +68,37 @@ def _friendly_ai_failure(agent_name: str, stderr: str) -> Optional[str]:
             "暂时不能调用深度模型。简单问候我会直接回复；复杂任务等额度恢复后再继续。"
         )
     return None
+
+
+def _singleton_lock_path(
+    lock_dir: Path,
+    server: str,
+    room: str | None,
+    agent_name: str,
+) -> Path:
+    """Build a stable lock path for one server/room/agent adapter instance."""
+    effective_room = room if room else f"_agent_{agent_name.lower()}"
+    key = "\n".join([server.rstrip("/"), effective_room, agent_name.lower()])
+    digest = hashlib.sha256(key.encode("utf-8")).hexdigest()[:16]
+    safe_agent = re.sub(r"[^a-z0-9_-]+", "-", agent_name.lower()).strip("-") or "agent"
+    return lock_dir / f"{safe_agent}-{digest}.lock"
+
+
+def _acquire_singleton_lock(lock_path: Path) -> TextIO:
+    """Acquire an exclusive non-blocking adapter lock and return its file handle."""
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    lock_file = lock_path.open("a+")
+    try:
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError as exc:
+        lock_file.close()
+        raise RuntimeError(f"adapter already running for lock {lock_path}") from exc
+
+    lock_file.seek(0)
+    lock_file.truncate()
+    lock_file.write(str(Path.cwd()) + "\n")
+    lock_file.flush()
+    return lock_file
 
 
 def _strip_mention(content: str, agent_name: str) -> str:
@@ -946,6 +980,17 @@ Examples:
     args = parser.parse_args()
     args.command = args.command.split()
     agent_id = args.agent_id or f"{args.agent_name.lower().replace(' ', '-')}-{uuid.uuid4().hex[:6]}"
+    lock_path = _singleton_lock_path(
+        Path.home() / ".multi-agent-project-room" / "locks",
+        server=args.server,
+        room=args.room,
+        agent_name=args.agent_name,
+    )
+    try:
+        singleton_lock = _acquire_singleton_lock(lock_path)
+    except RuntimeError as e:
+        print(f"  ❌ {e}")
+        sys.exit(2)
 
     adapter = LocalAgentAdapter(
         server=args.server,
@@ -969,6 +1014,8 @@ Examples:
     except KeyboardInterrupt:
         print(f"\n  👋 [{args.agent_name}] Shutting down...")
         adapter.stop()
+    finally:
+        singleton_lock.close()
 
 
 if __name__ == "__main__":

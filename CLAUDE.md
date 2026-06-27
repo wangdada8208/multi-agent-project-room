@@ -10,15 +10,15 @@
 Step 1: 阅读 PLAN.md       → 了解当前阶段和你的任务
 Step 2: 阅读 CONTEXT.md    → 理解项目理念
 Step 3: 阅读 AGENTS.md     → 遵守 Agent 协作规则
-Step 4: 查看 PLAN.md §14   → 找到当前未完成的 Phase
+Step 4: 查看 PLAN.md §10   → 找到当前未完成的 W5 / Roadmap 项
 Step 5: 开始执行            → 完成后更新 PLAN.md 的 [ ] 为 [x]
 ```
 
 ## 2. 项目状态
 
 ```
-当前阶段: Phase 1 (项目骨架搭建)
-总体进度: 0/9 个 Phase 完成
+当前阶段: W5 稳定化与验收闭环
+总体进度: MVP 主链路已完成，剩余工作集中在生产验收、A2A 可靠性和文档收口
 ```
 
 ## 3. 技术栈概要
@@ -58,9 +58,11 @@ frontend/         React 前端
 
 ## 6. 从哪里开始
 
-如果你是**第一次加入**，先读 `PLAN.md` 全文，然后从 Phase 1 的第一个任务开始。
+如果你是**第一次加入**，先读 `PLAN.md` 全文，然后看
+`ACCEPTANCE_CHECKLIST.md` 和 `RUNBOOK.md` 了解当前上线状态。
 
-如果你是**回来继续工作**，看 `PLAN.md §14 当前进度`，找到未完成的 Phase，继续推进。
+如果你是**回来继续工作**，看 `PLAN.md §10 当前进度` 和 `ROADMAP.md`，
+优先推进 W5 稳定化、验收和 A2A 可靠性任务。
 
 ---
 

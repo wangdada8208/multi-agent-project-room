@@ -11,7 +11,11 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from local_agent_adapter import LocalAgentAdapter
+from local_agent_adapter import (
+    LocalAgentAdapter,
+    _acquire_singleton_lock,
+    _singleton_lock_path,
+)
 
 
 class FakeWebSocket:
@@ -64,6 +68,26 @@ def test_call_local_ai_returns_friendly_usage_limit(monkeypatch):
 
     assert "额度限制" in response
     assert "Upgrade to Pro" not in response
+
+
+def test_singleton_lock_rejects_duplicate_adapter(tmp_path):
+    """The same server, room, and agent should only have one local adapter process."""
+    lock_path = _singleton_lock_path(
+        tmp_path,
+        server="https://hub.example.com",
+        room="_agent_codex",
+        agent_name="Codex",
+    )
+
+    first_lock = _acquire_singleton_lock(lock_path)
+    try:
+        with pytest.raises(RuntimeError, match="already running"):
+            _acquire_singleton_lock(lock_path)
+    finally:
+        first_lock.close()
+
+    second_lock = _acquire_singleton_lock(lock_path)
+    second_lock.close()
 
 
 @pytest.mark.asyncio
