@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     a2a_port: int = 8765
     a2a_public_url: str = "http://localhost:8000"
     a2a_protocol_version: str = "0.3.0"
+    a2a_task_timeout_seconds: int = 300
     message_retention_days: int = 15
     auth_secret_key: str = "dev-change-me"
     auth_token_ttl_minutes: int = 60 * 24 * 7

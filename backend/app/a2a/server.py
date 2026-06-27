@@ -212,6 +212,13 @@ async def rpc_tasks_list(params: dict) -> dict:
     return {"tasks": tasks, "count": len(tasks)}
 
 
+@rpc_method("tasks/expire")
+async def rpc_tasks_expire(params: dict) -> dict:
+    """Expire stale submitted/working tasks now."""
+    timeout_seconds = params.get("timeout_seconds")
+    return await tm.expire_stale_tasks(timeout_seconds=timeout_seconds)
+
+
 @rpc_method("message/send")
 async def rpc_message_send(params: dict) -> dict:
     """Send a message into a chat room (A2A → Chat bridge)."""

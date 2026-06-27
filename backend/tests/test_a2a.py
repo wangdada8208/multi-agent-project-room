@@ -1,9 +1,13 @@
 """Test A2A Hub: agent card, task lifecycle, agent registration."""
 
+from datetime import datetime, timedelta, timezone
+
 import pytest
 from httpx import AsyncClient
 
 from app.a2a import task_manager as tm
+from app.a2a.models import A2ATask
+from app.chat import service as chat_service
 
 
 @pytest.mark.asyncio
@@ -147,3 +151,48 @@ async def test_submit_task_can_skip_remote_routing():
     assert task is not None
     assert task["target_agent"] == "Codex"
     assert task["status"] == "working"
+
+
+@pytest.mark.asyncio
+async def test_submit_task_fails_when_remote_target_unavailable(db):
+    """Direct A2A tasks should fail fast when the target agent has no active route."""
+    await chat_service.get_or_create_room(db, "demo-room", name="Demo Room")
+
+    result = await tm.submit_task(
+        query="Ask missing agent",
+        target_agent="MissingAgent",
+        source_agent="Tester",
+        room_id="demo-room",
+    )
+
+    assert result["status"] == "failed"
+    assert "unavailable" in result["error"]
+    task = await tm.get_task(result["id"])
+    assert task is not None
+    assert task["status"] == "failed"
+    assert task["result"]["error"] == result["error"]
+
+
+@pytest.mark.asyncio
+async def test_expire_stale_tasks_marks_old_working_tasks_failed(db):
+    """Old working tasks should not stay stuck forever."""
+    await chat_service.get_or_create_room(db, "demo-room", name="Demo Room")
+    result = await tm.submit_task(
+        query="@Codex old task",
+        target_agent="Codex",
+        source_agent="Tester",
+        room_id="demo-room",
+        route_remote=False,
+    )
+
+    db_task = await db.get(A2ATask, result["id"])
+    db_task.created_at = datetime.now(timezone.utc) - timedelta(seconds=120)
+    await db.commit()
+
+    expired = await tm.expire_stale_tasks(timeout_seconds=60)
+
+    assert expired["count"] == 1
+    task = await tm.get_task(result["id"])
+    assert task is not None
+    assert task["status"] == "failed"
+    assert "timed out" in task["result"]["error"]

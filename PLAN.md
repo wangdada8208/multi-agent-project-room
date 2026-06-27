@@ -759,10 +759,10 @@ W5      修 bug + 写文档
 ```
 Claude — 当前任务               Codex — 当前任务
 ─────────────────────────       ─────────────────────────
-□ A2A 错误处理 + 重试增强          □ ACCEPTANCE_CHECKLIST.md 验收闭环
-□ Knowledge/Repository 联调        □ Adapter 单实例与运行手册
-□ 任务超时/失败态完善              □ CLAUDE.md / RUNBOOK.md 状态更新
-□ 生产运行观察与部署文档            □ ROADMAP.md 后续路线维护
+[ ] A2A 重试增强                  [ ] ACCEPTANCE_CHECKLIST.md 验收闭环
+[ ] Knowledge/Repository 联调      [x] Adapter 单实例与运行手册
+[x] 任务超时/失败态基础完善        [x] CLAUDE.md / RUNBOOK.md 状态更新
+[ ] 生产运行观察与部署文档          [x] ROADMAP.md 后续路线维护
 ```
 
 ---

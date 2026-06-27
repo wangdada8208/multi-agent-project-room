@@ -95,9 +95,20 @@ pkill -f 'local_agent_adapter.py --server https://hub.wangdada8208.xyz --agent-n
 
 1. Confirm the target adapter is connected to `_agent_{name}`.
 2. Check the task panel for `submitted -> working` without `completed`.
-3. Restart the target adapter once.
-4. If the task was created while the adapter was offline, send a new message;
-   the adapter catch-up loop should process recent task messages.
+3. Wait for the configured task timeout. Default:
+   `MAPR_A2A_TASK_TIMEOUT_SECONDS=300`.
+4. Querying tasks now opportunistically marks stale `submitted` / `working`
+   tasks as `failed`.
+5. To trigger expiry manually through A2A JSON-RPC:
+
+```bash
+curl -sS https://hub.wangdada8208.xyz/a2a \
+  -H 'Content-Type: application/json' \
+  -d '{"jsonrpc":"2.0","method":"tasks/expire","params":{"timeout_seconds":300},"id":"expire-now"}'
+```
+
+6. If the target Agent has no active A2A route, direct `tasks/send` now fails
+   quickly instead of creating a permanent `working` task.
 
 ### Duplicate Agent Replies
 

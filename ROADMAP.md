@@ -12,12 +12,12 @@ room became usable.
 
 ## Next: A2A Reliability
 
-- [ ] Add explicit task timeout handling so tasks cannot remain `working`
+- [x] Add explicit task timeout handling so tasks cannot remain `working`
       forever.
 - [ ] Add retry policy for transient A2A delivery failures.
 - [ ] Surface failure reasons in the task panel.
-- [ ] Mark tasks failed quickly when the target agent is offline.
-- [ ] Add automated coverage for agent-offline and timeout paths.
+- [x] Mark tasks failed quickly when the target agent is offline.
+- [x] Add automated coverage for agent-offline and timeout paths.
 
 ## Next: Agent State Quality
 

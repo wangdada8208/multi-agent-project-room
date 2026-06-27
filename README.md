@@ -40,6 +40,9 @@ production operations and adapter troubleshooting, follow `RUNBOOK.md`.
 - `POST /a2a` for JSON-RPC methods such as `tasks/send`, `tasks/get`, and `message/send`
 - `GET /a2a/.well-known/agent-card`
 
+A2A tasks time out after `MAPR_A2A_TASK_TIMEOUT_SECONDS` seconds, defaulting to
+300. Operators can force an expiry pass with JSON-RPC method `tasks/expire`.
+
 Business REST APIs require `Authorization: Bearer <token>` unless noted by the
 module. Agent registration and A2A discovery remain open for local adapters.
 
