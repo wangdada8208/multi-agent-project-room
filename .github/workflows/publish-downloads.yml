@@ -1,0 +1,171 @@
+name: Publish Download Assets
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_base_url:
+        description: "Temporary HTTP base URL containing the files"
+        required: true
+      target_slug:
+        description: "Subdirectory under /downloads/"
+        required: true
+        default: "skills-20260629"
+
+jobs:
+  publish:
+    runs-on: [self-hosted, multi-agent]
+    timeout-minutes: 60
+
+    steps:
+      - name: Download, verify, and expose files
+        env:
+          SOURCE_BASE_URL: ${{ inputs.source_base_url }}
+          TARGET_SLUG: ${{ inputs.target_slug }}
+          PACKAGE_NAME: wangdada-all-user-skills-20260629.tar.gz
+          PACKAGE_SHA256: 0625b3e16600c9c770a825bddd7c45fd03c2a20a1a0aaeafb7ee209469edddef
+          CLASSIFICATION_NAME: skill-classification-20260629.md
+          CLASSIFICATION_SHA256: bc186c66af1601dfd1be1face1c90d544335fe69afec81409c60616a1f808617
+        run: |
+          set -euo pipefail
+
+          case "$TARGET_SLUG" in
+            *[!A-Za-z0-9._-]*|"")
+              echo "Invalid target slug: $TARGET_SLUG" >&2
+              exit 2
+              ;;
+          esac
+
+          if [ "$(id -u)" -eq 0 ]; then
+            SUDO=""
+          else
+            SUDO="sudo -n"
+          fi
+
+          BASE_URL="${SOURCE_BASE_URL%/}"
+          ROOT="/var/www/hub-downloads"
+          DEST="$ROOT/$TARGET_SLUG"
+          TMP="$DEST.tmp"
+
+          $SUDO rm -rf "$TMP"
+          $SUDO mkdir -p "$TMP"
+          $SUDO chown "$(id -u):$(id -g)" "$TMP"
+
+          curl --fail --location --retry 5 --retry-delay 5 \
+            --output "$TMP/$CLASSIFICATION_NAME" \
+            "$BASE_URL/$CLASSIFICATION_NAME"
+          curl --fail --location --retry 5 --retry-delay 5 \
+            --output "$TMP/$PACKAGE_NAME" \
+            "$BASE_URL/$PACKAGE_NAME"
+
+          printf "%s  %s\n" "$CLASSIFICATION_SHA256" "$TMP/$CLASSIFICATION_NAME" | sha256sum -c -
+          printf "%s  %s\n" "$PACKAGE_SHA256" "$TMP/$PACKAGE_NAME" | sha256sum -c -
+
+          cat > "$TMP/README.txt" <<EOF
+          Skill handoff downloads
+
+          Package:
+            $PACKAGE_NAME
+            sha256 $PACKAGE_SHA256
+
+          Classification:
+            $CLASSIFICATION_NAME
+            sha256 $CLASSIFICATION_SHA256
+          EOF
+
+          $SUDO mkdir -p "$ROOT"
+          $SUDO rm -rf "$DEST"
+          $SUDO mv "$TMP" "$DEST"
+          $SUDO find "$DEST" -type d -exec chmod 755 {} \;
+          $SUDO find "$DEST" -type f -exec chmod 644 {} \;
+
+          $SUDO python3 - <<'PY'
+          from __future__ import annotations
+
+          import re
+          import shutil
+          import subprocess
+          from datetime import datetime
+          from pathlib import Path
+
+          marker = "location ^~ /downloads/"
+          location = """
+              location ^~ /downloads/ {
+                  alias /var/www/hub-downloads/;
+                  autoindex off;
+                  add_header X-Content-Type-Options "nosniff" always;
+              }
+          """
+
+          dump = subprocess.run(
+              ["nginx", "-T"],
+              check=True,
+              stdout=subprocess.PIPE,
+              stderr=subprocess.STDOUT,
+              text=True,
+          ).stdout
+
+          current_file: Path | None = None
+          candidates: set[Path] = set()
+          for line in dump.splitlines():
+              match = re.match(r"# configuration file ([^:]+):", line)
+              if match:
+                  current_file = Path(match.group(1))
+                  continue
+              if current_file and "server_name" in line and "hub.wangdada8208.xyz" in line:
+                  candidates.add(current_file)
+
+          if not candidates:
+              raise SystemExit("Could not find nginx config for hub.wangdada8208.xyz")
+
+          changed = False
+          for path in sorted(candidates):
+              text = path.read_text()
+              if marker in text:
+                  continue
+
+              inserts: list[tuple[int, str]] = []
+              for match in re.finditer(r"server\s*\{", text):
+                  start = match.start()
+                  depth = 0
+                  end = None
+                  for idx in range(match.end() - 1, len(text)):
+                      char = text[idx]
+                      if char == "{":
+                          depth += 1
+                      elif char == "}":
+                          depth -= 1
+                          if depth == 0:
+                              end = idx
+                              break
+                  if end is None:
+                      continue
+                  block = text[start:end]
+                  if "server_name" in block and "hub.wangdada8208.xyz" in block:
+                      inserts.append((end, location))
+
+              if not inserts:
+                  continue
+
+              stamp = datetime.utcnow().strftime("%Y%m%d%H%M%S")
+              shutil.copy2(path, f"{path}.bak-downloads-{stamp}")
+              for pos, snippet in sorted(inserts, reverse=True):
+                  text = text[:pos] + snippet + text[pos:]
+              path.write_text(text)
+              changed = True
+              print(f"Patched {path}")
+
+          if not changed:
+              print("Nginx downloads location already present")
+          PY
+
+          $SUDO nginx -t
+          if command -v systemctl >/dev/null 2>&1; then
+            $SUDO systemctl reload nginx
+          else
+            $SUDO nginx -s reload
+          fi
+
+          curl --fail --head --location \
+            "https://hub.wangdada8208.xyz/downloads/$TARGET_SLUG/$CLASSIFICATION_NAME"
+          curl --fail --head --location \
+            "https://hub.wangdada8208.xyz/downloads/$TARGET_SLUG/$PACKAGE_NAME"
