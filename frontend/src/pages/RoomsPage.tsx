@@ -1,106 +1,91 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createRoom, fetchRooms } from "../lib/api";
-import { useRoomStore } from "../stores/roomStore";
 import type { Room } from "../types/chat";
 
 export function RoomsPage() {
-  const [newName, setNewName] = useState("");
-  const [newDesc, setNewDesc] = useState("");
-  const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const [showCreate, setShowCreate] = useState(false);
+  const [roomName, setRoomName] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [error, setError] = useState("");
 
-  const roomsQuery = useQuery({ queryKey: ["rooms"], queryFn: fetchRooms });
-  const setRooms = useRoomStore((state) => state.setRooms);
-
-  const createMutation = useMutation({
-    mutationFn: () =>
-      createRoom(newName || "新房间", newDesc),
-    onSuccess: (room) => {
-      setNewName("");
-      setNewDesc("");
-      queryClient.invalidateQueries({ queryKey: ["rooms"] });
-      navigate(`/rooms/${room.id}`);
-    },
+  const roomsQuery = useQuery({
+    queryKey: ["rooms"],
+    queryFn: fetchRooms,
+    refetchInterval: 10000,
   });
-
-  useEffect(() => {
-    if (roomsQuery.data) setRooms(roomsQuery.data);
-  }, [roomsQuery.data, setRooms]);
 
   const rooms: Room[] = roomsQuery.data ?? [];
 
+  async function handleCreate() {
+    if (!roomName.trim()) return;
+    setCreating(true);
+    setError("");
+    try {
+      const room = await createRoom(roomName.trim());
+      await queryClient.invalidateQueries({ queryKey: ["rooms"] });
+      navigate(`/rooms/${room.id}`);
+    } catch {
+      setError("创建失败，请重试。");
+    } finally {
+      setCreating(false);
+    }
+  }
+
   return (
-    <div style={{ display: "grid", gap: 20 }}>
-      <section className="page-card">
-        <p className="section-label">房间</p>
-        <h1 className="card-title">项目房间</h1>
-        <p className="card-subtitle">选择一个房间进入，或创建一个新的协作空间。</p>
+    <div className="rooms-page">
+      <div className="rooms-header">
+        <h1>房间列表</h1>
+        <button
+          type="button"
+          className="btn-primary"
+          style={{ width: "auto", padding: "8px 20px" }}
+          onClick={() => setShowCreate(!showCreate)}
+        >
+          + 新建房间
+        </button>
+      </div>
 
-        {roomsQuery.isLoading && <div className="empty-state"><p>加载中...</p></div>}
-        {roomsQuery.isError && (
-          <div className="empty-state">
-            <p style={{ color: "#dc2626" }}>无法加载房间列表，请检查后端服务是否运行。</p>
-          </div>
-        )}
-
-        {rooms.length === 0 && !roomsQuery.isLoading && (
-          <div className="empty-state">
-            <p>暂无房间，创建一个开始协作吧。</p>
-          </div>
-        )}
-
-        <div className="room-grid">
-          {rooms.map((room) => (
-            <Link className="room-card" key={room.id} to={`/rooms/${room.id}`}>
-              <div className="name">{room.name}</div>
-              <div className="desc">
-                {room.description || `房间 ${room.id.slice(0, 8)}...`}
-              </div>
-              <div className="meta">
-                {room.created_at
-                  ? new Date(room.created_at).toLocaleDateString("zh-CN")
-                  : ""}
-              </div>
-            </Link>
-          ))}
-        </div>
-      </section>
-
-      <div className="create-section">
-        <p className="section-label">创建</p>
-        <div style={{ fontWeight: 600, fontSize: 16, marginBottom: 12 }}>新房间</div>
-        <div className="row">
+      {showCreate && (
+        <div className="create-room-card">
           <input
-            placeholder="房间名称"
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
+            value={roomName}
+            onChange={(e) => setRoomName(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleCreate()}
+            placeholder="输入房间名称..."
+            autoFocus
           />
-          <input
-            placeholder="描述（可选）"
-            value={newDesc}
-            onChange={(e) => setNewDesc(e.target.value)}
-            style={{ flex: 2 }}
-          />
-          <button
-            onClick={() => createMutation.mutate()}
-            disabled={createMutation.isPending}
-            style={{
-              padding: "10px 20px",
-              border: "none",
-              borderRadius: 10,
-              background: "var(--accent)",
-              color: "white",
-              fontWeight: 600,
-              fontSize: 14,
-              cursor: "pointer",
-              opacity: createMutation.isPending ? 0.6 : 1,
-            }}
-          >
-            {createMutation.isPending ? "创建中..." : "创建房间"}
+          <button type="button" className="btn-primary" style={{ width: "auto", padding: "8px 16px" }} onClick={handleCreate} disabled={creating || !roomName.trim()}>
+            {creating ? "创建中..." : "创建"}
           </button>
         </div>
+      )}
+
+      {error && <p style={{ color: "var(--red)", fontSize: 13 }}>{error}</p>}
+
+      {roomsQuery.isLoading && <p className="panel-empty">加载中...</p>}
+      {!roomsQuery.isLoading && rooms.length === 0 && (
+        <div className="chat-empty">
+          <p>还没有房间</p>
+          <small>点击「+ 新建房间」开始协作。</small>
+        </div>
+      )}
+
+      <div className="rooms-grid">
+        {rooms.map((room) => (
+          <button key={room.id} type="button" className="room-card" onClick={() => navigate(`/rooms/${room.id}`)}>
+            <span className="room-card__icon">🏠</span>
+            <div className="room-card__info">
+              <strong>{room.name}</strong>
+              {room.description && <small>{room.description}</small>}
+              <small>{new Date(room.created_at).toLocaleDateString("zh-CN")}</small>
+            </div>
+            <span className="room-card__arrow">→</span>
+          </button>
+        ))}
       </div>
     </div>
   );
