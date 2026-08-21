@@ -136,6 +136,15 @@ export function useWebSocket(roomId: string) {
         if (payload.type === "task_update" && payload.task) {
           upsertTask(payload.task);
         }
+
+        if (payload.type === "agent_dialogue_message" && payload.message) {
+          addMessage(payload.message);
+        }
+
+        if (payload.type === "agent_dialogue_ended") {
+          // Loop ended — could show a toast or update UI
+          console.log("Dialogue ended", payload.dialogue);
+        }
       });
     };
 
