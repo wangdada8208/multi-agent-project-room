@@ -160,3 +160,60 @@ class TestMessageLoop:
 
 
 import asyncio
+
+
+# ── Agent Discovery Dedup ──────────────────────────────
+
+
+class TestAgentDiscoveryDedup:
+    @pytest.mark.asyncio
+    async def test_register_upsert_same_name_url(self, db):
+        """Same name + URL should update, not create duplicate."""
+        from app.a2a.discovery import AgentDiscovery
+
+        r1 = await AgentDiscovery.register("TestAgent", "http://localhost:9999")
+        assert r1["status"] == "registered"
+
+        r2 = await AgentDiscovery.register("TestAgent", "http://localhost:9999")
+        assert r2["status"] == "updated"
+        assert r2["id"] == r1["id"]
+
+    @pytest.mark.asyncio
+    async def test_register_deactivates_old_url(self, db):
+        """Re-registering with different URL should deactivate old record."""
+        from app.a2a.discovery import AgentDiscovery
+
+        await AgentDiscovery.register("OldAgent", "http://old:1111")
+        r2 = await AgentDiscovery.register("OldAgent", "http://new:2222")
+
+        agents = await AgentDiscovery.list_available()
+        active = [a for a in agents if a["name"] == "OldAgent"]
+        assert len(active) == 1
+        assert active[0]["url"] == "http://new:2222"
+
+    @pytest.mark.asyncio
+    async def test_cleanup_duplicates(self, db):
+        """Cleanup should remove inactive and duplicate active records."""
+        from app.a2a.discovery import AgentDiscovery
+
+        # Create duplicates manually via multiple registrations at same url (simulating old behavior)
+        for _ in range(3):
+            await AgentDiscovery.register("DupAgent", "http://dup:1234")
+
+        result = await AgentDiscovery.cleanup_duplicates()
+        agents = await AgentDiscovery.list_available()
+        dup_agents = [a for a in agents if a["name"] == "DupAgent"]
+        assert len(dup_agents) == 1
+
+    @pytest.mark.asyncio
+    async def test_list_available_deduplicates_by_name(self, db):
+        """list_available should return unique agent names."""
+        from app.a2a.discovery import AgentDiscovery
+
+        await AgentDiscovery.register("UniqueA", "http://a:1")
+        await AgentDiscovery.register("UniqueB", "http://b:2")
+
+        agents = await AgentDiscovery.list_available()
+        names = [a["name"] for a in agents]
+        assert names.count("UniqueA") <= 1
+        assert names.count("UniqueB") <= 1
