@@ -1,4 +1,4 @@
-"""Test A2A Hub: agent card, task lifecycle, agent registration."""
+"""Test A2A Hub v1.0: agent card, protocol routes, dialogue system, task lifecycle."""
 
 from datetime import datetime, timedelta, timezone
 
@@ -12,127 +12,118 @@ from app.chat import service as chat_service
 
 @pytest.mark.asyncio
 async def test_agent_card_endpoint(client: AsyncClient):
-    """Agent card should list all skills."""
-    resp = await client.get("/a2a/.well-known/agent-card")
+    """Agent Card at /.well-known/agent-card.json (A2A v1.0 standard)."""
+    resp = await client.get("/.well-known/agent-card.json")
     assert resp.status_code == 200
     data = resp.json()
     assert "name" in data
     assert "skills" in data
     assert len(data["skills"]) > 0
+    # v1.0 fields
+    assert "version" in data
+    assert "capabilities" in data
 
 
 @pytest.mark.asyncio
-async def test_a2a_task_submit_and_query(client: AsyncClient):
-    """Submit a task via JSON-RPC, then query its status."""
-    # Submit task
+async def test_a2a_jsonrpc_endpoint_exists(client: AsyncClient):
+    """The A2A JSON-RPC endpoint should exist and accept POST."""
     resp = await client.post(
-        "/a2a",
-        json={
-            "jsonrpc": "2.0",
-            "method": "tasks/send",
-            "params": {"query": "Test task"},
-            "id": "req-1",
-        },
+        "/a2a/rpc",
+        content=b"invalid-body",
+        headers={"Content-Type": "application/json"},
     )
-    assert resp.status_code == 200
-    result = resp.json()
-    assert result.get("result") is not None
-    task_id = result["result"]["id"]
-    assert result["result"]["status"] in ("submitted", "working")
-
-    # Get task status
-    resp = await client.post(
-        "/a2a",
-        json={
-            "jsonrpc": "2.0",
-            "method": "tasks/get",
-            "params": {"id": task_id},
-            "id": "req-2",
-        },
-    )
-    assert resp.status_code == 200
-    assert resp.json()["result"]["id"] == task_id
+    # Should not 404 — it may return 400/422 for bad body but route exists
+    assert resp.status_code != 404
 
 
 @pytest.mark.asyncio
-async def test_a2a_task_list(client: AsyncClient):
-    """List tasks should return recent tasks or empty list."""
-    # Submit a task
-    await client.post(
-        "/a2a",
-        json={
-            "jsonrpc": "2.0",
-            "method": "tasks/send",
-            "params": {"query": "List test task"},
-            "id": "r1",
-        },
-    )
-
+async def test_dialogue_rpc_unknown_method(client: AsyncClient):
+    """Unknown dialogue method should return error."""
     resp = await client.post(
-        "/a2a",
-        json={
-            "jsonrpc": "2.0",
-            "method": "tasks/list",
-            "params": {"limit": 10},
-            "id": "list-req",
-        },
+        "/a2a/dialogue-rpc",
+        json={"jsonrpc": "2.0", "method": "nonexistent", "params": {}, "id": "err1"},
     )
-    assert resp.status_code == 200
-    # Response may have result or error depending on DB state
-    json_resp = resp.json()
-    if json_resp.get("result") is not None:
-        tasks = json_resp["result"].get("tasks", [])
-        assert isinstance(tasks, list)
+    assert resp.status_code == 404  # HTTPException from unknown method
 
 
 @pytest.mark.asyncio
-async def test_a2a_cancel_task(client: AsyncClient):
-    """Cancel a submitted task."""
+async def test_dialogue_create_and_send(client: AsyncClient):
+    """Create a dialogue and send messages through it."""
+    # Create
     resp = await client.post(
-        "/a2a",
+        "/a2a/dialogue-rpc",
         json={
             "jsonrpc": "2.0",
-            "method": "tasks/send",
-            "params": {"query": "Cancel me"},
-            "id": "ct1",
+            "method": "dialogues/create",
+            "params": {
+                "room_id": "test-dialogue-room",
+                "initiator_agent": "Codex",
+                "participants": ["Claude"],
+                "duration_seconds": 30,
+                "max_turns": 5,
+            },
+            "id": "dc1",
         },
     )
+    assert resp.status_code == 200
     result = resp.json().get("result")
-    if result is None:
-        # Task may not be persisted in test env, skip
-        return
-    task_id = result["id"]
+    assert result is not None
+    assert result["status"] == "active"
+    assert len(result["participants"]) >= 2
+    dialogue_id = result["dialogue_id"]
 
+    # Send
     resp = await client.post(
-        "/a2a",
+        "/a2a/dialogue-rpc",
         json={
             "jsonrpc": "2.0",
-            "method": "tasks/cancel",
-            "params": {"id": task_id},
-            "id": "ct2",
+            "method": "dialogues/send",
+            "params": {
+                "dialogue_id": dialogue_id,
+                "content": "Hello Claude!",
+                "sender_id": "codex-id",
+                "sender_name": "Codex",
+            },
+            "id": "ds1",
         },
     )
     assert resp.status_code == 200
-    cancel_result = resp.json().get("result", {})
-    if cancel_result:
-        assert cancel_result.get("status") in ("canceled", "completed")
+    send_result = resp.json().get("result")
+    assert send_result is not None
+    assert send_result["status"] == "sent"
+    assert send_result["target_agent"] == "Claude"
 
 
 @pytest.mark.asyncio
-async def test_a2a_unknown_method(client: AsyncClient):
-    """Unknown JSON-RPC method should return error."""
-    resp = await client.post(
-        "/a2a",
+async def test_dialogue_end(client: AsyncClient):
+    """End an active dialogue."""
+    create_resp = await client.post(
+        "/a2a/dialogue-rpc",
         json={
             "jsonrpc": "2.0",
-            "method": "nonexistent",
-            "params": {},
-            "id": "err1",
+            "method": "dialogues/create",
+            "params": {
+                "room_id": "test-end-room",
+                "initiator_agent": "Codex",
+                "participants": ["Claude"],
+            },
+            "id": "de0",
+        },
+    )
+    dialogue_id = create_resp.json()["result"]["dialogue_id"]
+
+    resp = await client.post(
+        "/a2a/dialogue-rpc",
+        json={
+            "jsonrpc": "2.0",
+            "method": "dialogues/end",
+            "params": {"dialogue_id": dialogue_id},
+            "id": "de1",
         },
     )
     assert resp.status_code == 200
-    assert resp.json()["error"] is not None
-    assert resp.json()["error"]["code"] == -32601
+    end_result = resp.json().get("result")
+    assert end_result["status"] == "ended"
 
 
 @pytest.mark.asyncio

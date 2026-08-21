@@ -16,8 +16,8 @@ async def test_health_endpoint(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_a2a_agent_card(client: AsyncClient):
-    """GET /a2a/.well-known/agent-card should return Hub card."""
-    resp = await client.get("/a2a/.well-known/agent-card")
+    """GET /.well-known/agent-card.json should return Hub card."""
+    resp = await client.get("/.well-known/agent-card.json")
     assert resp.status_code == 200
     data = resp.json()
     assert data["name"] == "Multi-Agent Room Hub"

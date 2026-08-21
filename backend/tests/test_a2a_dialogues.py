@@ -8,10 +8,10 @@ from httpx import AsyncClient
 async def test_dialogue_start_send_and_end(client: AsyncClient):
     """Dialogue RPCs should create, relay, and end a two-agent session."""
     start_resp = await client.post(
-        "/a2a",
+        "/a2a/dialogue-rpc",
         json={
             "jsonrpc": "2.0",
-            "method": "dialogues/start",
+            "method": "dialogues/create",
             "params": {
                 "room_id": "dialogue-room",
                 "initiator_agent": "Codex",
@@ -30,7 +30,7 @@ async def test_dialogue_start_send_and_end(client: AsyncClient):
     dialogue_id = start_result["dialogue_id"]
 
     send_resp = await client.post(
-        "/a2a",
+        "/a2a/dialogue-rpc",
         json={
             "jsonrpc": "2.0",
             "method": "dialogues/send",
@@ -54,7 +54,7 @@ async def test_dialogue_start_send_and_end(client: AsyncClient):
     assert send_result["current_turn"] == 1
 
     end_resp = await client.post(
-        "/a2a",
+        "/a2a/dialogue-rpc",
         json={
             "jsonrpc": "2.0",
             "method": "dialogues/end",
@@ -73,10 +73,10 @@ async def test_dialogue_start_send_and_end(client: AsyncClient):
 async def test_dialogue_rejects_send_after_turn_limit(client: AsyncClient):
     """Dialogue sessions should stop relaying once max_turns is reached."""
     start_resp = await client.post(
-        "/a2a",
+        "/a2a/dialogue-rpc",
         json={
             "jsonrpc": "2.0",
-            "method": "dialogues/start",
+            "method": "dialogues/create",
             "params": {
                 "room_id": "dialogue-room",
                 "initiator_agent": "Codex",
@@ -90,7 +90,7 @@ async def test_dialogue_rejects_send_after_turn_limit(client: AsyncClient):
     dialogue_id = start_resp.json()["result"]["dialogue_id"]
 
     first_resp = await client.post(
-        "/a2a",
+        "/a2a/dialogue-rpc",
         json={
             "jsonrpc": "2.0",
             "method": "dialogues/send",
@@ -108,7 +108,7 @@ async def test_dialogue_rejects_send_after_turn_limit(client: AsyncClient):
     assert first_resp.json()["result"]["status"] == "sent"
 
     second_resp = await client.post(
-        "/a2a",
+        "/a2a/dialogue-rpc",
         json={
             "jsonrpc": "2.0",
             "method": "dialogues/send",

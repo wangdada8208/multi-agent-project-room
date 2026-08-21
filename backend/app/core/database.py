@@ -32,6 +32,22 @@ class Base(DeclarativeBase):
     pass
 
 
+async def init_db():
+    """Create all tables. Called from FastAPI lifespan startup."""
+    # Import all models so Base.metadata is populated
+    import app.models.user  # noqa: F401
+    import app.models.room  # noqa: F401
+    import app.models.agent_card  # noqa: F401
+    import app.chat.models  # noqa: F401
+    import app.a2a.models  # noqa: F401
+    import app.approval.models  # noqa: F401
+    import app.agent.models  # noqa: F401
+    import app.knowledge.models  # noqa: F401
+
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+
 async def get_db() -> AsyncSession:  # type: ignore[misc]
     """FastAPI dependency: yield an async session."""
     async with async_session() as session:
