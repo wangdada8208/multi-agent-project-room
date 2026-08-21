@@ -12,3 +12,5 @@ alembic>=1.14,<2
 greenlet>=3.0,<4
 redis>=5.0,<6
 aiosqlite>=0.20,<1
+a2a-sdk[http-server]>=1.1,<2
+sse-starlette>=2.0,<3

@@ -1,4 +1,7 @@
-"""Multi-Agent Project Room — FastAPI application entrypoint."""
+"""Multi-Agent Project Room — FastAPI application entrypoint.
+
+A2A Protocol v1.0 via official a2a-sdk.
+"""
 
 from __future__ import annotations
 
@@ -13,7 +16,7 @@ from app.gateway.routes import router as gateway_router
 from app.auth.routes import router as auth_router
 from app.api.rooms import router as rooms_router
 from app.chat.routes import router as chat_router
-from app.a2a.server import router as a2a_router
+from app.a2a.server import legacy_router, mount_a2a
 from app.a2a.routes import router as task_router
 from app.approval.routes import router as approval_router
 from app.agent.routes import router as agent_router
@@ -32,7 +35,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title=settings.app_name,
-    version="1.0.0",
+    version="2.0.0",
     lifespan=lifespan,
 )
 
@@ -60,12 +63,17 @@ app.include_router(gateway_router)    # GET /health
 app.include_router(auth_router)       # /api/v1/auth
 app.include_router(rooms_router)      # /api/v1/rooms
 app.include_router(chat_router)       # /api/v1/rooms/{id}/messages
-app.include_router(a2a_router)        # /a2a (JSON-RPC + Agent Card)
 app.include_router(task_router)       # /api/v1/tasks
 app.include_router(approval_router)   # /api/v1/approvals
 app.include_router(agent_router)      # /api/v1/agents
 app.include_router(knowledge_router)  # /api/v1/rooms/{id}/docs
 app.include_router(repository_router) # /api/v1/rooms/{id}/git
+
+# A2A v1.0 — official SDK protocol routes (Agent Card + JSON-RPC)
+mount_a2a(app)
+
+# A2A legacy — dialogue system + agent discovery RPC
+app.include_router(legacy_router)     # /a2a/rpc (dialogue methods)
 
 # ── WebSocket ──────────────────────────────────────────
 app.add_api_websocket_route("/ws/chat/{room_id}", handle_chat)
