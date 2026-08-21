@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.config import get_settings
+from app.core.database import init_db
 from app.gateway.routes import router as gateway_router
 from app.auth.routes import router as auth_router
 from app.api.rooms import router as rooms_router
@@ -29,7 +30,8 @@ settings = get_settings()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Application lifecycle."""
+    """Application lifecycle: create tables on startup."""
+    await init_db()
     yield
 
 

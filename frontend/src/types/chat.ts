@@ -6,7 +6,10 @@ export type MessageType =
   | "task"
   | "proposal"
   | "report"
-  | "approval_request";
+  | "approval_request"
+  | "consensus"
+  | "conflict"
+  | "loop_update";
 
 export interface Room {
   id: string;
@@ -50,6 +53,27 @@ export interface RoomTask {
   completed_at?: string | null;
 }
 
+/** 消息循环协作的轮次记录 */
+export interface LoopTurn {
+  agent_name: string;
+  content: string;
+  turn_number: number;
+  signals_consensus: boolean;
+  conflicts: string[];
+  timestamp: string;
+}
+
+export interface MessageLoopState {
+  loop_id: string;
+  room_id: string;
+  topic: string;
+  status: "pending" | "active" | "consensus" | "max_turns" | "canceled" | "timeout";
+  current_round: number;
+  max_turns: number;
+  turns: LoopTurn[];
+  consensus_summary?: string | null;
+}
+
 export interface WebSocketMessageEvent {
   type: "message";
   message: ChatMessage;
@@ -66,11 +90,40 @@ export interface WebSocketTypingEvent {
   sender_id: string;
 }
 
+export interface WebSocketLoopEvent {
+  type: "agent_dialogue_message";
+  dialogue: Record<string, unknown>;
+  message: ChatMessage;
+}
+
+export interface WebSocketLoopEndEvent {
+  type: "agent_dialogue_ended";
+  dialogue: Record<string, unknown>;
+}
+
 export type RoomSocketEvent =
   | WebSocketMessageEvent
   | WebSocketSystemEvent
   | WebSocketTypingEvent
+  | WebSocketLoopEvent
+  | WebSocketLoopEndEvent
   | { type: "presence_snapshot"; participants: PresenceParticipant[] }
   | { type: "user_online" | "user_offline"; participant: PresenceParticipant }
   | { type: "task_update"; task: RoomTask }
   | { type: "pong" };
+
+// ── 团队配置 ────────────────────────────────────────────
+
+export interface TeamRoleConfig {
+  name: string;
+  agent_name: string;
+  responsibilities: string[];
+  focus_areas: string[];
+  ignore_areas: string[];
+}
+
+export interface TeamConfig {
+  title: string;
+  roles: TeamRoleConfig[];
+  rules: string[];
+}
