@@ -1,11 +1,12 @@
-"""Pytest fixtures: test database + test client."""
+"""Pytest fixtures: test database + test client.
 
-import asyncio
+Compatible with pytest-asyncio >= 0.23 and Python 3.13.
+"""
+
 import sys
 from pathlib import Path
 from typing import AsyncGenerator
 
-import pytest
 import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
@@ -15,7 +16,7 @@ if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
 from app.main import app
-from app.core.database import Base, get_db, async_session as production_session
+from app.core.database import Base, get_db
 from app.a2a import task_manager as a2a_task_manager
 from app.a2a import server as a2a_server
 from app.a2a import discovery as a2a_discovery
@@ -31,14 +32,6 @@ a2a_task_manager.async_session = test_session
 a2a_server.async_session = test_session
 a2a_discovery.async_session = test_session
 chat_ws_handler.async_session = test_session
-
-
-@pytest.fixture(scope="session")
-def event_loop():
-    """Create a single event loop for the session."""
-    loop = asyncio.new_event_loop()
-    yield loop
-    loop.close()
 
 
 @pytest_asyncio.fixture(autouse=True)
