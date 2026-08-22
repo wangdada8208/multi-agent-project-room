@@ -3,7 +3,7 @@ import { useChatStore } from "../stores/chatStore";
 import type { ChatMessage, MessageType, RoomSocketEvent, SenderType } from "../types/chat";
 
 import { useAuthStore } from "../stores/authStore";
-import { websocketUrl } from "../lib/api";
+import { websocketUrl, apiFetch } from "../lib/api";
 
 interface SendMessageInput {
   content: string;
@@ -23,10 +23,24 @@ function getReconnectDelay(attempt: number): number {
   return Math.min(RECONNECT_BASE_DELAY_MS * 2 ** Math.max(attempt - 1, 0), RECONNECT_MAX_DELAY_MS);
 }
 
+async function fetchMissedMessages(roomId: string, afterTimestamp: string | null): Promise<ChatMessage[]> {
+  try {
+    const params = new URLSearchParams({ limit: "100" });
+    if (afterTimestamp) params.set("after", afterTimestamp);
+    const res = await apiFetch(`/api/v1/rooms/${roomId}/messages?${params}`);
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.messages ?? [];
+  } catch {
+    return [];
+  }
+}
+
 export function useWebSocket(roomId: string) {
   const socketRef = useRef<WebSocket | null>(null);
   const reconnectTimerRef = useRef<number | null>(null);
   const reconnectAttemptRef = useRef(0);
+  const lastDisconnectRef = useRef<string | null>(null);
   const addMessage = useChatStore((state) => state.addMessage);
   const markTyping = useChatStore((state) => state.markTyping);
   const setParticipants = useChatStore((state) => state.setParticipants);
@@ -49,12 +63,25 @@ export function useWebSocket(roomId: string) {
       if (disposed || reconnectTimerRef.current !== null) return;
       if (socketRef.current === socket) socketRef.current = null;
 
+      // Record when we lost connection so we can catch up later
+      lastDisconnectRef.current = new Date().toISOString();
+
       reconnectAttemptRef.current += 1;
       const delay = getReconnectDelay(reconnectAttemptRef.current);
       reconnectTimerRef.current = window.setTimeout(() => {
         reconnectTimerRef.current = null;
         if (!disposed) connect();
       }, delay);
+    };
+
+    const catchUpMissedMessages = async () => {
+      const since = lastDisconnectRef.current;
+      if (!since) return; // First connect, no gap to fill
+      const missed = await fetchMissedMessages(roomId, since);
+      for (const msg of missed) {
+        addMessage(msg); // addMessage already deduplicates by ID
+      }
+      lastDisconnectRef.current = null; // Reset after successful catch-up
     };
 
     const connect = () => {
@@ -77,6 +104,8 @@ export function useWebSocket(roomId: string) {
             sender_type: auth.user.user_type,
           }));
         }
+        // Fetch messages sent while disconnected
+        catchUpMissedMessages();
       });
 
       socket.addEventListener("close", () => {
@@ -142,7 +171,6 @@ export function useWebSocket(roomId: string) {
         }
 
         if (payload.type === "agent_dialogue_ended") {
-          // Loop ended — could show a toast or update UI
           console.log("Dialogue ended", payload.dialogue);
         }
       });

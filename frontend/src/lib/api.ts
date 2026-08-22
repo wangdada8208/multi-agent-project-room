@@ -78,7 +78,7 @@ export interface Approval {
   created_at: string;
 }
 
-async function apiFetch(input: RequestInfo | URL, init: RequestInit = {}) {
+export async function apiFetch(input: RequestInfo | URL, init: RequestInit = {}) {
   const token = useAuthStore.getState().token;
   const headers = new Headers(init.headers);
   if (!headers.has("Content-Type") && init.body) {
