@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createRoom, fetchRooms } from "../lib/api";
+import { useAuthStore } from "../stores/authStore";
 import type { Room } from "../types/chat";
 
 export function RoomsPage() {
@@ -35,8 +36,23 @@ export function RoomsPage() {
     }
   }
 
+  const user = useAuthStore((state) => state.user);
+  const logout = useAuthStore((state) => state.logout);
+  const displayName = user?.display_name ?? "";
+
   return (
     <div className="rooms-page">
+      <header className="rooms-topbar">
+        <span className="brand-mini">🤖 协作空间</span>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          {displayName && <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{displayName}</span>}
+          {user && (
+            <button type="button" onClick={logout} className="btn-ghost" style={{ padding: '4px 10px' }}>
+              退出
+            </button>
+          )}
+        </div>
+      </header>
       <div className="rooms-header">
         <h1>房间列表</h1>
         <button
@@ -66,8 +82,14 @@ export function RoomsPage() {
 
       {error && <p style={{ color: "var(--red)", fontSize: 13 }}>{error}</p>}
 
-      {roomsQuery.isLoading && <p className="panel-empty">加载中...</p>}
-      {!roomsQuery.isLoading && rooms.length === 0 && (
+      {roomsQuery.isError && (
+        <div className="chat-error">
+          <p>加载房间失败，请刷新重试。</p>
+          <button type="button" onClick={() => roomsQuery.refetch()}>重试</button>
+        </div>
+      )}
+      {!roomsQuery.isError && roomsQuery.isLoading && <p className="panel-empty">加载中...</p>}
+      {!roomsQuery.isLoading && !roomsQuery.isError && rooms.length === 0 && (
         <div className="chat-empty">
           <p>还没有房间</p>
           <small>点击「+ 新建房间」开始协作。</small>
