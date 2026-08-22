@@ -13,3 +13,4 @@ backend/test.db
 test.db
 frontend/vite.config.js
 frontend/vite.config.d.ts
+test_verify.db
