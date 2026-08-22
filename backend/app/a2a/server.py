@@ -15,7 +15,9 @@ import logging
 from datetime import datetime, timedelta, timezone
 
 import pydantic
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
+from app.core.security import get_current_user
+from app.models.user import User
 
 from a2a.server.agent_execution.agent_executor import AgentExecutor
 from a2a.server.agent_execution.context import RequestContext
@@ -142,7 +144,7 @@ def rpc_method(name: str):
 
 
 @router.post("/dialogue-rpc")
-async def handle_dialogue_jsonrpc(request: DialogueRequest):
+async def handle_dialogue_jsonrpc(request: DialogueRequest, current_user: User = Depends(get_current_user)):
     """Dialogue-specific and agent-discovery JSON-RPC methods."""
     handler = DIALOGUE_METHODS.get(request.method)
     if not handler:

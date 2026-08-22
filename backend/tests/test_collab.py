@@ -225,7 +225,7 @@ class TestAgentDiscoveryDedup:
 
 class TestDialogueAutoRun:
     @pytest.mark.asyncio
-    async def test_dialogues_run_creates_and_executes(self, client: AsyncClient):
+    async def test_dialogues_run_creates_and_executes(self, client: AsyncClient, auth_headers: dict):
         """dialogues/run should create a dialogue and auto-execute turns."""
         resp = await client.post("/a2a/dialogue-rpc", json={
             "jsonrpc": "2.0",
@@ -238,7 +238,7 @@ class TestDialogueAutoRun:
                 "max_turns": 2,
             },
             "id": "run-1",
-        })
+        }, headers=auth_headers)
         assert resp.status_code == 200
         result = resp.json().get("result", {})
         assert result["status"] == "active"
@@ -246,23 +246,23 @@ class TestDialogueAutoRun:
         assert len(result["participants"]) >= 2
 
     @pytest.mark.asyncio
-    async def test_dialogues_run_requires_room(self, client: AsyncClient):
+    async def test_dialogues_run_requires_room(self, client: AsyncClient, auth_headers: dict):
         """dialogues/run should fail without room_id."""
         resp = await client.post("/a2a/dialogue-rpc", json={
             "jsonrpc": "2.0",
             "method": "dialogues/run",
             "params": {"participants": ["A"]},
             "id": "run-err",
-        })
+        }, headers=auth_headers)
         assert resp.status_code == 400
 
     @pytest.mark.asyncio
-    async def test_dialogues_run_requires_participants(self, client: AsyncClient):
+    async def test_dialogues_run_requires_participants(self, client: AsyncClient, auth_headers: dict):
         """dialogues/run should fail without participants."""
         resp = await client.post("/a2a/dialogue-rpc", json={
             "jsonrpc": "2.0",
             "method": "dialogues/run",
             "params": {"room_id": "r1"},
             "id": "run-err2",
-        })
+        }, headers=auth_headers)
         assert resp.status_code == 400
