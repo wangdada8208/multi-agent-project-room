@@ -5,10 +5,11 @@ from httpx import AsyncClient
 
 
 @pytest.mark.asyncio
-async def test_dialogue_start_send_and_end(client: AsyncClient):
+async def test_dialogue_start_send_and_end(client: AsyncClient, auth_headers: dict):
     """Dialogue RPCs should create, relay, and end a two-agent session."""
     start_resp = await client.post(
         "/a2a/dialogue-rpc",
+        headers=auth_headers,
         json={
             "jsonrpc": "2.0",
             "method": "dialogues/create",
@@ -31,6 +32,7 @@ async def test_dialogue_start_send_and_end(client: AsyncClient):
 
     send_resp = await client.post(
         "/a2a/dialogue-rpc",
+        headers=auth_headers,
         json={
             "jsonrpc": "2.0",
             "method": "dialogues/send",
@@ -55,6 +57,7 @@ async def test_dialogue_start_send_and_end(client: AsyncClient):
 
     end_resp = await client.post(
         "/a2a/dialogue-rpc",
+        headers=auth_headers,
         json={
             "jsonrpc": "2.0",
             "method": "dialogues/end",
@@ -70,10 +73,11 @@ async def test_dialogue_start_send_and_end(client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_dialogue_rejects_send_after_turn_limit(client: AsyncClient):
+async def test_dialogue_rejects_send_after_turn_limit(client: AsyncClient, auth_headers: dict):
     """Dialogue sessions should stop relaying once max_turns is reached."""
     start_resp = await client.post(
         "/a2a/dialogue-rpc",
+        headers=auth_headers,
         json={
             "jsonrpc": "2.0",
             "method": "dialogues/create",
@@ -91,6 +95,7 @@ async def test_dialogue_rejects_send_after_turn_limit(client: AsyncClient):
 
     first_resp = await client.post(
         "/a2a/dialogue-rpc",
+        headers=auth_headers,
         json={
             "jsonrpc": "2.0",
             "method": "dialogues/send",
@@ -109,6 +114,7 @@ async def test_dialogue_rejects_send_after_turn_limit(client: AsyncClient):
 
     second_resp = await client.post(
         "/a2a/dialogue-rpc",
+        headers=auth_headers,
         json={
             "jsonrpc": "2.0",
             "method": "dialogues/send",

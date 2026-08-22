@@ -22,7 +22,7 @@ export function DialoguePanel({ roomId, onlineAgents }: DialoguePanelProps) {
     setLoading(true);
     setError("");
     try {
-      const token = localStorage.getItem("mapr-token") ?? "";
+      const token = localStorage.getItem("mapr-auth-token") ?? "";
       const res = await fetch("/a2a/dialogue-rpc", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
@@ -99,7 +99,7 @@ export function DialoguePanel({ roomId, onlineAgents }: DialoguePanelProps) {
     if (!loop) return;
     setLoading(true);
     try {
-      const token = localStorage.getItem("mapr-token") ?? "";
+      const token = localStorage.getItem("mapr-auth-token") ?? "";
       await fetch("/a2a/dialogue-rpc", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },

@@ -88,7 +88,15 @@ export async function apiFetch(input: RequestInfo | URL, init: RequestInit = {})
     headers.set("Authorization", `Bearer ${token}`);
   }
   const request = typeof input === "string" ? apiUrl(input) : input;
-  return fetch(request, { ...init, headers });
+  const response = await fetch(request, { ...init, headers });
+
+  // Auto-logout on expired/invalid token
+  if (response.status === 401 && token) {
+    useAuthStore.getState().logout();
+    window.location.href = "/login";
+  }
+
+  return response;
 }
 
 export async function register(input: {

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,20 +10,21 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.security import create_access_token, get_current_user, hash_password, verify_password
 from app.models.user import User
+from .rate_limit import check_rate_limit, record_attempt, clear_attempts
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
 
 class RegisterRequest(BaseModel):
     username: str = Field(min_length=3, max_length=64, pattern=r"^[a-zA-Z0-9_.-]+$")
-    password: str = Field(min_length=6, max_length=128)
+    password: str = Field(min_length=8, max_length=128)
     display_name: str = Field(min_length=1, max_length=128)
     user_type: str = Field(default="human", pattern="^(human|agent)$")
 
 
 class LoginRequest(BaseModel):
-    username: str
-    password: str
+    username: str = Field(max_length=128)
+    password: str = Field(max_length=128)
 
 
 def _auth_response(user: User) -> dict:
@@ -35,7 +36,9 @@ def _auth_response(user: User) -> dict:
 
 
 @router.post("/register")
-async def register(payload: RegisterRequest, db: AsyncSession = Depends(get_db)) -> dict:
+async def register(request: Request, payload: RegisterRequest, db: AsyncSession = Depends(get_db)) -> dict:
+    check_rate_limit(request, "register")
+
     existing = await db.execute(select(User).where(User.username == payload.username))
     if existing.scalar_one_or_none() is not None:
         raise HTTPException(status_code=409, detail="Username already exists")
@@ -50,15 +53,22 @@ async def register(payload: RegisterRequest, db: AsyncSession = Depends(get_db))
     db.add(user)
     await db.commit()
     await db.refresh(user)
+
+    clear_attempts(request, "register")
     return _auth_response(user)
 
 
 @router.post("/login")
-async def login(payload: LoginRequest, db: AsyncSession = Depends(get_db)) -> dict:
+async def login(request: Request, payload: LoginRequest, db: AsyncSession = Depends(get_db)) -> dict:
+    check_rate_limit(request, "login")
+
     result = await db.execute(select(User).where(User.username == payload.username))
     user = result.scalar_one_or_none()
     if user is None or not verify_password(payload.password, user.password_hash):
+        record_attempt(request, "login")
         raise HTTPException(status_code=401, detail="Invalid username or password")
+
+    clear_attempts(request, "login")
     user.last_seen_at = datetime.now(timezone.utc)
     await db.commit()
     await db.refresh(user)

@@ -51,9 +51,18 @@ async def upload_file(
     if not file.filename:
         raise HTTPException(status_code=400, detail="No filename provided")
 
-    content = await file.read()
-    if len(content) > MAX_FILE_SIZE:
-        raise HTTPException(status_code=413, detail="File too large (max 50MB)")
+    # Stream-read in chunks to avoid loading oversized files into memory
+    chunks = []
+    total_size = 0
+    while True:
+        chunk = await file.read(1024 * 1024)  # 1MB chunks
+        if not chunk:
+            break
+        total_size += len(chunk)
+        if total_size > MAX_FILE_SIZE:
+            raise HTTPException(status_code=413, detail="File too large (max 50MB)")
+        chunks.append(chunk)
+    content = b"".join(chunks)
 
     # Sanitize filename to prevent path traversal
     clean_name = re.sub(r"[^a-zA-Z0-9._\-\u4e00-\u9fff]", "_", file.filename)

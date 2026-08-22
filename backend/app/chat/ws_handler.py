@@ -1,4 +1,4 @@
-"""WebSocket chat handler with PostgreSQL persistence.
+"""WebSocket chat handler with PostgreSQL persistence and auth.
 
 Message flow:
   Client sends JSON → server persists to DB → server broadcasts to room
@@ -17,10 +17,11 @@ import json
 import logging
 import re
 
-from fastapi import WebSocket, WebSocketDisconnect
+from fastapi import WebSocket, WebSocketDisconnect, Query
 from sqlalchemy import select
 
 from app.core.database import async_session
+from app.core.security import decode_access_token
 from app.chat import service as chat_service
 from app.a2a import task_manager as tm
 from app.ws.connection_manager import connection_manager
@@ -107,14 +108,23 @@ async def _check_mentions_and_forward(
         })
 
 
-async def handle_chat(websocket: WebSocket, room_id: str) -> None:
+async def handle_chat(websocket: WebSocket, room_id: str, token: str = Query(default="")) -> None:
     """WebSocket endpoint for a chat room.
 
-    Wire this in main.py:
-        app.add_websocket_route("/ws/chat/{room_id}", handle_chat)
+    Requires ?token=<access_token> query parameter for authentication.
     """
+    # ── Authenticate before accepting connection ──
+    try:
+        payload = decode_access_token(token)
+    except Exception:
+        await websocket.close(code=4001, reason="Authentication required")
+        return
+
+    authenticated_user_id = payload.get("sub", "")
+    authenticated_user_type = payload.get("typ", "human")
+
     await connection_manager.connect(room_id, websocket)
-    logger.info("ws connected room=%s", room_id)
+    logger.info("ws connected room=%s user=%s", room_id[:8], authenticated_user_id[:8])
     await websocket.send_json(
         {
             "type": "presence_snapshot",
@@ -137,8 +147,10 @@ async def handle_chat(websocket: WebSocket, room_id: str) -> None:
                 await websocket.send_json({"type": "pong"})
                 continue
 
-            # ── Presence identity ──
+            # ── Presence identity (must match authenticated user) ──
             if msg_type == "identify":
+                # Force sender_id to match the token subject
+                raw["sender_id"] = authenticated_user_id
                 participant = await connection_manager.identify(room_id, websocket, raw)
                 await connection_manager.broadcast(
                     room_id,
@@ -156,12 +168,13 @@ async def handle_chat(websocket: WebSocket, room_id: str) -> None:
             if msg_type == "typing":
                 await connection_manager.broadcast(
                     room_id,
-                    {"type": "typing", "sender_id": raw.get("sender_id", "anonymous")},
+                    {"type": "typing", "sender_id": authenticated_user_id},
                 )
                 continue
 
             # ── Chat message ──
             if msg_type == "message":
+                raw["sender_id"] = authenticated_user_id  # Force identity from token
                 participant = await connection_manager.identify(room_id, websocket, raw)
                 content = str(raw.get("content", "")).strip()
                 if not content:
@@ -174,7 +187,6 @@ async def handle_chat(websocket: WebSocket, room_id: str) -> None:
                 target_room = raw.get("target_room") or room_id
 
                 async with async_session() as db:
-                    # Ensure target room exists
                     room = await db.get(Room, target_room)
                     if room is None:
                         room = await chat_service.get_or_create_room(
@@ -184,8 +196,8 @@ async def handle_chat(websocket: WebSocket, room_id: str) -> None:
                     message = await chat_service.save_message(
                         db=db,
                         room_id=target_room,
-                        sender_id=str(raw.get("sender_id", "anonymous")),
-                        sender_type=raw.get("sender_type", "human"),
+                        sender_id=str(raw.get("sender_id", authenticated_user_id)),
+                        sender_type=raw.get("sender_type", authenticated_user_type),
                         sender_name=raw.get("sender_name"),
                         content=content,
                         msg_type=raw.get("msg_type", "text"),
@@ -208,8 +220,6 @@ async def handle_chat(websocket: WebSocket, room_id: str) -> None:
                         }],
                     )
 
-                # @mention detection — skip for agent channel traffic
-                # (prevents infinite loops when agents mention each other)
                 if not room_id.startswith("_agent_"):
                     await _check_mentions_and_forward(
                         target_room, message, content
@@ -217,7 +227,7 @@ async def handle_chat(websocket: WebSocket, room_id: str) -> None:
 
     except WebSocketDisconnect:
         participant = connection_manager.disconnect(room_id, websocket)
-        logger.info("ws disconnected room=%s participant=%s", room_id, participant)
+        logger.info("ws disconnected room=%s", room_id[:8])
         if participant:
             await connection_manager.broadcast(
                 room_id,
@@ -229,7 +239,7 @@ async def handle_chat(websocket: WebSocket, room_id: str) -> None:
         )
     except Exception as e:
         participant = connection_manager.disconnect(room_id, websocket)
-        logger.exception("ws error room=%s", room_id)
+        logger.exception("ws error room=%s", room_id[:8])
         if participant:
             await connection_manager.broadcast(
                 room_id,

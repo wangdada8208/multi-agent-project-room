@@ -13,7 +13,8 @@ interface SendMessageInput {
 }
 
 function getWebSocketUrl(roomId: string): string {
-  return websocketUrl(`/ws/chat/${roomId}`);
+  const token = localStorage.getItem("mapr-auth-token") ?? "";
+  return websocketUrl(`/ws/chat/${roomId}?token=${encodeURIComponent(token)}`);
 }
 
 const RECONNECT_BASE_DELAY_MS = 1000;

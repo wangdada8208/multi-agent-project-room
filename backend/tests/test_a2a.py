@@ -11,7 +11,7 @@ from app.chat import service as chat_service
 
 
 @pytest.mark.asyncio
-async def test_agent_card_endpoint(client: AsyncClient):
+async def test_agent_card_endpoint(client: AsyncClient, auth_headers: dict):
     """Agent Card at /.well-known/agent-card.json (A2A v1.0 standard)."""
     resp = await client.get("/.well-known/agent-card.json")
     assert resp.status_code == 200
@@ -25,7 +25,7 @@ async def test_agent_card_endpoint(client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_a2a_jsonrpc_endpoint_exists(client: AsyncClient):
+async def test_a2a_jsonrpc_endpoint_exists(client: AsyncClient, auth_headers: dict):
     """The A2A JSON-RPC endpoint should exist and accept POST."""
     resp = await client.post(
         "/a2a/rpc",
@@ -37,21 +37,23 @@ async def test_a2a_jsonrpc_endpoint_exists(client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_dialogue_rpc_unknown_method(client: AsyncClient):
+async def test_dialogue_rpc_unknown_method(client: AsyncClient, auth_headers: dict):
     """Unknown dialogue method should return error."""
     resp = await client.post(
         "/a2a/dialogue-rpc",
         json={"jsonrpc": "2.0", "method": "nonexistent", "params": {}, "id": "err1"},
+        headers=auth_headers,
     )
     assert resp.status_code == 404  # HTTPException from unknown method
 
 
 @pytest.mark.asyncio
-async def test_dialogue_create_and_send(client: AsyncClient):
+async def test_dialogue_create_and_send(client: AsyncClient, auth_headers: dict):
     """Create a dialogue and send messages through it."""
     # Create
     resp = await client.post(
         "/a2a/dialogue-rpc",
+        headers=auth_headers,
         json={
             "jsonrpc": "2.0",
             "method": "dialogues/create",
@@ -75,6 +77,7 @@ async def test_dialogue_create_and_send(client: AsyncClient):
     # Send
     resp = await client.post(
         "/a2a/dialogue-rpc",
+        headers=auth_headers,
         json={
             "jsonrpc": "2.0",
             "method": "dialogues/send",
@@ -95,10 +98,11 @@ async def test_dialogue_create_and_send(client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_dialogue_end(client: AsyncClient):
+async def test_dialogue_end(client: AsyncClient, auth_headers: dict):
     """End an active dialogue."""
     create_resp = await client.post(
         "/a2a/dialogue-rpc",
+        headers=auth_headers,
         json={
             "jsonrpc": "2.0",
             "method": "dialogues/create",
@@ -114,6 +118,7 @@ async def test_dialogue_end(client: AsyncClient):
 
     resp = await client.post(
         "/a2a/dialogue-rpc",
+        headers=auth_headers,
         json={
             "jsonrpc": "2.0",
             "method": "dialogues/end",
