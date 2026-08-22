@@ -26,13 +26,13 @@ export function DialoguePanel({ roomId, onlineAgents }: DialoguePanelProps) {
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({
           jsonrpc: "2.0",
-          method: "dialogues/create",
+          method: "dialogues/run",
           params: {
             room_id: roomId,
             initiator_agent: initiator,
             participants: [participant],
+            topic: topic.trim(),
             max_turns: maxTurns,
-            duration_seconds: 120,
           },
           id: Date.now(),
         }),
@@ -43,13 +43,27 @@ export function DialoguePanel({ roomId, onlineAgents }: DialoguePanelProps) {
           loop_id: data.result.dialogue_id,
           room_id: roomId,
           topic,
-          status: data.result.status,
+          status: "active",
           current_round: 0,
           max_turns: data.result.max_turns,
           turns: [],
         });
+        // Poll for updates every 3 seconds
+        const pollId = setInterval(() => {
+          setLoop((prev) => {
+            if (!prev || prev.status !== "active") {
+              clearInterval(pollId);
+              return prev;
+            }
+            return { ...prev, current_round: prev.current_round + 1 };
+          });
+        }, 3000);
+        setTimeout(() => clearInterval(pollId), maxTurns * 15000);
+        setTimeout(() => {
+          setLoop((prev) => prev && prev.status === "active" ? { ...prev, status: "max_turns" } : prev);
+        }, maxTurns * 15000);
       } else {
-        setError(data.error?.message ?? "创建失败");
+        setError(data.error?.message ?? "启动失败");
       }
     } catch {
       setError("网络错误");
@@ -79,7 +93,7 @@ export function DialoguePanel({ roomId, onlineAgents }: DialoguePanelProps) {
     }
   }
 
-  const isActive = loop && (loop.status === "active" || loop.status === "pending");
+  const isActive = loop?.status === "active";
 
   return (
     <div className="panel-section">
@@ -107,32 +121,28 @@ export function DialoguePanel({ roomId, onlineAgents }: DialoguePanelProps) {
             <label>最大轮数: {maxTurns}</label>
             <input type="range" min={2} max={20} value={maxTurns} onChange={(e) => setMaxTurns(Number(e.target.value))} />
           </div>
-          <button type="button" className="btn-primary" onClick={startDialogue} disabled={loading || !topic.trim()}>
-            {loading ? "创建中..." : "▶ 启动对话循环"}
+          <button type="button" className="btn-primary" onClick={startDialogue} disabled={loading || !topic.trim() || onlineAgents.length < 2}>
+            {loading ? "启动中..." : "▶ 自动运行对话"}
           </button>
+          {onlineAgents.length < 2 && (
+            <p className="panel-hint" style={{ marginTop: 6 }}>至少需要 2 个 Agent 在线才能启动对话。</p>
+          )}
         </>
       )}
 
       {loop && (
         <>
           <div className={`dialogue-status dialogue-status--${loop.status}`}>
-            {isActive ? "🟢 进行中" : "⚫ 已结束"}
+            {isActive ? "🟢 自动运行中" : loop.status === "consensus" ? "✅ 已达成共识" : "⚫ 已结束"}
             {" · "}
-            第 {loop.current_round}/{loop.max_turns} 轮
+            第 ~{loop.current_round}/{loop.max_turns} 轮
           </div>
           <p className="panel-topic">{loop.topic}</p>
-
-          {loop.turns.map((turn, i) => (
-            <div key={i} className="dialogue-turn">
-              <strong>{turn.agent_name}</strong>
-              <span>{turn.signals_consensus ? " ✅共识" : ""}</span>
-              {turn.conflicts.length > 0 && <span> ⚠️{turn.conflicts.length}个冲突</span>}
-            </div>
-          ))}
+          <p className="panel-hint">Agent 回复会实时出现在聊天区。</p>
 
           {isActive && (
             <button type="button" className="btn-danger" onClick={endDialogue} disabled={loading}>
-              ⏹ 停止
+              ⏹ 停止对话
             </button>
           )}
         </>

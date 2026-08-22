@@ -14,3 +14,6 @@ redis>=5.0,<6
 aiosqlite>=0.20,<1
 a2a-sdk[http-server]>=1.1,<2
 sse-starlette>=2.0,<3
+aiofiles>=24,<26
+aiofiles>=24,<26
+python-multipart>=0.0.9

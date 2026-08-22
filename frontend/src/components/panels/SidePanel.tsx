@@ -1,11 +1,12 @@
 import { useState, type ReactNode } from "react";
 
-type TabId = "members" | "tasks" | "dialogue" | "team";
+type TabId = "members" | "tasks" | "dialogue" | "files" | "team";
 
 interface SidePanelProps {
   members: ReactNode;
   tasks: ReactNode;
   dialogue: ReactNode;
+  files: ReactNode;
   team: ReactNode;
 }
 
@@ -13,13 +14,13 @@ const TABS: { id: TabId; label: string; icon: string }[] = [
   { id: "members", label: "成员", icon: "👥" },
   { id: "tasks", label: "任务", icon: "📋" },
   { id: "dialogue", label: "对话", icon: "💬" },
+  { id: "files", label: "文件", icon: "📎" },
   { id: "team", label: "团队", icon: "⚙️" },
 ];
 
-export function SidePanel({ members, tasks, dialogue, team }: SidePanelProps) {
+export function SidePanel({ members, tasks, dialogue, files, team }: SidePanelProps) {
   const [active, setActive] = useState<TabId>("members");
-
-  const content = { members, tasks, dialogue, team };
+  const content = { members, tasks, dialogue, files, team };
 
   return (
     <aside className="side-panel">
@@ -36,9 +37,7 @@ export function SidePanel({ members, tasks, dialogue, team }: SidePanelProps) {
           </button>
         ))}
       </nav>
-      <div className="side-panel__content">
-        {content[active]}
-      </div>
+      <div className="side-panel__content">{content[active]}</div>
     </aside>
   );
 }

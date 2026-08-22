@@ -23,6 +23,7 @@ from app.approval.routes import router as approval_router
 from app.agent.routes import router as agent_router
 from app.knowledge.routes import router as knowledge_router
 from app.repository.routes import router as repository_router
+from app.files.routes import router as files_router
 from app.chat.ws_handler import handle_chat
 
 settings = get_settings()
@@ -70,6 +71,7 @@ app.include_router(approval_router)   # /api/v1/approvals
 app.include_router(agent_router)      # /api/v1/agents
 app.include_router(knowledge_router)  # /api/v1/rooms/{id}/docs
 app.include_router(repository_router) # /api/v1/rooms/{id}/git
+app.include_router(files_router)     # /api/v1/rooms/{id}/files
 
 # A2A v1.0 — official SDK protocol routes (Agent Card + JSON-RPC)
 mount_a2a(app)

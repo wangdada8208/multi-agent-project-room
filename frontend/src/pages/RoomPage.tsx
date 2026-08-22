@@ -6,9 +6,11 @@ import { SidePanel } from "../components/panels/SidePanel";
 import { MembersPanel } from "../components/panels/MembersPanel";
 import { TasksPanel } from "../components/panels/TasksPanel";
 import { DialoguePanel } from "../components/panels/DialoguePanel";
+import { FilesPanel } from "../components/panels/FilesPanel";
 import { TeamPanel } from "../components/panels/TeamPanel";
 import { MessageItem } from "../components/chat/MessageItem";
 import { ChatInput } from "../components/chat/ChatInput";
+import { useNotification } from "../hooks/useNotification";
 import { fetchMessages, fetchAgents, fetchTasks } from "../lib/api";
 import { useAuthStore } from "../stores/authStore";
 import { useChatStore } from "../stores/chatStore";
@@ -27,6 +29,7 @@ export function RoomPage() {
   const roomId = params.roomId ?? "demo-room";
 
   const { sendMessage } = useWebSocket(roomId);
+  const { enabled: notifEnabled, requestPermission: requestNotifPermission } = useNotification(roomId);
   const user = useAuthStore((state) => state.user);
   const messages = useChatStore((state) => state.messages);
   const setMessages = useChatStore((state) => state.setMessages);
@@ -86,10 +89,17 @@ export function RoomPage() {
         <header className="chat-area__header">
           <Link to="/rooms" className="chat-area__back">←</Link>
           <span className="chat-area__title">房间</span>
-          <span className={`chat-area__status chat-area__status--${connectionStatus}`}>
-            <span className="dot" />
-            {CONNECTION_LABEL[connectionStatus]}
-          </span>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: "auto" }}>
+            {!notifEnabled && (
+              <button type="button" onClick={requestNotifPermission} title="开启 Agent 回复通知" style={{ fontSize: 16, background: "none", border: "none", cursor: "pointer" }}>
+                🔔
+              </button>
+            )}
+            <span className={`chat-area__status chat-area__status--${connectionStatus}`}>
+              <span className="dot" />
+              {CONNECTION_LABEL[connectionStatus]}
+            </span>
+          </div>
         </header>
 
         <div className="chat-area__messages" ref={listRef}>
@@ -114,6 +124,7 @@ export function RoomPage() {
         members={<MembersPanel participants={participants} />}
         tasks={<TasksPanel tasks={tasks} />}
         dialogue={<DialoguePanel roomId={roomId} onlineAgents={onlineAgentNames} />}
+        files={<FilesPanel roomId={roomId} authToken={useAuthStore.getState().token ?? undefined} />}
         team={<TeamPanel />}
       />
     </div>

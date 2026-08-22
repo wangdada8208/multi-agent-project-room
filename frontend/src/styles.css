@@ -227,3 +227,13 @@ a { color: inherit; text-decoration: none; }
 .room-card__info strong { font-size: 15px; }
 .room-card__info small { color: var(--text-muted); font-size: 12px; }
 .room-card__arrow { color: var(--text-muted); font-size: 18px; }
+
+/* ── Files Panel ──────────────────────────────────── */
+.files-list { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.file-row { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border); transition: all .15s; color: var(--text); }
+.file-row:hover { background: var(--bg-hover); border-color: var(--accent); }
+.file-row__info { flex: 1; min-width: 0; }
+.file-row__name { font-size: 13px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
+.file-row__info small { color: var(--text-muted); font-size: 11px; }
+.file-row__download { color: var(--text-muted); font-size: 16px; }
+.file-row:hover .file-row__download { color: var(--accent); }

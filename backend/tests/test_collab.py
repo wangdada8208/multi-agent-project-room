@@ -1,6 +1,7 @@
 """Test message loop collaboration and team configuration parsing."""
 
 import pytest
+from httpx import AsyncClient
 from app.collab.message_loop import (
     MessageLoop,
     LoopStatus,
@@ -217,3 +218,51 @@ class TestAgentDiscoveryDedup:
         names = [a["name"] for a in agents]
         assert names.count("UniqueA") <= 1
         assert names.count("UniqueB") <= 1
+
+
+# ── Dialogue Auto-Run ──────────────────────────────────
+
+
+class TestDialogueAutoRun:
+    @pytest.mark.asyncio
+    async def test_dialogues_run_creates_and_executes(self, client: AsyncClient):
+        """dialogues/run should create a dialogue and auto-execute turns."""
+        resp = await client.post("/a2a/dialogue-rpc", json={
+            "jsonrpc": "2.0",
+            "method": "dialogues/run",
+            "params": {
+                "room_id": "auto-run-room",
+                "initiator_agent": "AgentA",
+                "participants": ["AgentB"],
+                "topic": "讨论登录方案",
+                "max_turns": 2,
+            },
+            "id": "run-1",
+        })
+        assert resp.status_code == 200
+        result = resp.json().get("result", {})
+        assert result["status"] == "active"
+        assert result["auto_run"] is True
+        assert len(result["participants"]) >= 2
+
+    @pytest.mark.asyncio
+    async def test_dialogues_run_requires_room(self, client: AsyncClient):
+        """dialogues/run should fail without room_id."""
+        resp = await client.post("/a2a/dialogue-rpc", json={
+            "jsonrpc": "2.0",
+            "method": "dialogues/run",
+            "params": {"participants": ["A"]},
+            "id": "run-err",
+        })
+        assert resp.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_dialogues_run_requires_participants(self, client: AsyncClient):
+        """dialogues/run should fail without participants."""
+        resp = await client.post("/a2a/dialogue-rpc", json={
+            "jsonrpc": "2.0",
+            "method": "dialogues/run",
+            "params": {"room_id": "r1"},
+            "id": "run-err2",
+        })
+        assert resp.status_code == 400

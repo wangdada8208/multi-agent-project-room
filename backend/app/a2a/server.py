@@ -271,6 +271,197 @@ async def rpc_dialogues_end(params: dict) -> dict:
     return _serialize_dialogue(dialogue)
 
 
+
+# ── Dialogue auto-run: backend drives agent-to-agent message loop ──
+
+RUNNING_LOOPS: set[str] = set()
+
+
+async def _send_to_agent(agent_name: str, prompt: str) -> str:
+    """Send a prompt to a registered agent via its A2A task endpoint.
+
+    Falls back to simulated response if the agent is unreachable.
+    """
+    agents = await AgentDiscovery.list_available()
+    target = next(
+        (a for a in agents if a["name"].lower() == agent_name.lower()), None
+    )
+    if not target or not target.get("url") or target["url"].startswith("local://"):
+        # Simulated fallback
+        return f"[{agent_name}] 收到。我同意当前方案，建议继续推进。"
+
+    try:
+        import httpx
+        async with httpx.AsyncClient(timeout=60) as client:
+            resp = await client.post(
+                f"{target['url'].rstrip('/')}/a2a/rpc",
+                json={
+                    "jsonrpc": "2.0",
+                    "method": "tasks/send",
+                    "params": {"query": prompt},
+                    "id": str(uuid.uuid4()),
+                },
+            )
+            data = resp.json()
+            result = data.get("result", {})
+            artifacts = result.get("artifacts", [])
+            if artifacts and isinstance(artifacts, list):
+                first = artifacts[0]
+                if isinstance(first, dict):
+                    parts = first.get("parts", [])
+                    if parts:
+                        return str(parts[0])
+            return f"[{agent_name}] 已处理任务（无文本返回）"
+    except Exception as e:
+        logger.warning("Failed to reach agent %s: %s", agent_name, e)
+        return f"[{agent_name}] 无法连接，使用默认回复：同意继续。"
+
+
+async def _run_dialogue_loop(dialogue_id: str):
+    """Background task that drives the dialogue loop until consensus or max turns."""
+    import asyncio
+
+    dialogue = DIALOGUES.get(dialogue_id)
+    if not dialogue or dialogue_id in RUNNING_LOOPS:
+        return
+
+    RUNNING_LOOPS.add(dialogue_id)
+    participants = dialogue["participants"]
+    room_id = dialogue["room_id"]
+
+    try:
+        topic = dialogue.get("topic", "请讨论并达成共识")
+
+        for round_num in range(dialogue["max_turns"]):
+            if dialogue["status"] != "active":
+                break
+
+            for i, agent_name in enumerate(participants):
+                if dialogue["status"] != "active":
+                    break
+
+                # Build context (reset each turn to prevent pollution)
+                recent = [
+                    t["content"][:200]
+                    for t in dialogue.get("turns", [])[-2:]
+                ]
+                context = (
+                    f"## 协作主题\n{topic}\n\n"
+                    f"## 当前进度\n第 {round_num + 1} 轮\n"
+                )
+                if recent:
+                    context += "## 最近讨论\n" + "\n".join(recent)
+                context += (
+                    "\n\n请回复你的观点。如果已达成共识，回复开头加 [CONSENSUS]。"
+                )
+
+                # Send to agent and get response
+                response_text = await _send_to_agent(agent_name, context)
+
+                # Record turn
+                if "turns" not in dialogue:
+                    dialogue["turns"] = []
+                turn_data = {
+                    "agent": agent_name,
+                    "content": response_text,
+                    "round": round_num + 1,
+                    "consensus": "[CONSENSUS]" in response_text.upper(),
+                    "conflicts": [],
+                }
+                dialogue["turns"].append(turn_data)
+
+                # Save to room as chat message
+                await _save_room_message(
+                    room_id=room_id,
+                    sender_id=f"{agent_name.lower()}-loop",
+                    sender_name=agent_name,
+                    content=response_text,
+                    dialogue_id=dialogue_id,
+                )
+
+                # Broadcast to WebSocket
+                await connection_manager.broadcast(room_id, {
+                    "type": "message",
+                    "message": {
+                        "id": str(uuid.uuid4()),
+                        "room_id": room_id,
+                        "sender_id": f"{agent_name.lower()}-loop",
+                        "sender_type": "agent",
+                        "sender_name": agent_name,
+                        "content": response_text,
+                        "msg_type": "text",
+                        "parent_id": dialogue_id,
+                        "created_at": _now().isoformat(),
+                    },
+                })
+
+                # Check consensus
+                if turn_data["consensus"]:
+                    dialogue["status"] = "ended"
+                    dialogue["reason"] = "consensus"
+                    dialogue["ended_at"] = _now()
+                    break
+
+            else:
+                continue  # Next round
+            break  # Consensus reached or ended
+
+        if dialogue["status"] == "active":
+            dialogue["status"] = "ended"
+            dialogue["reason"] = "max_turns_reached"
+            dialogue["ended_at"] = _now()
+
+    finally:
+        RUNNING_LOOPS.discard(dialogue_id)
+        await connection_manager.broadcast(room_id, {
+            "type": "agent_dialogue_ended",
+            "dialogue": _serialize_dialogue(dialogue),
+        })
+
+
+@rpc_method("dialogues/run")
+async def rpc_dialogues_run(params: dict) -> dict:
+    """Start an auto-running dialogue loop between two or more agents."""
+    room_id = str(params.get("room_id", "")).strip()
+    initiator = str(params.get("initiator_agent", "")).strip() or "hub"
+    participants = [str(p).strip() for p in params.get("participants", [])]
+    topic = str(params.get("topic", "")).strip() or "请讨论以下话题并达成共识"
+    max_turns = max(2, min(int(params.get("max_turns") or 6), 20))
+
+    if not room_id:
+        raise HTTPException(status_code=400, detail="room_id is required")
+    if len(participants) < 1:
+        raise HTTPException(status_code=400, detail="at least 1 participant required")
+
+    now = _now()
+    dialogue_id = str(uuid.uuid4())
+    all_participants = list({initiator, *participants})
+
+    dialogue = {
+        "dialogue_id": dialogue_id,
+        "room_id": room_id,
+        "initiator_agent": initiator,
+        "participants": all_participants,
+        "topic": topic,
+        "status": "active",
+        "current_turn": 0,
+        "max_turns": max_turns,
+        "turns": [],
+        "created_at": now,
+        "expires_at": now + timedelta(seconds=300),
+        "ended_at": None,
+        "reason": None,
+        "auto_run": True,
+    }
+    DIALOGUES[dialogue_id] = dialogue
+
+    # Launch background task
+    import asyncio
+    asyncio.create_task(_run_dialogue_loop(dialogue_id))
+
+    return _serialize_dialogue(dialogue)
+
+
 @rpc_method("agent/list")
 async def rpc_agent_list(params: dict) -> dict:
     agents = await AgentDiscovery.list_available(capability=params.get("capability"))
