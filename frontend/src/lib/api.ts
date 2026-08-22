@@ -260,3 +260,28 @@ export async function fetchTasks(roomId: string): Promise<RoomTask[]> {
   const payload = (await response.json()) as { tasks?: RoomTask[] };
   return payload.tasks ?? [];
 }
+
+
+export interface RoomTemplateInfo {
+  id: string;
+  key: string;
+  name: string;
+  description: string | null;
+  icon: string;
+  team_config_markdown: string | null;
+}
+
+export async function fetchTemplates(): Promise<RoomTemplateInfo[]> {
+  const response = await apiFetch("/api/v1/templates");
+  if (!response.ok) throw new Error("Failed to load templates");
+  const payload = (await response.json()) as { templates?: RoomTemplateInfo[] };
+  return payload.templates ?? [];
+}
+
+export async function searchMessages(roomId: string, query: string): Promise<ChatMessage[]> {
+  if (!query.trim()) return [];
+  const response = await apiFetch(`/api/v1/rooms/${roomId}/messages/search?q=${encodeURIComponent(query)}`);
+  if (!response.ok) throw new Error("Failed to search messages");
+  const payload = (await response.json()) as { results?: ChatMessage[] };
+  return payload.results ?? [];
+}

@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from "react";
+import { PermissionsPanel } from "./PermissionsPanel";
 
-type TabId = "members" | "tasks" | "dialogue" | "files" | "team";
+type TabId = "members" | "tasks" | "dialogue" | "files" | "team" | "permissions";
 
 interface SidePanelProps {
   members: ReactNode;
@@ -8,6 +9,7 @@ interface SidePanelProps {
   dialogue: ReactNode;
   files: ReactNode;
   team: ReactNode;
+  roomId: string;
 }
 
 const TABS: { id: TabId; label: string; icon: string }[] = [
@@ -16,11 +18,12 @@ const TABS: { id: TabId; label: string; icon: string }[] = [
   { id: "dialogue", label: "对话", icon: "💬" },
   { id: "files", label: "文件", icon: "📎" },
   { id: "team", label: "团队", icon: "⚙️" },
+  { id: "permissions", label: "权限", icon: "🔒" },
 ];
 
-export function SidePanel({ members, tasks, dialogue, files, team }: SidePanelProps) {
+export function SidePanel({ members, tasks, dialogue, files, team, roomId }: SidePanelProps) {
   const [active, setActive] = useState<TabId>("members");
-  const content = { members, tasks, dialogue, files, team };
+  const content: Partial<Record<TabId, ReactNode>> = { members, tasks, dialogue, files, team };
 
   return (
     <aside className="side-panel">
@@ -37,7 +40,9 @@ export function SidePanel({ members, tasks, dialogue, files, team }: SidePanelPr
           </button>
         ))}
       </nav>
-      <div className="side-panel__content">{content[active]}</div>
+      <div className="side-panel__content">
+        {active === "permissions" ? <PermissionsPanel roomId={roomId} /> : content[active]}
+      </div>
     </aside>
   );
 }

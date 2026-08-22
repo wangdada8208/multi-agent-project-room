@@ -11,7 +11,8 @@ import { TeamPanel } from "../components/panels/TeamPanel";
 import { MessageItem } from "../components/chat/MessageItem";
 import { ChatInput } from "../components/chat/ChatInput";
 import { useNotification } from "../hooks/useNotification";
-import { fetchMessages, fetchAgents, fetchTasks } from "../lib/api";
+import { useAnalytics } from "../hooks/useAnalytics";
+import { fetchMessages, fetchAgents, fetchTasks, searchMessages } from "../lib/api";
 import { useAuthStore } from "../stores/authStore";
 import { useChatStore } from "../stores/chatStore";
 import type { SenderType } from "../types/chat";
@@ -30,6 +31,7 @@ export function RoomPage() {
 
   const { sendMessage } = useWebSocket(roomId);
   const { enabled: notifEnabled, requestPermission: requestNotifPermission } = useNotification(roomId);
+  const { track } = useAnalytics();
   const user = useAuthStore((state) => state.user);
   const messages = useChatStore((state) => state.messages);
   const setMessages = useChatStore((state) => state.setMessages);
@@ -37,6 +39,10 @@ export function RoomPage() {
   const participants = useChatStore((state) => state.participants);
   const tasks = useChatStore((state) => state.tasks);
   const setTasks = useChatStore((state) => state.setTasks);
+
+  useEffect(() => {
+    track("room_enter", roomId);
+  }, [roomId, track]);
 
   // Fetch messages
   const messagesQuery = useQuery({
@@ -74,13 +80,51 @@ export function RoomPage() {
     return (agentsQuery.data ?? []).map((a) => a.name).slice(0, 4);
   }, [participants, agentsQuery.data]);
 
+    const [searchQuery, setSearchQuery] = useState("");
+  const [showSearch, setShowSearch] = useState(false);
+  const [searchResults, setSearchResults] = useState<typeof messages>([]);
+  const [isSearching, setIsSearching] = useState(false);
+
   const listRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight;
   }, [messages.length]);
 
-  const handleSend = (content: string, senderType: SenderType) =>
-    sendMessage({ content, senderId: user?.id ?? "anon", senderType });
+  const handleSend = (content: string, senderType: SenderType) => {
+    track("message_send", roomId, { sender_type: senderType });
+    return sendMessage({ content, senderId: user?.id ?? "anon", senderType });
+  };
+
+  async function handleShare() {
+    try {
+      const token = useAuthStore.getState().token ?? "";
+      const res = await fetch(`/api/v1/rooms/${roomId}/share`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ expires_hours: 72 }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const url = `${window.location.origin}${data.share_url}`;
+        await navigator.clipboard.writeText(url);
+        alert(`分享链接已复制到剪贴板：\n${url}\n\n有效期 72 小时`);
+      }
+    } catch { /* silent */ }
+  }
+
+  async function handleSearch() {
+    if (!searchQuery.trim()) return;
+    setIsSearching(true);
+    try {
+      const results = await searchMessages(roomId, searchQuery.trim());
+      setSearchResults(results);
+      setShowSearch(true);
+    } catch {
+      setSearchResults([]);
+    } finally {
+      setIsSearching(false);
+    }
+  }
 
   return (
     <div className="room-layout">
@@ -95,6 +139,10 @@ export function RoomPage() {
                 🔔
               </button>
             )}
+            <button type="button" className="chat-search-toggle" onClick={() => setShowSearch(!showSearch)} title="搜索消息">
+              🔍
+            </button>
+            <button type="button" className="chat-search-toggle" onClick={handleShare} title="分享房间链接">🔗</button>
             <span className={`chat-area__status chat-area__status--${connectionStatus}`}>
               <span className="dot" />
               {CONNECTION_LABEL[connectionStatus]}
@@ -102,6 +150,35 @@ export function RoomPage() {
           </div>
         </header>
 
+        {showSearch && (
+          <div className="chat-search-bar">
+            <input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+              placeholder="搜索消息..."
+              autoFocus
+            />
+            <button type="button" onClick={handleSearch} disabled={isSearching || !searchQuery.trim()}>
+              {isSearching ? "搜索中..." : "搜索"}
+            </button>
+            <button type="button" className="btn-ghost" onClick={() => { setShowSearch(false); setSearchResults([]); setSearchQuery(""); }}>
+              ✕
+            </button>
+          </div>
+        )}
+        {showSearch && searchResults.length > 0 && (
+          <div className="chat-search-results">
+            <p className="chat-search-results__header">找到 {searchResults.length} 条结果：</p>
+            {searchResults.map((msg) => (
+              <div key={msg.id} className="chat-search-result-row">
+                <strong>{msg.sender_name ?? msg.sender_id}</strong>
+                <span>{msg.content}</span>
+                <small>{new Date(msg.created_at).toLocaleString("zh-CN")}</small>
+              </div>
+            ))}
+          </div>
+        )}
         <div className="chat-area__messages" ref={listRef}>
           {messagesQuery.isLoading && <p className="chat-loading">加载消息...</p>}
           {messagesQuery.isError && <p className="chat-error">加载失败，请刷新重试。</p>}
@@ -121,6 +198,7 @@ export function RoomPage() {
 
       {/* ── 右侧面板 ── */}
       <SidePanel
+        roomId={roomId}
         members={<MembersPanel participants={participants} />}
         tasks={<TasksPanel tasks={tasks} />}
         dialogue={<DialoguePanel roomId={roomId} onlineAgents={onlineAgentNames} />}

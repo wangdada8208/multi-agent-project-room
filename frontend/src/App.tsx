@@ -2,6 +2,9 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { LoginPage } from "./pages/LoginPage";
 import { RoomPage } from "./pages/RoomPage";
 import { RoomsPage } from "./pages/RoomsPage";
+import { OnboardingPage } from "./pages/OnboardingPage";
+import { TeamPage } from "./pages/TeamPage";
+import { SharedRoomPage } from "./pages/SharedRoomPage";
 import { useAuthStore } from "./stores/authStore";
 import type { ReactNode } from "react";
 
@@ -16,6 +19,10 @@ export function App() {
     <Routes>
       {/* Login — standalone full-page */}
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/onboarding" element={<RequireAuth><OnboardingPage /></RequireAuth>} />
+      <Route path="/team" element={<RequireAuth><TeamPage /></RequireAuth>} />
+      <Route path="/rooms/:roomId/team" element={<RequireAuth><TeamPage /></RequireAuth>} />
+      <Route path="/shared/:token" element={<SharedRoomPage />} />
 
       {/* Room — full-screen (no sidebar) */}
       <Route path="/rooms/:roomId" element={<RequireAuth><RoomPage /></RequireAuth>} />

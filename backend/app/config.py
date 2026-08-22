@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     message_retention_days: int = 15
     auth_secret_key: str = "dev-change-me"
     auth_token_ttl_minutes: int = 60 * 24 * 7
+    rate_limit_per_minute: int = 60
 
     model_config = {"env_file": ".env", "env_prefix": "MAPR_"}
 

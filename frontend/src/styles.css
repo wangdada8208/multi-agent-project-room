@@ -246,3 +246,119 @@ a { color: inherit; text-decoration: none; }
 
 /* Retry button in error state */
 .chat-error button { padding: 4px 14px; border-radius: 6px; background: var(--accent); color: white; border: none; cursor: pointer; font-size: 13px; margin-top: 8px; }
+
+
+/* ── Onboarding Page ─────────────────────────────── */
+.onboarding-page { display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; background: var(--bg); }
+.onboarding-card { width: 100%; max-width: 520px; background: var(--bg-card); border-radius: 16px; padding: 36px; box-shadow: 0 4px 20px rgba(0,0,0,.08); }
+.onboarding-header { text-align: center; margin-bottom: 24px; }
+.onboarding-logo { font-size: 48px; display: block; margin-bottom: 12px; }
+.onboarding-header h1 { font-size: 20px; margin-bottom: 6px; }
+.onboarding-header p { font-size: 14px; color: var(--text-secondary); }
+
+.onboarding-steps { display: flex; align-items: center; gap: 8px; margin-bottom: 28px; }
+.onboarding-step-dot { width: 32px; height: 32px; border-radius: 50%; border: 2px solid var(--border); font-size: 13px; font-weight: 600; color: var(--text-muted); display: flex; align-items: center; justify-content: center; transition: all .15s; flex-shrink: 0; }
+.onboarding-step-dot.active { border-color: var(--accent); color: var(--accent); }
+.onboarding-step-dot.current { background: var(--accent); color: white; border-color: var(--accent); }
+.onboarding-step-bar { flex: 1; height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; }
+.onboarding-step-bar div { height: 100%; background: var(--accent); transition: width .3s; }
+
+.onboarding-content { text-align: center; margin-bottom: 24px; min-height: 120px; }
+.onboarding-icon { font-size: 40px; display: block; margin-bottom: 12px; }
+.onboarding-content h2 { font-size: 17px; margin-bottom: 8px; }
+.onboarding-content p { font-size: 14px; color: var(--text-secondary); line-height: 1.6; }
+.onboarding-code { background: #f8fafc; border: 1px solid var(--border); border-radius: 8px; padding: 14px; font-size: 13px; text-align: left; margin-top: 16px; overflow-x: auto; white-space: pre-wrap; word-break: break-all; }
+
+.onboarding-templates { margin-bottom: 20px; }
+.onboarding-templates__label { font-size: 13px; color: var(--text-secondary); margin-bottom: 10px; }
+.onboarding-template-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+.onboarding-template-card { padding: 12px; border: 1px solid var(--border); border-radius: 10px; text-align: center; transition: all .15s; display: flex; flex-direction: column; gap: 4px; }
+.onboarding-template-card:hover { border-color: var(--accent); box-shadow: 0 2px 8px rgba(37,99,235,.08); }
+.onboarding-template-card .icon { font-size: 22px; }
+.onboarding-template-card strong { font-size: 13px; }
+.onboarding-template-card small { font-size: 11px; color: var(--text-muted); }
+
+.onboarding-nav { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+.onboarding-next { padding: 10px 28px !important; }
+.onboarding-skip { text-align: center; }
+.onboarding-skip a { font-size: 13px; color: var(--text-muted); }
+.onboarding-skip a:hover { color: var(--accent); }
+
+/* ── Chat Search ─────────────────────────────────── */
+.chat-search-toggle { font-size: 15px; background: none; border: none; cursor: pointer; opacity: .7; }
+.chat-search-toggle:hover { opacity: 1; }
+.chat-search-bar { display: flex; gap: 6px; padding: 8px 16px; background: var(--bg-hover); border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.chat-search-bar input { flex: 1; padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; background: var(--bg-card); color: var(--text); outline: none; }
+.chat-search-bar input:focus { border-color: var(--accent); }
+.chat-search-bar button { padding: 6px 12px; border-radius: 6px; background: var(--accent); color: white; border: none; font-size: 13px; cursor: pointer; }
+
+.chat-search-results { max-height: 200px; overflow-y: auto; padding: 8px 16px; background: var(--bg-card); border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.chat-search-results__header { font-size: 12px; color: var(--text-secondary); margin-bottom: 6px; }
+.chat-search-result-row { padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+.chat-search-result-row:last-child { border-bottom: none; }
+.chat-search-result-row strong { font-size: 12px; color: var(--accent); margin-right: 6px; }
+.chat-search-result-row small { display: block; font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+
+/* ── Dialogue Interventions ──────────────────────── */
+.dialogue-interventions { display: flex; gap: 6px; margin-top: 10px; }
+.dialogue-btn-skip { flex-shrink: 0; }
+.dialogue-inject { margin-top: 10px; }
+.dialogue-inject input { flex: 1; }
+
+/* ── Team Page ───────────────────────────────────── */
+.team-page { max-width: 720px; margin: 0 auto; padding: 24px 20px; }
+.team-page__header { margin-bottom: 20px; display: flex; flex-direction: column; gap: 4px; }
+.team-page__header h1 { font-size: 20px; }
+.team-page__header p { font-size: 13px; color: var(--text-secondary); }
+.team-saved-toast { position: fixed; bottom: 20px; right: 20px; background: var(--green); color: white; padding: 10px 18px; border-radius: 8px; font-size: 14px; z-index: 100; animation: fadeInOut 2s ease; }
+
+@keyframes fadeInOut {
+  0% { opacity: 0; transform: translateY(10px); }
+  15% { opacity: 1; transform: translateY(0); }
+  85% { opacity: 1; transform: translateY(0); }
+  100% { opacity: 0; transform: translateY(-10px); }
+}
+
+/* ── Mobile Responsive ───────────────────────────── */
+@media (max-width: 768px) {
+  .room-layout { flex-direction: column; height: auto; min-height: 100vh; }
+  .side-panel { width: 100% !important; min-width: unset !important; max-height: 300px; border-left: none; border-top: 1px solid var(--border); order: -1; }
+  .chat-area { min-height: calc(100vh - 300px); }
+  .rooms-grid { grid-template-columns: 1fr; }
+  .onboarding-template-grid { grid-template-columns: 1fr; }
+  .onboarding-card { padding: 24px; }
+  .msg-row { max-width: 92%; }
+  .sidebar { position: fixed; left: -220px; z-index: 50; transition: left .2s; }
+  .sidebar.open { left: 0; }
+}
+
+@media (max-width: 480px) {
+  .chat-area__header { padding: 10px 12px; }
+  .chat-input__mentions { flex-wrap: wrap; }
+  .side-panel__tabs { overflow-x: auto; }
+  .panel-field input, .panel-field select, .panel-field textarea { font-size: 14px; }
+}
+
+/* ── Permissions Panel ───────────────────────────── */
+.permissions-list { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.permission-row { display: flex; align-items: center; gap: 8px; padding: 8px; border-radius: 8px; border: 1px solid var(--border); transition: background .15s; }
+.permission-row:hover { background: var(--bg-hover); }
+.permission-row__info { flex: 1; min-width: 0; }
+.permission-row__info strong { font-size: 13px; display: block; }
+.permission-row__info small { font-size: 11px; color: var(--text-muted); }
+.permission-role-select { padding: 4px 6px; border-radius: 4px; border: 1px solid var(--border); font-size: 12px; background: var(--bg-card); color: var(--text); outline: none; cursor: pointer; width: auto; }
+.permission-remove { color: var(--text-muted); font-size: 14px; cursor: pointer; background: none; border: none; padding: 4px; }
+.permission-remove:hover { color: var(--red); }
+
+/* Dark theme additions */
+[data-theme="dark"] .chat-search-bar { background: var(--bg-card); }
+[data-theme="dark"] .onboarding-code { background: var(--bg-hover); border-color: var(--border); }
+[data-theme="dark"] .permission-row:hover { background: var(--bg-hover); }
+[data-theme="dark"] .permission-role-select { background: var(--bg-card); border-color: var(--border); color: var(--text); }
+
+/* ── Shared Room Page ────────────────────────────── */
+.shared-room-page { max-width: 720px; margin: 0 auto; padding: 20px; }
+.shared-room-header { display: flex; align-items: center; gap: 10px; padding-bottom: 12px; margin-bottom: 16px; border-bottom: 1px solid var(--border); }
+.shared-badge { font-size: 11px; padding: 2px 8px; border-radius: 8px; background: var(--accent); color: white; font-weight: 600; }
+.shared-messages { display: flex; flex-direction: column; gap: 10px; }
+.msg-row--shared { max-width: 90%; }
