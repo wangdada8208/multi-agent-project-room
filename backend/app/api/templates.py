@@ -86,6 +86,7 @@ async def create_room_from_template(
         created_by=current_user.id,
     )
     db.add(room)
+    await db.flush()
 
     from app.models.room_permission import RoomPermission
     perm = RoomPermission(
