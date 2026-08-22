@@ -35,7 +35,7 @@ export function useNotification(roomId: string) {
 
     for (const msg of newMessages) {
       // Don't notify for own messages or system
-      const user = JSON.parse(localStorage.getItem("mapr-user") ?? "{}");
+      const user = JSON.parse(localStorage.getItem("mapr-auth-user") ?? "{}");
       if (msg.sender_id === user.id || msg.sender_type === "system") continue;
       if (msg.sender_type !== "agent") continue; // Only agent replies
 

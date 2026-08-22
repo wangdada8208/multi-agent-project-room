@@ -43,6 +43,7 @@ async def init_db():
     import app.approval.models  # noqa: F401
     import app.agent.models  # noqa: F401
     import app.knowledge.models  # noqa: F401
+    import app.files.models  # noqa: F401
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)

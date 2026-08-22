@@ -268,6 +268,13 @@ async def rpc_dialogues_end(params: dict) -> dict:
         dialogue["room_id"],
         {"type": "agent_dialogue_ended", "dialogue": _serialize_dialogue(dialogue)},
     )
+    # Cleanup: remove ended dialogue after 60 seconds to prevent memory leak
+    import asyncio
+    async def _delayed_cleanup(did=dialogue_id):
+        await asyncio.sleep(60)
+        DIALOGUES.pop(did, None)
+        RUNNING_LOOPS.discard(did)
+    asyncio.create_task(_delayed_cleanup())
     return _serialize_dialogue(dialogue)
 
 
@@ -432,6 +439,8 @@ async def rpc_dialogues_run(params: dict) -> dict:
         raise HTTPException(status_code=400, detail="room_id is required")
     if len(participants) < 1:
         raise HTTPException(status_code=400, detail="at least 1 participant required")
+    if len(RUNNING_LOOPS) >= 5:
+        raise HTTPException(status_code=429, detail="Too many concurrent dialogue loops (max 5)")
 
     now = _now()
     dialogue_id = str(uuid.uuid4())
@@ -459,6 +468,18 @@ async def rpc_dialogues_run(params: dict) -> dict:
     import asyncio
     asyncio.create_task(_run_dialogue_loop(dialogue_id))
 
+    return _serialize_dialogue(dialogue)
+
+
+@rpc_method("dialogues/status")
+async def rpc_dialogues_status(params: dict) -> dict:
+    """Get the current status of a dialogue loop."""
+    dialogue_id = str(params.get("dialogue_id", "")).strip()
+    if not dialogue_id:
+        raise HTTPException(status_code=400, detail="dialogue_id is required")
+    dialogue = DIALOGUES.get(dialogue_id)
+    if not dialogue:
+        raise ValueError("Dialogue not found")
     return _serialize_dialogue(dialogue)
 
 
