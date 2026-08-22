@@ -15,6 +15,8 @@ export function DialoguePanel({ roomId, onlineAgents }: DialoguePanelProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  const all_participants = 2; // initiator + participant
+
   async function startDialogue() {
     if (!topic.trim()) return;
     setLoading(true);
@@ -48,20 +50,41 @@ export function DialoguePanel({ roomId, onlineAgents }: DialoguePanelProps) {
           max_turns: data.result.max_turns,
           turns: [],
         });
-        // Poll for updates every 3 seconds
-        const pollId = setInterval(() => {
-          setLoop((prev) => {
-            if (!prev || prev.status !== "active") {
-              clearInterval(pollId);
-              return prev;
+        // Poll real status from server every 5 seconds
+        const pollId = setInterval(async () => {
+          try {
+            const token = localStorage.getItem("mapr-auth-token") ?? "";
+            const statusRes = await fetch("/a2a/dialogue-rpc", {
+              method: "POST",
+              headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+              body: JSON.stringify({
+                jsonrpc: "2.0",
+                method: "dialogues/status",
+                params: { dialogue_id: data.result.dialogue_id },
+                id: Date.now(),
+              }),
+            });
+            const statusData = await statusRes.json();
+            if (statusData.result) {
+              setLoop((prev) => prev ? {
+                ...prev,
+                status: statusData.result.status,
+                current_round: Math.floor((statusData.result.turns?.length ?? 0) / all_participants),
+                turns: (statusData.result.turns ?? []).map((t: Record<string, unknown>) => ({
+                  agent_name: t.agent as string,
+                  content: t.content as string,
+                  turn_number: prev.turns.length + 1,
+                  signals_consensus: t.consensus as boolean,
+                  conflicts: [],
+                  timestamp: new Date().toISOString(),
+                })),
+              } : null);
+              if (statusData.result.status !== "active") clearInterval(pollId);
             }
-            return { ...prev, current_round: prev.current_round + 1 };
-          });
-        }, 3000);
-        setTimeout(() => clearInterval(pollId), maxTurns * 15000);
-        setTimeout(() => {
-          setLoop((prev) => prev && prev.status === "active" ? { ...prev, status: "max_turns" } : prev);
-        }, maxTurns * 15000);
+          } catch {
+            // Silent fail on poll
+          }
+        }, 5000);
       } else {
         setError(data.error?.message ?? "启动失败");
       }
