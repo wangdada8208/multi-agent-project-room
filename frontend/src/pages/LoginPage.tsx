@@ -36,110 +36,55 @@ export function LoginPage() {
   }
 
   return (
-    <section className="page-card narrow" style={{ marginTop: "12vh" }}>
-      <p className="section-label">欢迎</p>
-      <h1 className="card-title">{mode === "login" ? "登录协作空间" : "创建协作账户"}</h1>
-      <p className="card-subtitle">
-        使用轻量账户进入多人多 Agent 项目房间。
-      </p>
+    <div className="login-page">
+      <div className="login-card">
+        <div className="login-logo">
+          <span>◈</span>
+          <h1>{mode === "login" ? "欢迎回来" : "创建账户"}</h1>
+          <p>多人多 Agent 协作空间</p>
+        </div>
 
-      <form onSubmit={handleSubmit} style={{ display: "grid", gap: 16 }}>
-        <div>
-          <label style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 6, display: "block", fontWeight: 500 }}>
-            用户名
-          </label>
+        <form className="login-form" onSubmit={handleSubmit}>
           <input
             value={username}
             onChange={(e) => setUsername(e.target.value)}
-            placeholder="例如：wangdada"
+            placeholder="用户名"
             autoFocus
-            style={{
-              width: "100%",
-              padding: "10px 14px",
-              border: "1px solid var(--border)",
-              borderRadius: 10,
-              fontSize: 15,
-              outline: "none",
-              color: "var(--text-primary)",
-              background: "var(--bg-card)",
-            }}
-            onFocus={(e) => e.target.style.borderColor = "var(--accent-blue)"}
-            onBlur={(e) => e.target.style.borderColor = "var(--border)"}
           />
-        </div>
-        {mode === "register" && (
-          <div>
-            <label style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 6, display: "block", fontWeight: 500 }}>
-              显示名称
-            </label>
+
+          {mode === "register" && (
             <input
               value={displayName}
               onChange={(e) => setDisplayNameInput(e.target.value)}
-              placeholder="例如：张三"
-              style={{
-                width: "100%",
-                padding: "10px 14px",
-                border: "1px solid var(--border)",
-                borderRadius: 10,
-                fontSize: 15,
-                outline: "none",
-                color: "var(--text-primary)",
-                background: "var(--bg-card)",
-              }}
+              placeholder="显示名称（可选）"
             />
-          </div>
-        )}
-        <div>
-          <label style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 6, display: "block", fontWeight: 500 }}>
-            密码
-          </label>
+          )}
+
           <input
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            placeholder="至少 6 位"
-            style={{
-              width: "100%",
-              padding: "10px 14px",
-              border: "1px solid var(--border)",
-              borderRadius: 10,
-              fontSize: 15,
-              outline: "none",
-              color: "var(--text-primary)",
-              background: "var(--bg-card)",
-            }}
+            placeholder="密码"
           />
+
+          {error && <div className="login-error">{error}</div>}
+
+          <button
+            type="submit"
+            className="btn-primary"
+            disabled={submitting || !username.trim() || !password}
+          >
+            {submitting ? "处理中..." : mode === "login" ? "登录" : "注册并进入"}
+          </button>
+        </form>
+
+        <div className="login-switch">
+          {mode === "login"
+            ? <>没有账户？<button onClick={() => setMode("register")}>创建一个</button></>
+            : <>已有账户？<button onClick={() => setMode("login")}>返回登录</button></>
+          }
         </div>
-
-        {error && <p style={{ color: "#dc2626", fontSize: 13, margin: 0 }}>{error}</p>}
-
-        <button
-          type="submit"
-          disabled={submitting || !username.trim() || !password}
-          style={{
-            padding: "12px 24px",
-            border: "none",
-            borderRadius: 10,
-            background: "var(--accent-blue)",
-            color: "white",
-            fontWeight: 600,
-            fontSize: 15,
-            cursor: submitting ? "wait" : "pointer",
-            transition: "background 0.15s",
-          }}
-          onMouseOver={(e) => e.currentTarget.style.background = "#1d4ed8"}
-          onMouseOut={(e) => e.currentTarget.style.background = "var(--accent-blue)"}
-        >
-          {submitting ? "处理中..." : mode === "login" ? "登录" : "注册并进入"}
-        </button>
-        <button
-          type="button"
-          className="link-button"
-          onClick={() => setMode(mode === "login" ? "register" : "login")}
-        >
-          {mode === "login" ? "没有账户？创建一个" : "已有账户？返回登录"}
-        </button>
-      </form>
-    </section>
+      </div>
+    </div>
   );
 }

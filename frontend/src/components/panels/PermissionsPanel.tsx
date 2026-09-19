@@ -119,7 +119,7 @@ export function PermissionsPanel({ roomId }: PermissionsPanelProps) {
       </div>
 
       {error && <p className="panel-error">{error}</p>}
-      {message && <p className="panel-hint" style={{ color: "var(--green)" }}>{message}</p>}
+      {message && <p className="panel-hint" style={{ color: "var(--success)" }}>{message}</p>}
 
       {!loading && members.length > 0 && (
         <div className="permissions-list">

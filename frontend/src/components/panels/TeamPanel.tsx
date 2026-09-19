@@ -19,10 +19,10 @@ export function TeamPanel() {
       />
       {config && (
         <details style={{ marginTop: 12 }}>
-          <summary style={{ cursor: "pointer", fontSize: "0.8rem", color: "#6b7280" }}>
+          <summary style={{ cursor: "pointer", fontSize: "0.8rem", color: "var(--text-tertiary)" }}>
             当前配置 ({config.roles.length} 个角色)
           </summary>
-          <pre style={{ fontSize: "0.75rem", background: "#f9fafb", padding: 10, borderRadius: 6, overflow: "auto", maxHeight: 200 }}>
+          <pre style={{ fontSize: "0.75rem", background: "var(--bg-elevated)", padding: 10, borderRadius: 6, overflow: "auto", maxHeight: 200 }}>
             {JSON.stringify(config, null, 2)}
           </pre>
         </details>
