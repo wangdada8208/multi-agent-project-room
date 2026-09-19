@@ -1,272 +1,68 @@
-# **CONTEXT**
+# 项目设计理念与背景
 
-Last Updated: 2026-06-14
+本文档阐述多智能体项目协作室的设计初衷、核心矛盾与演进方向。
 
-## **Why This Project Exists**
+## 1. 项目初衷
 
-This project started from a simple question:
+软件工程由团队完成。
+团队成员需要交流需求、探讨方案、分工执行并相互审查成果。
+现有多数 AI 工具主要服务单人交互。
+本项目探索多个用户与多个智能体如何共同工作。
+核心场景是两位人类用户各自携带自己的智能体进入共享空间协同开发。
 
-Can multiple humans and multiple AI agents collaborate inside the same project space as a real software team?
+## 2. 核心矛盾：连接不等于信任
 
-Current AI coding workflows are mostly:
+在项目初期，团队倾向于关注如何跑通聊天通道与任务派发。
+随着功能逐步成型，更深层的工程矛盾随之浮现。
+把两个智能体接入同一个聊天室并赋予调用权限，并不意味着建立了可信协作。
+任何网络层面的通信连接，绝不自动等同于数据访问与动作执行的授权。
+智能体如果在没有明确权限边界的情况下协同工作，会导致严重的安全隐患：
+- 对方发送的消息可能包含恶意提示词，诱导本地智能体越权。
+- 智能体可能擅自读取开发者的本地私密文件并发送到公共空间。
+- 智能体可能误将口头讨论的初步意向视为主人的最终商业承诺。
+- 人类在前端界面点击批准往往缺乏明确的时效与调用范围约束。
 
-Human → AI
+## 3. 可信协作的核心原则
 
-or
+项目后续发展必须建立在以下核心原则之上。
 
-Human → Multiple Independent AIs
+### 明确的主从归属
 
-However, real software teams work differently.
+智能体不是自由运作的独立主体。
+智能体严格归属于其背后的人类主人。
+共享服务器仅仅是中立的消息分发介质。
+服务器必须校验智能体与主人的从属关系，不得允许冒名连接。
 
-Real teams consist of multiple people who:
+### 私有空间与共享空间隔离
 
-- discuss requirements
-- share information
-- negotiate solutions
-- divide responsibilities
-- review each other’s work
+每个智能体维护两个不同的交互界面。
+面向主人的界面属于私有通道。
+私有通道用于汇报事实、请示授权与接收取消指令。
+面向团队的房间属于公共通道。
+公共通道仅用于广播经主人批准的脱敏提案与最终决策。
 
-The goal of this project is to explore whether AI agents can participate in this process as first-class team members.
+### 最小范围数据暴露
 
-------
+智能体在公共通道中必须贯彻最小披露原则。
+进入大模型处理的数据必须提前完成范围收敛。
+禁止直接向模型提供完整的本地环境或私有记录。
 
-# **Original Idea**
+## 4. 最小可行验证场景：虚构日历协商
 
-The original idea was:
+为了在不产生真实业务破坏的前提下验证可信协作，项目选定虚构日历协商作为首个落地场景。
 
-Two humans.
+### 场景流程
 
-Two AI agents.
+1. 两位主人各自指定智能体参与特定房间的排期讨论。
+2. 两位主人分别授权自己的智能体提供特定的空闲时间段。
+3. 双方智能体在房间内轮流交换候选时间方案。
+4. 一旦协商提议超出已批准的时间范围，智能体必须暂停发言并向各自主人请示。
+5. 主人可以拒绝提议、收回授权或直接终止整个任务。
+6. 协商达成一致后，各自智能体向主人的私有界面提交包含双方完整签名的汇总报告。
 
-One shared project room.
+### 安全边界
 
-Example:
-
-Human A
- Codex
-
-Human B
- Claude
-
-All participants exist inside the same workspace.
-
-All participants can communicate.
-
-All participants can observe project state.
-
-Humans provide requirements and approvals.
-
-Agents perform implementation work.
-
-------
-
-# **Key Insight**
-
-Traditional AI development workflows isolate agents.
-
-Each agent works independently.
-
-This project intentionally moves toward:
-
-Shared Context Collaboration.
-
-Agents should be able to:
-
-- read the same repository
-- read the same project documents
-- read the same discussions
-- observe the same decisions
-
-This creates a shared understanding of the project.
-
-------
-
-# **What We Are Building**
-
-This is NOT a general chat application.
-
-This is NOT a social platform.
-
-This is NOT another AI assistant.
-
-This is a collaborative software development room.
-
-The room should support:
-
-- Humans
-- Agents
-- Tasks
-- Discussions
-- Approvals
-- Shared knowledge
-- Shared code
-
-------
-
-# **Human Responsibilities**
-
-Humans are responsible for:
-
-- defining goals
-- approving proposals
-- resolving conflicts
-- correcting mistakes
-- making final decisions
-
-Humans remain the authority.
-
-------
-
-# **Agent Responsibilities**
-
-Agents are responsible for:
-
-- discussing solutions
-- proposing designs
-- implementing code
-- reviewing code
-- updating documentation
-- reporting progress
-
-Agents are contributors.
-
-Agents are not owners.
-
-------
-
-# **Communication Philosophy**
-
-Communication is the core feature.
-
-Agents should not silently modify the project.
-
-Agents should communicate.
-
-Agents should explain reasoning.
-
-Agents should ask questions.
-
-Agents should synchronize understanding.
-
-The project values discussion over blind execution.
-
-------
-
-# **Shared Context Philosophy**
-
-Chat history is temporary.
-
-Repository state is durable.
-
-Documentation is durable.
-
-Project knowledge must be stored in shared documents.
-
-Agents should always prioritize:
-
-1. Repository
-2. Documentation
-3. Decisions
-4. Chat History
-
-------
-
-# **Development Philosophy**
-
-This project follows Vibe Coding principles.
-
-Rapid iteration is preferred.
-
-Learning is preferred over perfection.
-
-Working software is preferred over theoretical architecture.
-
-Simple solutions are preferred over complex systems.
-
-The MVP should remain as small as possible.
-
-------
-
-# **Long-Term Vision**
-
-Phase 1
-
-Shared chat room.
-
-Multiple humans.
-
-Multiple agents.
-
-Shared repository.
-
-Human approval workflow.
-
-------
-
-Phase 2
-
-MCP integration.
-
-Agents gain structured access to tools.
-
-------
-
-Phase 3
-
-A2A integration.
-
-Agents communicate through standard protocols.
-
-------
-
-Phase 4
-
-Autonomous project collaboration.
-
-Agents coordinate tasks with minimal human intervention.
-
-------
-
-Phase 5
-
-Network of project rooms.
-
-Multiple teams.
-
-Multiple agents.
-
-Shared ecosystem.
-
-------
-
-# **Success Definition**
-
-Success is NOT measured by code quantity.
-
-Success is NOT measured by complexity.
-
-Success is measured by one question:
-
-Can humans and agents collaborate naturally inside the same project room?
-
-If the answer is yes,
-
-the experiment succeeds.
-
-------
-
-# **Final Guideline For Future Agents**
-
-Before writing code:
-
-Understand the project.
-
-Understand the people.
-
-Understand the goals.
-
-Then contribute.
-
-Do not optimize for output.
-
-Optimize for collaboration.
+该场景全程使用虚构的时间数据。
+系统禁止读取主人的真实日历软件。
+系统禁止在真实日历中创建正式日程或发送外部邮件邀请。
+真实外部写操作必须留待后续阶段单独评审与授权。

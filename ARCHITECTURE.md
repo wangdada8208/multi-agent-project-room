@@ -1,154 +1,123 @@
-## **ARCHITECTURE.md**
+# 系统架构与安全模型
+
+本文档描述系统的总体架构、分层职责与安全授权模型。
+文档内容以当前代码现状及可信协作演进要求为准。
+
+## 1. 总体架构分层
+
+系统分为五个功能层次。各层次边界清晰，职责明确。
+
+```text
+┌───────────────────────────────────────────────────────────┐
+│ 1. 客户端层 (React 18 + Vite)                             │
+│    聊天界面 | 成员面板 | 任务追踪 | 审批卡片 | 团队配置编辑器 │
+└─────────────────────────────┬─────────────────────────────┘
+                              │ HTTP / WebSocket
+┌─────────────────────────────▼─────────────────────────────┐
+│ 2. 服务与房间层 (FastAPI + PostgreSQL + SQLite)            │
+│    账号认证 | 房间管理 | 消息持久化 | 模板系统 | 权限与埋点    │
+└─────────────────────────────┬─────────────────────────────┘
+                              │ 内存调用 / 状态分发
+┌─────────────────────────────▼─────────────────────────────┐
+│ 3. 协作控制层 (MessageLoop + ApprovalService)             │
+│    上下文构造 | 轮次限制 | 共识状态跟踪 | 审批记录与回调      │
+└─────────────────────────────┬─────────────────────────────┘
+                              │ JSON-RPC / Protobuf RPC
+┌─────────────────────────────▼─────────────────────────────┐
+│ 4. 通信协议层 (A2A Protocol v1.0 + a2a-sdk v1.1.2)        │
+│    Agent Card 发现 | 对话 RPC 路由 | 任务状态机            │
+└─────────────────────────────┬─────────────────────────────┘
+                              │ 子进程标准输入输出 (ACP 模式)
+┌─────────────────────────────▼─────────────────────────────┐
+│ 5. 接入与执行层 (agent_gateway.py + 本地 CLI)             │
+│    Claude Code 驱动 | Codex CLI 驱动 | 本地执行沙箱        │
+└───────────────────────────────────────────────────────────┘
+```
 
-# **Architecture**
+## 2. 各层职责说明
 
-Version: MVP
+### 第 1 层：客户端展示层
 
-## **High Level Design**
+前端采用 React 18 与 Vite 构建。
+提供多标签页协同面板。
+展示房间聊天流、智能体状态、待办任务与人类审批卡片。
+支持共识标记与冲突内容的高亮显示。
 
-+–––––––––––+
- | Frontend (React) |
- +–––––––––––+
+### 第 2 层：服务与房间层
 
-|
+后端采用 FastAPI 框架。
+管理用户注册、登录令牌与房间生命周期。
+维护消息与审批记录的持久化存储。
+当前远端基线已为 WebSocket 连接与 `/a2a/dialogue-rpc` 增加了令牌认证。
 
-WebSocket
+### 第 3 层：协作控制层
 
-|
+该层负责组织两方或多方智能体的协同协商。
+`MessageLoop` 模块驱动智能体按轮次发言。
+在每轮对话中重置上下文，防止历史信息无限膨胀。
+检测智能体输出中的共识信号。
+文本共识标记仅作为提示，不构成法律或业务层面的正式承诺。
 
-+–––––––––––+
- | Backend (FastAPI) |
- +–––––––––––+
+### 第 4 层：通信协议层
 
-|
+协议层全面集成官方 `a2a-sdk`。
+对外暴露标准接口：
+- Agent Card 描述接口：`GET /.well-known/agent-card.json`。
+- 对话交互接口：`POST /a2a/dialogue-rpc`。
+- 任务交互接口：`POST /a2a/rpc`。
+替换了早期自写的非标 JSON-RPC 实现。
 
-+–––––––––––+
- | PostgreSQL |
- +–––––––––––+
+### 第 5 层：接入与执行层
 
-------
+该层负责与人类开发者本地的 AI CLI 工具对接。
+`agent_gateway.py` 采用轻量级子进程模式拉起本地命令行工具。
+隔离模型运行环境与房间服务器通信逻辑。
 
-## **Modules**
+## 3. 可信协作安全模型
 
-### **Auth Module**
+网络连接不等于信任。
+智能体协作必须建立在严格的边界控制之上。
 
-Responsibilities:
+### 认证与授权解耦
 
-- Lightweight username/password registration and login
-- Bearer token issuance
-- Current user resolution for protected APIs
+登录认证仅能证明发起请求的客户端拥有有效账号。
+登录认证不能证明该账号对特定智能体拥有归属权。
+也不能证明该账号具备特定会话的访问授权。
+系统后续演进必须将 `current_user` 强绑定到具体智能体实例与房间权限。
 
-------
+### 数据流向边界
 
-### **Chat Module**
+数据在进入模型前必须经过白名单过滤。
+以日历协商场景为例，系统仅允许交换双方批准的空闲时间段。
+禁止将个人日历标题、备注、参与人名单或地理位置输入模型或发送给对方。
+来自外部智能体的所有消息，一律标记为不可信输入。
+不可信输入只能作为业务协商提案，不得作为系统指令执行。
 
-Responsibilities:
+### 动作授权与审批
 
-- Room management
-- Message persistence
-- WebSocket broadcast
-- Presence events: `presence_snapshot`, `user_online`, `user_offline`
+审批服务负责记录人类主人的明确授权。
+授权必须具备明确的时效、作用域与一次性特征。
+禁止先调用外部工具再补办审批。
+在执行任何可能产生外部副作用的动作前，系统必须强制校验有效的授权凭证。
 
-------
+### 取消联动与迟到输出隔离
 
-### **Agent Module**
+人类主人随时可以中止正在进行的协作任务。
+系统收到取消指令时，必须同时向底层执行子进程发送终止信号。
+底层进程停止后，后续迟到的模型输出必须予以丢弃，不得存入数据库，也不得广播至房间。
 
-Responsibilities:
+## 4. 当前代码基线差异
 
-- Agent registration
-- Agent identity
-- Agent permissions
+为了确保开发协同的一致性，系统明确划分两个代码基线。
 
-------
+### 官方远端基线
 
-### **Repository Module**
+远端代码以 `origin/main` 的 `f1af097` 节点为准。
+已通过静态复核的模块包含 SDK 路由、基础认证与协作循环。
+远端基线未包含完整的跨机器联调自动化测试。
 
-Responsibilities:
+### 本地待提交功能
 
-- Git synchronization
-- Commit tracking
-- Branch tracking
-
-------
-
-### **Knowledge Base Module**
-
-Responsibilities:
-
-- Read project documents
-- Provide context to Agents
-
-------
-
-### **Approval Module**
-
-Responsibilities:
-
-- Create approval requests
-- Track approvals
-- Authorize execution
-- Link human decisions to A2A task status
-
-------
-
-### **A2A Task Module**
-
-Responsibilities:
-
-- Submit and query agent tasks
-- Track room/source message/approval linkage
-- Broadcast `task_update` events into rooms
-
-------
-
-## **Data Flow**
-
-Human Message
-
-↓
-
-Chat Room
-
-↓
-
-@Agent Mention Creates A2A Task
-
-↓
-
-Agent Works Or Requests Approval
-
-↓
-
-Proposal
-
-↓
-
-Human Approval
-
-↓
-
-Execution
-
-↓
-
-Report
-
-------
-
-## **Future Architecture**
-
-Phase 2
-
-MCP Integration
-
-Phase 3
-
-A2A Integration
-
-Phase 4
-
-Multi-Room Support
-
-Phase 5
-
-Distributed Agent Network
+本地工作区包含前端 P0 到 P3 阶段的界面增强。
+本地另有独立的受控调度器原型代码。
+这些能力尚未合并至远端，不得视为已就绪的生产特性。

@@ -1,42 +1,52 @@
-# Roadmap
+# 项目研发路线图
 
-This file tracks the next development direction after the MVP collaboration
-room became usable.
+本文档记录系统的近期推进计划、中长期演进方向以及历史完成里程碑。
 
-## Now: Stabilization And Acceptance
+## 1. 当前推进重点：Phase 0（统一基线与契约）
 
-- [ ] Complete `ACCEPTANCE_CHECKLIST.md` against production.
-- [ ] Update `PLAN.md` checkboxes after each verified area.
-- [ ] Keep `CLAUDE.md` and `RUNBOOK.md` aligned with production reality.
-- [ ] Confirm only one Codex and one Claude adapter are running during demos.
+当前的主要任务是消除认知分歧，建立稳固的基础基线。
 
-## Next: A2A Reliability
+- [x] 重构全部核心开发文档，消除陈旧描述与矛盾信息。
+- [x] 固定远端 `origin/main`（`f1af097`）为当前阶段的参考基线。
+- [ ] 输出现有代码在全新环境下的运行耗时与测试覆盖报告。
+- [ ] 确定 `local_agent_adapter.py` 与 `agent_gateway.py` 的迁移或合并策略。
+- [ ] 补充双机断网重连与异常恢复的手工演练清单。
 
-- [x] Add explicit task timeout handling so tasks cannot remain `working`
-      forever.
-- [ ] Add retry policy for transient A2A delivery failures.
-- [ ] Surface failure reasons in the task panel.
-- [x] Mark tasks failed quickly when the target agent is offline.
-- [x] Add automated coverage for agent-offline and timeout paths.
+## 2. 下一阶段目标：Phase 1（Mock 条件下受控通道）
 
-## Next: Agent State Quality
+该阶段在无需真实模型调用的前提下，验证安全隔离与控制机制。
 
-- [ ] Extend adapter registration to report `online`, `busy`, `error`, and
-      `quota_limited`.
-- [ ] Show adapter health in the Agent panel.
-- [ ] Add last-seen timestamps to the UI.
-- [ ] Make duplicate local adapter starts visible in logs and fail fast.
+- [ ] 实现 `current_user` 与智能体实例的绑定校验，禁止冒名发送。
+- [ ] 增加房间与会话成员鉴权拦截器。
+- [ ] 实现结构化一次性动作授权，杜绝先调用后审批。
+- [ ] 建立任务取消与底层执行进程的联动停止机制。
+- [ ] 增加迟到输出隔离机制，抛弃取消后返回的结果。
+- [ ] 在单机双进程以及两台物理机器之间验证会话状态恢复。
 
-## Later: Collaboration Depth
+## 3. 远期演进规划：Phase 2（虚构日历协商闭环）
 
-- [ ] Improve A2A relay dialogue prompts for short, useful turn-taking.
-- [ ] Add a conversation transcript summary at the end of relay dialogue.
-- [ ] Add structured handoff messages between Claude and Codex.
-- [ ] Add per-room knowledge search inside agent prompts.
+该阶段接入受限的大模型，验证两台机器智能体之间的协同博弈。
 
-## Later: Product Hardening
+- [ ] 接入真实模型，仅提供获批的虚构空闲时段。
+- [ ] 建立主动请示机制，当提议超出授权范围时自动挂起对话。
+- [ ] 建立面向人类主人的私有汇报通道。
+- [ ] 增加模型调用 token 消耗与轮次配额管理。
+- [ ] 增加针对单方伪造共识与提示词注入的防御机制。
 
-- [ ] Add authenticated production admin operations.
-- [ ] Add rate limiting to public endpoints.
-- [ ] Add richer production observability.
-- [ ] Add backup and restore documentation for PostgreSQL.
+## 4. 未来扩展评估：真实环境集成
+
+下列高风险能力必须在 Phase 2 验收通过后另行立项评估：
+- 真实日历软件的读取与写入。
+- 自动化创建日历事件与发送邀请邮件。
+- 跨网络的生产环境持久化同步。
+
+## 5. 历史已完成里程碑
+
+系统已交付下列核心能力：
+- 用户注册、登录鉴权与 Bearer 令牌发放。
+- 基于 WebSocket 的实时房间聊天与事件广播。
+- 基于官方 `a2a-sdk` 的 Agent Card 暴露与对话 RPC。
+- 基于 `MessageLoop` 的协作循环与共识标记解析。
+- 基于 ACP 模式的本地智能体网关 `agent_gateway.py`。
+- 多面板前端界面（包含成员、任务、对话、文件与团队配置）。
+- 房间权限管理、场景模板、消息搜索与移动端适配。
