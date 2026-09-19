@@ -150,7 +150,12 @@ async def handle_dialogue_jsonrpc(request: DialogueRequest, current_user: User =
     if not handler:
         raise HTTPException(status_code=404, detail=f"Method not found: {request.method}")
     try:
-        result = await handler(request.params)
+        import inspect
+        sig = inspect.signature(handler)
+        if "user" in sig.parameters:
+            result = await handler(request.params, user=current_user)
+        else:
+            result = await handler(request.params)
         return {"jsonrpc": "2.0", "result": result, "id": request.id}
     except HTTPException:
         raise
@@ -159,10 +164,42 @@ async def handle_dialogue_jsonrpc(request: DialogueRequest, current_user: User =
 
 
 @rpc_method("dialogues/create")
-async def rpc_dialogues_create(params: dict) -> dict:
+async def rpc_dialogues_create(params: dict, user: User) -> dict:
     room_id = str(params.get("room_id", "")).strip()
     if not room_id:
         raise HTTPException(status_code=400, detail="room_id is required")
+
+    from app.models.room import Room
+    from app.models.room_permission import RoomPermission
+    from sqlalchemy import select
+
+    async with async_session() as db:
+        room = await db.get(Room, room_id)
+        if not room:
+            room = Room(id=room_id, name=f"Room {room_id[:8]}", created_by=user.id)
+            db.add(room)
+            await db.flush()
+            perm = RoomPermission(room_id=room_id, user_id=user.id, role="owner")
+            db.add(perm)
+            await db.commit()
+        else:
+            perm_stmt = select(RoomPermission).where(
+                RoomPermission.room_id == room_id,
+                RoomPermission.user_id == user.id,
+            )
+            perm = (await db.execute(perm_stmt)).scalars().first()
+            if not perm:
+                any_perm_stmt = select(RoomPermission).where(RoomPermission.room_id == room_id)
+                any_perms = (await db.execute(any_perm_stmt)).scalars().all()
+                if not any_perms:
+                    perm = RoomPermission(room_id=room_id, user_id=user.id, role="owner")
+                    db.add(perm)
+                    await db.commit()
+                else:
+                    raise HTTPException(status_code=403, detail="No access to this room")
+            elif perm.role not in ("owner", "member"):
+                raise HTTPException(status_code=403, detail="Requires member or owner role")
+
     initiator = str(params.get("initiator_agent", "")).strip() or "hub"
     participants = [str(p) for p in params.get("participants", [])]
     duration_seconds = int(params.get("duration_seconds") or 30)
@@ -174,6 +211,7 @@ async def rpc_dialogues_create(params: dict) -> dict:
     dialogue = {
         "dialogue_id": dialogue_id,
         "room_id": room_id,
+        "created_by_user_id": user.id,
         "initiator_agent": initiator,
         "participants": _normalize_participants(participants, initiator),
         "status": "active",
@@ -191,7 +229,7 @@ async def rpc_dialogues_create(params: dict) -> dict:
 
 
 @rpc_method("dialogues/send")
-async def rpc_dialogues_send(params: dict) -> dict:
+async def rpc_dialogues_send(params: dict, user: User) -> dict:
     dialogue_id = str(params.get("dialogue_id", "")).strip()
     content = str(params.get("content", "")).strip()
     sender_id = str(params.get("sender_id", "")).strip()
@@ -200,6 +238,35 @@ async def rpc_dialogues_send(params: dict) -> dict:
         raise HTTPException(status_code=400, detail="dialogue_id, content, sender_id, and sender_name are required")
 
     dialogue = DIALOGUES.get(dialogue_id)
+    if not dialogue:
+        raise ValueError("Dialogue is not active")
+
+    from app.models.room_permission import RoomPermission
+    from app.models.user import User as UserModel
+    from sqlalchemy import select
+
+    async with async_session() as db:
+        perm_stmt = select(RoomPermission).where(
+            RoomPermission.room_id == dialogue["room_id"],
+            RoomPermission.user_id == user.id,
+        )
+        perm = (await db.execute(perm_stmt)).scalars().first()
+        if not perm:
+            any_perm_stmt = select(RoomPermission).where(RoomPermission.room_id == dialogue["room_id"])
+            any_perms = (await db.execute(any_perm_stmt)).scalars().all()
+            if any_perms:
+                raise HTTPException(status_code=403, detail="No access to this room")
+            perm = RoomPermission(room_id=dialogue["room_id"], user_id=user.id, role="owner")
+            db.add(perm)
+            await db.commit()
+        elif perm.role not in ("owner", "member"):
+            raise HTTPException(status_code=403, detail="Requires member or owner role")
+
+        # Impersonation guard: cannot forge another real user ID as sender_id
+        if sender_id != user.id:
+            other_user = await db.get(UserModel, sender_id)
+            if other_user and other_user.id != user.id:
+                raise HTTPException(status_code=403, detail="Impersonation of another user is prohibited")
     if not dialogue or dialogue["status"] != "active":
         raise ValueError("Dialogue is not active")
     if _now() >= dialogue["expires_at"]:
@@ -256,13 +323,25 @@ async def rpc_dialogues_send(params: dict) -> dict:
 
 
 @rpc_method("dialogues/end")
-async def rpc_dialogues_end(params: dict) -> dict:
+async def rpc_dialogues_end(params: dict, user: User) -> dict:
     dialogue_id = str(params.get("dialogue_id", "")).strip()
     if not dialogue_id:
         raise HTTPException(status_code=400, detail="dialogue_id is required")
     dialogue = DIALOGUES.get(dialogue_id)
     if not dialogue:
         raise ValueError("Dialogue not found")
+
+    from app.models.room_permission import RoomPermission
+    from sqlalchemy import select
+
+    async with async_session() as db:
+        perm_stmt = select(RoomPermission).where(
+            RoomPermission.room_id == dialogue["room_id"],
+            RoomPermission.user_id == user.id,
+        )
+        perm = (await db.execute(perm_stmt)).scalars().first()
+        if perm and perm.role not in ("owner", "member"):
+            raise HTTPException(status_code=403, detail="Insufficient permission to end dialogue")
     dialogue["status"] = "ended"
     dialogue["ended_at"] = _now()
     dialogue["reason"] = params.get("reason") or "ended"
