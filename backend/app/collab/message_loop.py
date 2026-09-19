@@ -9,6 +9,7 @@
 """
 
 from __future__ import annotations
+from app.collab.calendar_negotiation import CandidateSlotProposal
 
 import logging
 import re
@@ -23,6 +24,7 @@ logger = logging.getLogger(__name__)
 class LoopStatus(str, Enum):
     PENDING = "pending"
     ACTIVE = "active"
+    SUSPENDED = "suspended"
     CONSENSUS = "consensus"
     MAX_TURNS = "max_turns"
     CANCELED = "canceled"
@@ -203,6 +205,48 @@ class MessageLoop:
         )
         self.turns.append(result)
         return result
+
+
+    def suspend(self, reason: str = "", required_scope: Optional[str] = None) -> None:
+        """Suspend the loop when unapproved proposals or privilege boundaries are hit."""
+        self.status = LoopStatus.SUSPENDED
+        self.suspension_reason = reason
+        self.required_grant_scope = required_scope
+        logger.warning("MessageLoop %s suspended: %s (required_scope=%s)", self.loop_id, reason, required_scope)
+
+    def resume(self, grant: Optional[dict] = None) -> bool:
+        """Resume suspended loop only if valid grant is supplied when required."""
+        if self.status != LoopStatus.SUSPENDED:
+            return False
+        if self.required_grant_scope:
+            if not grant or grant.get("scope") != self.required_grant_scope:
+                raise ValueError(f"Cannot resume loop without valid grant for scope: {self.required_grant_scope}")
+        self.status = LoopStatus.ACTIVE
+        self.suspension_reason = None
+        self.required_grant_scope = None
+        logger.info("MessageLoop %s resumed successfully", self.loop_id)
+        return True
+
+    def propose_slot(self, agent_name: str, slot_text: str) -> CandidateSlotProposal:
+        """Record a candidate slot proposal initiated by an agent."""
+        self.candidate_proposal = CandidateSlotProposal(
+            slot_text=slot_text,
+            proposed_by_agent=agent_name,
+            confirmed_by={agent_name.lower()},
+        )
+        return self.candidate_proposal
+
+    def confirm_slot(self, agent_name: str, slot_text: str) -> bool:
+        """Confirm a proposed slot. Reaching two distinct confirmations triggers consensus."""
+        if not self.candidate_proposal:
+            return False
+        if self.candidate_proposal.slot_text.strip().lower() != slot_text.strip().lower():
+            return False
+        reached = self.candidate_proposal.confirm(agent_name)
+        if reached:
+            self.status = LoopStatus.CONSENSUS
+            self.consensus_summary = f"双方就时间段 {slot_text} 达成结构化双向共识"
+        return reached
 
     async def step(self, send_fn=None) -> TurnResult | None:
         """Execute one turn of the loop.
