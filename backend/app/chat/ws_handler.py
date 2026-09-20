@@ -123,6 +123,12 @@ async def handle_chat(websocket: WebSocket, room_id: str, token: str = Query(def
     authenticated_user_id = payload.get("sub", "")
     authenticated_user_type = payload.get("typ", "human")
 
+    # ── Resolve room identifier (support both room id and room name) ──
+    async with async_session() as db:
+        resolved = await chat_service.resolve_room(db, room_id)
+        if resolved:
+            room_id = resolved.id
+
     await connection_manager.connect(room_id, websocket)
     logger.info("ws connected room=%s user=%s", room_id[:8], authenticated_user_id[:8])
     await websocket.send_json(
@@ -160,11 +166,12 @@ async def handle_chat(websocket: WebSocket, room_id: str, token: str = Query(def
                     room_id,
                     {"type": "user_online", "participant": participant},
                 )
-                await websocket.send_json(
+                await connection_manager.broadcast(
+                    room_id,
                     {
                         "type": "presence_snapshot",
                         "participants": connection_manager.presence_snapshot(room_id),
-                    }
+                    },
                 )
                 continue
 
@@ -239,6 +246,13 @@ async def handle_chat(websocket: WebSocket, room_id: str, token: str = Query(def
             )
         await connection_manager.broadcast(
             room_id,
+            {
+                "type": "presence_snapshot",
+                "participants": connection_manager.presence_snapshot(room_id),
+            },
+        )
+        await connection_manager.broadcast(
+            room_id,
             {"type": "system", "content": "A participant left the room."},
         )
     except Exception as e:
@@ -249,6 +263,13 @@ async def handle_chat(websocket: WebSocket, room_id: str, token: str = Query(def
                 room_id,
                 {"type": "user_offline", "participant": participant},
             )
+        await connection_manager.broadcast(
+            room_id,
+            {
+                "type": "presence_snapshot",
+                "participants": connection_manager.presence_snapshot(room_id),
+            },
+        )
         await connection_manager.broadcast(
             room_id,
             {"type": "system", "content": f"Connection error: {str(e)}"},

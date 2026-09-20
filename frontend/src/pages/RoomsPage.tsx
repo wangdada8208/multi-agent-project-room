@@ -48,6 +48,19 @@ export function RoomsPage() {
     }
   }
 
+  function handleJoin() {
+    const trimmed = joinRoomId.trim();
+    if (!trimmed) return;
+    const matched = rooms.find(
+      (r) => r.id === trimmed || r.name.toLowerCase() === trimmed.toLowerCase()
+    );
+    if (matched) {
+      navigate(`/rooms/${matched.id}`);
+    } else {
+      navigate(`/rooms/${trimmed}`);
+    }
+  }
+
   const user = useAuthStore((state) => state.user);
   const logout = useAuthStore((state) => state.logout);
   const displayName = user?.display_name ?? "";
@@ -89,22 +102,18 @@ export function RoomsPage() {
             value={joinRoomId}
             onChange={(e) => setJoinRoomId(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "Enter" && joinRoomId.trim()) {
-                navigate(`/rooms/${joinRoomId.trim()}`);
+              if (e.key === "Enter") {
+                handleJoin();
               }
             }}
-            placeholder="输入或粘贴房间 ID..."
+            placeholder="输入房间 ID 或房间名称..."
             autoFocus
           />
           <button
             type="button"
             className="btn-primary"
             style={{ width: "auto", padding: "8px 16px" }}
-            onClick={() => {
-              if (joinRoomId.trim()) {
-                navigate(`/rooms/${joinRoomId.trim()}`);
-              }
-            }}
+            onClick={handleJoin}
             disabled={!joinRoomId.trim()}
           >
             进入
@@ -183,6 +192,9 @@ export function RoomsPage() {
             <span className="room-card__icon">🏠</span>
             <div className="room-card__info">
               <strong>{room.name}</strong>
+              <small style={{ fontFamily: "monospace", color: "var(--text-secondary)", fontSize: 11 }}>
+                ID: {room.id}
+              </small>
               {room.description && <small>{room.description}</small>}
               <small>{new Date(room.created_at).toLocaleDateString("zh-CN")}</small>
             </div>

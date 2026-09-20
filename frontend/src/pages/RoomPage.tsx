@@ -12,10 +12,10 @@ import { MessageItem } from "../components/chat/MessageItem";
 import { ChatInput } from "../components/chat/ChatInput";
 import { useNotification } from "../hooks/useNotification";
 import { useAnalytics } from "../hooks/useAnalytics";
-import { fetchMessages, fetchAgents, fetchTasks, searchMessages } from "../lib/api";
+import { fetchMessages, fetchAgents, fetchTasks, searchMessages, apiFetch } from "../lib/api";
 import { useAuthStore } from "../stores/authStore";
 import { useChatStore } from "../stores/chatStore";
-import type { SenderType } from "../types/chat";
+import type { Room, SenderType } from "../types/chat";
 
 const CONNECTION_LABEL: Record<string, string> = {
   connecting: "连接中...",
@@ -43,6 +43,18 @@ export function RoomPage() {
   useEffect(() => {
     track("room_enter", roomId);
   }, [roomId, track]);
+
+  // Fetch room info
+  const roomQuery = useQuery({
+    queryKey: ["rooms", roomId],
+    queryFn: async () => {
+      const res = await apiFetch(`/api/v1/rooms/${roomId}`);
+      if (!res.ok) return null;
+      const data = await res.json();
+      return data.room as Room;
+    },
+    enabled: !!roomId,
+  });
 
   // Fetch messages
   const messagesQuery = useQuery({
@@ -132,7 +144,27 @@ export function RoomPage() {
       <section className="chat-area">
         <header className="chat-area__header">
           <Link to="/rooms" className="chat-area__back">←</Link>
-          <span className="chat-area__title">房间</span>
+          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+            <span className="chat-area__title">{roomQuery.data?.name || "房间"}</span>
+            <span
+              style={{
+                fontSize: 11,
+                color: "var(--text-secondary)",
+                cursor: "pointer",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 4,
+                fontFamily: "monospace",
+              }}
+              title="点击复制完整房间 ID"
+              onClick={async () => {
+                await navigator.clipboard.writeText(roomId);
+                alert(`房间 ID 已复制到剪贴板：\n${roomId}\n\n可直接粘贴至 Agent 启动命令中的 --room-id 参数`);
+              }}
+            >
+              ID: {roomId} 📋
+            </span>
+          </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: "auto" }}>
             {!notifEnabled && (
               <button type="button" onClick={requestNotifPermission} title="开启 Agent 回复通知" style={{ fontSize: 16, background: "none", border: "none", cursor: "pointer" }}>

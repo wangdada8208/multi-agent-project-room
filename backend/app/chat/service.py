@@ -4,8 +4,11 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from typing import Literal
 
-from sqlalchemy import select, delete
+import logging
+from sqlalchemy import select, delete, update
 from sqlalchemy.ext.asyncio import AsyncSession
+
+logger = logging.getLogger(__name__)
 
 from app.chat.models import Message
 from app.config import get_settings
@@ -25,15 +28,38 @@ def retention_cutoff() -> datetime:
 
 
 async def cleanup_expired_messages(db: AsyncSession) -> int:
-    """Delete messages older than the configured retention period."""
-    stmt = (
-        delete(Message)
-        .where(Message.created_at < retention_cutoff())
-        .execution_options(synchronize_session=False)
-    )
-    result = await db.execute(stmt)
-    await db.commit()
-    return result.rowcount or 0
+    """Delete messages older than the configured retention period with safe FK nullification."""
+    try:
+        cutoff = retention_cutoff()
+        expired_subquery = select(Message.id).where(Message.created_at < cutoff)
+
+        # 1. Nullify tasks referencing expired messages
+        from app.a2a.models import A2ATask
+        await db.execute(
+            update(A2ATask)
+            .where(A2ATask.source_message_id.in_(expired_subquery))
+            .values(source_message_id=None)
+        )
+
+        # 2. Nullify replies referencing expired parent messages
+        await db.execute(
+            update(Message)
+            .where(Message.parent_id.in_(expired_subquery))
+            .values(parent_id=None)
+        )
+
+        stmt = (
+            delete(Message)
+            .where(Message.created_at < cutoff)
+            .execution_options(synchronize_session=False)
+        )
+        result = await db.execute(stmt)
+        await db.commit()
+        return result.rowcount or 0
+    except Exception as err:
+        logger.warning("Failed to cleanup expired messages: %s", err)
+        await db.rollback()
+        return 0
 
 
 async def save_message(
@@ -108,14 +134,24 @@ async def list_messages(
     return list(reversed(result.scalars().all()))
 
 
+async def resolve_room(db: AsyncSession, identifier: str) -> Room | None:
+    """Resolve a room by exact ID first, or fallback to exact name match."""
+    room = await db.get(Room, identifier)
+    if room:
+        return room
+    stmt = select(Room).where(Room.name == identifier, Room.is_active == True)
+    result = await db.execute(stmt)
+    return result.scalars().first()
+
+
 async def get_or_create_room(
     db: AsyncSession,
     room_id: str,
     name: str = "Default Room",
     description: str = "",
 ) -> Room:
-    """Get room by id, or create if not exists (for bootstrapping)."""
-    room = await db.get(Room, room_id)
+    """Get room by id or name, or create if not exists (for bootstrapping)."""
+    room = await resolve_room(db, room_id)
     if room:
         return room
     # Agent channels are hidden from room listings

@@ -79,7 +79,8 @@ async def get_room(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict:
-    room = await db.get(Room, room_id)
+    from app.chat.service import resolve_room
+    room = await resolve_room(db, room_id)
     if room is None:
         raise HTTPException(status_code=404, detail="Room not found")
     return {"room": room.to_dict()}
