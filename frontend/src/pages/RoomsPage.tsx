@@ -13,6 +13,8 @@ export function RoomsPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [roomName, setRoomName] = useState("");
   const [creating, setCreating] = useState(false);
+  const [joinRoomId, setJoinRoomId] = useState("");
+  const [showJoin, setShowJoin] = useState(false);
   const [error, setError] = useState("");
   const [templates, setTemplates] = useState<Array<{key:string,name:string,description:string|null,icon:string}>>([]);
   const [showTemplates, setShowTemplates] = useState(false);
@@ -71,11 +73,44 @@ export function RoomsPage() {
               📋 模板
             </button>
           )}
+          <button type="button" className="btn-ghost" style={{ padding: "8px 16px" }} onClick={() => setShowJoin(!showJoin)}>
+            🔑 加入房间
+          </button>
           <button type="button" className="btn-primary" style={{ width: "auto", padding: "8px 20px" }} onClick={() => setShowCreate(!showCreate)}>
             + 新建房间
           </button>
         </div>
       </div>
+
+      
+      {showJoin && (
+        <div className="create-room-card">
+          <input
+            value={joinRoomId}
+            onChange={(e) => setJoinRoomId(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && joinRoomId.trim()) {
+                navigate(`/rooms/${joinRoomId.trim()}`);
+              }
+            }}
+            placeholder="输入或粘贴房间 ID..."
+            autoFocus
+          />
+          <button
+            type="button"
+            className="btn-primary"
+            style={{ width: "auto", padding: "8px 16px" }}
+            onClick={() => {
+              if (joinRoomId.trim()) {
+                navigate(`/rooms/${joinRoomId.trim()}`);
+              }
+            }}
+            disabled={!joinRoomId.trim()}
+          >
+            进入
+          </button>
+        </div>
+      )}
 
       {showCreate && (
         <div className="create-room-card">

@@ -3,10 +3,11 @@
 Trusted Runner — 受控智能体运行器。
 
 特性：
-1. 子进程组隔离：通过 start_new_session 启动独立进程组。
-2. 强行取消联动：接收到取消事件时，通过 os.killpg 直接终止进程组。
-3. 迟到输出隔离：取消后子进程返回的任何残留输出均直接丢弃。
-4. 操作授权核验：执行特权动作前强制校验 ActionGrant 凭据与参数哈希。
+1. 自动登录与认证：支持传入用户名密码或 token，自动向服务端换取身份凭据。
+2. 房间长连接与上线：通过 WebSocket 连入指定房间，自动向房间声明 Agent 身份。
+3. 强行取消联动：收到 task_canceled 广播时，通过 os.killpg 直接终止子进程组。
+4. 迟到输出隔离：取消后子进程返回的任何残留输出均直接丢弃。
+5. 操作授权核验：执行特权动作前强制校验 ActionGrant 凭据与参数哈希。
 """
 
 from __future__ import annotations
@@ -21,7 +22,10 @@ import signal
 import sys
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Callable, Coroutine, Optional
+from typing import Any, Optional
+
+import httpx
+import websockets
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(levelname)s %(message)s")
 logger = logging.getLogger("trusted_runner")
@@ -88,7 +92,7 @@ class ProcessGroupController:
 
 
 class TrustedRunner:
-    """受控智能体运行器。包含执行隔离、取消响应与授权检查。"""
+    """受控智能体运行器。包含执行隔离、取消响应、授权检查与在线状态维持。"""
 
     def __init__(
         self,
@@ -182,16 +186,82 @@ class TrustedRunner:
             "stdout": stdout_text,
         }
 
+    async def connect_and_run(
+        self,
+        token: Optional[str] = None,
+        username: Optional[str] = None,
+        password: Optional[str] = None,
+    ) -> None:
+        """连接至房间 WebSocket，声明 Agent 身份并进入实时事件监听循环。"""
+        if not token:
+            if not username or not password:
+                raise ValueError("必须提供 --token，或者同时提供 --username 与 --password")
+            logger.info("authenticating with server %s as user=%s ...", self.server_url, username)
+            async with httpx.AsyncClient(verify=False) as client:
+                login_resp = await client.post(
+                    f"{self.server_url}/api/v1/auth/login",
+                    json={"username": username, "password": password},
+                )
+                if login_resp.status_code != 200:
+                    raise ValueError(f"登录失败 ({login_resp.status_code}): {login_resp.text}")
+                token = login_resp.json().get("access_token")
+                logger.info("authenticated successfully! access_token obtained.")
+
+        if not self.room_id:
+            raise ValueError("必须通过 --room-id 指定要连入的目标房间 ID")
+
+        ws_server = self.server_url.replace("https://", "wss://").replace("http://", "ws://")
+        ws_url = f"{ws_server}/ws/chat/{self.room_id}?token={token}"
+
+        logger.info("connecting to room %s as agent [%s] ...", self.room_id, self.agent_name)
+        async with websockets.connect(ws_url) as ws:
+            # 1. 发送身份宣告帧，让系统识别为 Agent
+            identify_payload = {
+                "type": "identify",
+                "sender_name": self.agent_name,
+                "sender_type": "agent",
+            }
+            await ws.send(json.dumps(identify_payload))
+            logger.info("=====================================================")
+            logger.info("✅ Agent [%s] 成功连入房间并在线！", self.agent_name)
+            logger.info("网页端成员面板现在已经可以看到 🤖 %s 在线。", self.agent_name)
+            logger.info("=====================================================")
+
+            # 2. 持续事件监听循环
+            async for raw in ws:
+                try:
+                    event = json.loads(raw)
+                    event_type = event.get("type")
+                    if event_type == "task_canceled":
+                        task_id = event.get("task_id")
+                        if not self.current_task_id or task_id == self.current_task_id:
+                            logger.warning("收到任务取消信号 task_id=%s，立即强杀子进程组！", task_id)
+                            self.cancel_current_execution()
+                    elif event_type == "message":
+                        msg = event.get("message", {})
+                        logger.info("收到房间消息 [%s]: %s", msg.get("sender_name"), msg.get("content"))
+                    elif event_type == "user_online":
+                        part = event.get("participant", {})
+                        logger.info("新成员上线: %s (%s)", part.get("sender_name"), part.get("sender_type"))
+                except Exception as err:
+                    logger.debug("event parse error: %s", err)
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Multi-Agent Project Room — Trusted Runner")
-    parser.add_argument("--agent-name", required=True, help="智能体名称")
-    parser.add_argument("--server", default="http://localhost:8000", help="服务端地址")
-    parser.add_argument("--room-id", default=None, help="目标房间标识")
+    parser.add_argument("--agent-name", required=True, help="智能体名称，例如 Codex-1")
+    parser.add_argument("--server", default="http://localhost:8000", help="服务端地址，例如 https://hub.wangdada8208.xyz")
+    parser.add_argument("--room-id", required=True, help="目标房间 ID")
+    parser.add_argument("--token", default=None, help="已登录用户的 Bearer Token")
+    parser.add_argument("--username", default=None, help="账号用户名（用于自动登录）")
+    parser.add_argument("--password", default=None, help="账号密码（用于自动登录）")
     args = parser.parse_args()
 
     runner = TrustedRunner(agent_name=args.agent_name, server_url=args.server, room_id=args.room_id)
-    logger.info("trusted runner initialized for agent=%s", runner.agent_name)
+    try:
+        asyncio.run(runner.connect_and_run(token=args.token, username=args.username, password=args.password))
+    except KeyboardInterrupt:
+        logger.info("runner stopped by user (KeyboardInterrupt)")
 
 
 if __name__ == "__main__":

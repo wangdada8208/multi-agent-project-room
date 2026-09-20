@@ -149,8 +149,12 @@ async def handle_chat(websocket: WebSocket, room_id: str, token: str = Query(def
 
             # ── Presence identity (must match authenticated user) ──
             if msg_type == "identify":
-                # Force sender_id to match the token subject
-                raw["sender_id"] = authenticated_user_id
+                # Ensure agent identities have unique composite sender_id to prevent collision with human owner
+                if str(raw.get("sender_type") or "").lower() == "agent":
+                    agent_name_slug = str(raw.get("sender_name") or "agent").lower().replace(" ", "_")
+                    raw["sender_id"] = f"agent_{agent_name_slug}_{authenticated_user_id}"
+                else:
+                    raw["sender_id"] = authenticated_user_id
                 participant = await connection_manager.identify(room_id, websocket, raw)
                 await connection_manager.broadcast(
                     room_id,
