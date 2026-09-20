@@ -228,6 +228,12 @@ async def rpc_dialogues_create(params: dict, user: User) -> dict:
     return _serialize_dialogue(dialogue)
 
 
+@rpc_method("dialogues/start")
+async def rpc_dialogues_start(params: dict, user: User) -> dict:
+    """Backward-compatible alias for dialogues/create."""
+    return await rpc_dialogues_create(params, user)
+
+
 @rpc_method("dialogues/send")
 async def rpc_dialogues_send(params: dict, user: User) -> dict:
     dialogue_id = str(params.get("dialogue_id", "")).strip()

@@ -32,24 +32,31 @@ logger = logging.getLogger(__name__)
 
 
 def _find_mentioned_agents(content: str, agent_names: set[str]) -> list[str]:
-    """Case-insensitive @mention detection. Returns matched agent names."""
+    """Case-insensitive @mention detection with boundary guard."""
     content_lower = content.lower()
     mentioned = []
-    for name in agent_names:
-        if re.search(rf'@{re.escape(name.lower())}\b', content_lower):
+    sorted_names = sorted(agent_names, key=len, reverse=True)
+    for name in sorted_names:
+        escaped = re.escape(name.lower())
+        pattern = rf"@{escaped}(?:(?=[^a-zA-Z0-9_-])|$)"
+        if re.search(pattern, content_lower):
             mentioned.append(name)
     return mentioned
 
 
-async def _get_active_agent_names() -> set[str]:
-    """Query all active agent names from the AgentCardRecord table."""
+async def _get_active_agent_names(room_id: str | None = None) -> set[str]:
+    """Query active agent names from both AgentCardRecord and WebSocket connections."""
+    active_names = connection_manager.get_online_agent_names(room_id)
     async with async_session() as db:
         result = await db.execute(
             select(AgentCardRecord.agent_name).where(
                 AgentCardRecord.is_active == True
             )
         )
-        return {row[0] for row in result.fetchall()}
+        for row in result.fetchall():
+            if row[0]:
+                active_names.add(row[0])
+    return active_names
 
 
 async def _check_mentions_and_forward(
@@ -58,7 +65,7 @@ async def _check_mentions_and_forward(
     content: str,
 ) -> None:
     """Detect @mentions and forward agent_task messages to agent channels."""
-    agent_names = await _get_active_agent_names()
+    agent_names = await _get_active_agent_names(source_room_id)
     mentioned = _find_mentioned_agents(content, agent_names)
     if not mentioned:
         return

@@ -46,6 +46,16 @@ class ConnectionManager:
             seen[participant["sender_id"]] = participant
         return list(seen.values())
 
+    def get_online_agent_names(self, room_id: str | None = None) -> set[str]:
+        """Return distinct agent names currently connected via WebSocket."""
+        names: set[str] = set()
+        rooms = [room_id] if room_id else list(self._participants.keys())
+        for r in rooms:
+            for p in self._participants.get(r, {}).values():
+                if p.get("sender_type") == "agent" and p.get("sender_name"):
+                    names.add(p["sender_name"])
+        return names
+
     async def broadcast(self, room_id: str, payload: dict) -> None:
         stale_connections: list[WebSocket] = []
 
