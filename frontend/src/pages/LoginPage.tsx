@@ -16,6 +16,10 @@ export function LoginPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
+    if (mode === "register" && password.length < 8) {
+      setError("密码长度至少需要 8 位，请重新输入");
+      return;
+    }
     setSubmitting(true);
     try {
       const payload = mode === "register"

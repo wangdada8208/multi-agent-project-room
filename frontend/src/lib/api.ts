@@ -109,7 +109,29 @@ export async function register(input: {
     method: "POST",
     body: JSON.stringify(input),
   });
-  if (!response.ok) throw new Error(await response.text());
+  if (!response.ok) {
+    const errorText = await response.text();
+    try {
+      const errorJson = JSON.parse(errorText);
+      if (Array.isArray(errorJson.detail)) {
+        const msgs = errorJson.detail.map((d: any) => {
+          if (d.loc && d.loc.includes("password")) {
+            return "密码长度至少需要 8 位，请重新输入";
+          }
+          if (d.loc && d.loc.includes("username")) {
+            return "用户名格式不符合要求";
+          }
+          return d.msg || "输入格式不符合要求";
+        });
+        throw new Error(msgs.join("；"));
+      } else if (typeof errorJson.detail === "string") {
+        throw new Error(errorJson.detail);
+      }
+    } catch (e) {
+      if (e instanceof Error && e.message !== errorText) throw e;
+    }
+    throw new Error(errorText);
+  }
   return response.json();
 }
 
