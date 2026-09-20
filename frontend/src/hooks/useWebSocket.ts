@@ -87,6 +87,11 @@ export function useWebSocket(roomId: string) {
 
     const connect = () => {
       clearReconnectTimer();
+      const token = localStorage.getItem("mapr-auth-token");
+      if (!token) {
+        setConnectionStatus("idle");
+        return;
+      }
       setConnectionStatus("connecting");
 
       const socket = new WebSocket(getWebSocketUrl(roomId));
@@ -109,9 +114,13 @@ export function useWebSocket(roomId: string) {
         catchUpMissedMessages();
       });
 
-      socket.addEventListener("close", () => {
+      socket.addEventListener("close", (event) => {
         if (disposed || socketRef.current !== socket) return;
         setConnectionStatus("closed");
+        if (event.code === 4001) {
+          // Authentication required; do not endlessly hammer the server
+          return;
+        }
         scheduleReconnect(socket);
       });
 
