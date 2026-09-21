@@ -128,3 +128,66 @@ async def test_trusted_runner_a2a_dialogue_cycle(client: AsyncClient, auth_heade
     )
     status_data2 = status_resp2.json()["result"]
     assert status_data2["current_turn"] == 2
+
+
+@pytest.mark.asyncio
+async def test_agent_message_distinct_sender_identity(client: AsyncClient, auth_headers: dict):
+    """Verify that agent messages are saved with distinct agent composite sender_id and not the human user_id."""
+    room_resp = await client.post(
+        "/api/v1/rooms",
+        json={"name": "Identity Room", "description": "test"},
+        headers=auth_headers,
+    )
+    room_id = room_resp.json()["room"]["id"]
+
+    # Start dialogue
+    d_resp = await client.post(
+        "/a2a/dialogue-rpc",
+        headers=auth_headers,
+        json={
+            "jsonrpc": "2.0",
+            "method": "dialogues/create",
+            "params": {
+                "room_id": room_id,
+                "initiator_agent": "Codex-1",
+                "participants": ["Codex-1", "Claude-1"],
+            },
+            "id": "id-create",
+        },
+    )
+    dialogue_id = d_resp.json()["result"]["dialogue_id"]
+
+    # Send dialogue message as agent
+    msg_resp = await client.post(
+        "/a2a/dialogue-rpc",
+        headers=auth_headers,
+        json={
+            "jsonrpc": "2.0",
+            "method": "dialogues/send",
+            "params": {
+                "dialogue_id": dialogue_id,
+                "room_id": room_id,
+                "sender_id": "agent_codex_1_custom",
+                "sender_name": "Codex-1",
+                "target_agent": "Claude-1",
+                "content": "我是 Codex-1，在线协作中。",
+            },
+            "id": "id-send",
+        },
+    )
+    assert msg_resp.status_code == 200
+
+    # Retrieve room messages
+    msgs_resp = await client.get(f"/api/v1/rooms/{room_id}/messages", headers=auth_headers)
+    assert msgs_resp.status_code == 200
+    messages = msgs_resp.json()["messages"]
+    agent_msg = next(m for m in messages if m["content"] == "我是 Codex-1，在线协作中。")
+
+    assert agent_msg["sender_type"] == "agent"
+    assert agent_msg["sender_name"] == "Codex-1"
+
+    # Agent sender_id must not collide with human user id
+    current_user_resp = await client.get("/api/v1/auth/me", headers=auth_headers)
+    human_user_id = current_user_resp.json()["user"]["id"]
+    assert agent_msg["sender_id"] != human_user_id
+    assert agent_msg["sender_id"] == "agent_codex_1_custom"

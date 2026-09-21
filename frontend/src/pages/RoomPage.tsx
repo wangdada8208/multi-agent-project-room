@@ -221,7 +221,7 @@ export function RoomPage() {
             </div>
           )}
           {messages.map((msg) => (
-            <MessageItem key={msg.id} message={msg} isOwn={msg.sender_id === (user?.id ?? "")} />
+            <MessageItem key={msg.id} message={msg} isOwn={msg.sender_type !== "agent" && msg.sender_id === (user?.id ?? "")} />
           ))}
         </div>
 

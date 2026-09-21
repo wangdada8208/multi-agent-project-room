@@ -192,7 +192,14 @@ async def handle_chat(websocket: WebSocket, room_id: str, token: str = Query(def
 
             # ── Chat message ──
             if msg_type == "message":
-                raw["sender_id"] = authenticated_user_id  # Force identity from token
+                sender_type = str(raw.get("sender_type") or authenticated_user_type).lower()
+                if sender_type == "agent":
+                    agent_name_slug = str(raw.get("sender_name") or "agent").lower().replace(" ", "_")
+                    raw["sender_id"] = f"agent_{agent_name_slug}_{authenticated_user_id}"
+                    raw["sender_type"] = "agent"
+                else:
+                    raw["sender_id"] = authenticated_user_id
+                    raw["sender_type"] = authenticated_user_type
                 participant = await connection_manager.identify(room_id, websocket, raw)
                 content = str(raw.get("content", "")).strip()
                 if not content:

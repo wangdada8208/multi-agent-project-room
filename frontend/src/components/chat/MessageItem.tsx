@@ -39,9 +39,10 @@ function renderContent(content: string) {
   });
 }
 
-export const MessageItem = memo(function MessageItem({ message, isOwn }: MessageItemProps) {
+export const MessageItem = memo(function MessageItem({ message, isOwn: rawIsOwn }: MessageItemProps) {
   const isSystem = message.msg_type === "system";
   const isAgent = message.sender_type === "agent";
+  const isOwn = !isAgent && rawIsOwn;
   const hasConsensus = message.msg_type === "consensus" || detectConsensus(message.content);
   const conflicts = message.msg_type === "conflict" ? [message.content] : detectConflicts(message.content);
 
@@ -71,7 +72,7 @@ export const MessageItem = memo(function MessageItem({ message, isOwn }: Message
       >
         <div className="msg-meta">
           <span className="msg-meta__name">
-            {isOwn ? "我" : message.sender_name || message.sender_id.slice(0, 8)}
+            {isAgent ? (message.sender_name || "Agent") : (isOwn ? "我" : message.sender_name || message.sender_id.slice(0, 8))}
             {isAgent && message.msg_type !== "text" && (
               <span className="msg-tag">{message.msg_type}</span>
             )}
