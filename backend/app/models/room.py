@@ -22,9 +22,15 @@ class Room(Base):
         String(36), ForeignKey("users.id"), nullable=True
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    transport: Mapped[str] = mapped_column(String(16), nullable=False, default="hub")
+    xmtp_group_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
+
+    def __init__(self, **kwargs):
+        kwargs.setdefault("transport", "hub")
+        super().__init__(**kwargs)
 
     def to_dict(self) -> dict:
         return {
@@ -33,5 +39,7 @@ class Room(Base):
             "description": self.description,
             "created_by": self.created_by,
             "is_active": self.is_active,
-            "created_at": self.created_at.isoformat(),
+            "transport": self.transport,
+            "xmtp_group_id": self.xmtp_group_id,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
         }
