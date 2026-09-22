@@ -16,3 +16,7 @@ frontend/vite.config.d.ts
 test_verify.db
 
 *.db
+*.db3
+*.db3-*
+workers/xmtp-member/node_modules/
+
