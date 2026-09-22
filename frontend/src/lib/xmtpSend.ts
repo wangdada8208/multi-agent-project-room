@@ -56,5 +56,5 @@ export async function sendXmtpMessage(options: {
   if (!conversation) {
     throw new Error(`Conversation ${options.groupId} not found`);
   }
-  await conversation.send(options.content);
+  await conversation.sendText(options.content);
 }

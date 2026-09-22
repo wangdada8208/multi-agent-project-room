@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { deliverOutgoing, routeOutgoing } from "./xmtpSend";
+import { describe, expect, it, vi } from "vitest";
+import { deliverOutgoing, routeOutgoing, sendXmtpMessage } from "./xmtpSend";
 
 describe("routeOutgoing", () => {
   it("keeps hub rooms on the websocket payload", () => {
@@ -45,5 +45,24 @@ describe("deliverOutgoing", () => {
     expect(result.delivered).toBe(true);
     expect(result.hubPayload).toBeNull();
     expect(seen).toEqual(["group-dev-1:只有成员能看"]);
+  });
+});
+
+describe("sendXmtpMessage", () => {
+  it("sends with sendText and does not call send", async () => {
+    const sendText = vi.fn(async (_text: string) => {});
+    const send = vi.fn(async (_text: string) => {});
+    const client = {
+      conversations: {
+        getConversationById: async () => ({ sendText, send }),
+      },
+    };
+    await sendXmtpMessage({
+      groupId: "group-dev-2",
+      content: "phase-send-text",
+      client,
+    });
+    expect(sendText).toHaveBeenCalledWith("phase-send-text");
+    expect(send).not.toHaveBeenCalled();
   });
 });
