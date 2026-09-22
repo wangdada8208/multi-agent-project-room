@@ -16,6 +16,7 @@ import { useAnalytics } from "../hooks/useAnalytics";
 import { fetchMessages, fetchAgents, fetchTasks, searchMessages, apiFetch } from "../lib/api";
 import { loadOrCreateInboxKey, createLocalXmtpClient } from "../lib/xmtpLocalIdentity";
 import { sendXmtpMessage, toLocalChatMessage } from "../lib/xmtpSend";
+import { memberIdentifier, assertWorkerAddress } from "../lib/xmtpGroup";
 import { useAuthStore } from "../stores/authStore";
 import { useChatStore } from "../stores/chatStore";
 import type { Room, SenderType } from "../types/chat";
@@ -89,7 +90,11 @@ export function RoomPage() {
         setXmtpClient(client);
 
         if (!roomQuery.data?.xmtp_group_id) {
+          const workerAddress = assertWorkerAddress(
+            import.meta.env.VITE_XMTP_WORKER_ADDRESS as string | undefined,
+          );
           const group = await client.conversations.createGroup([]);
+          await group.addMembersByIdentifiers([memberIdentifier(workerAddress)]);
           if (cancelled) return;
           const token = useAuthStore.getState().token ?? "";
           const res = await apiFetch(`/api/v1/rooms/${roomId}/xmtp-binding`, {
