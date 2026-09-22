@@ -11,9 +11,9 @@
 
 消息仍然经过投递服务器。服务器保存的是密文。
 
-现有 WebSocket 房间在字段 `transport=hub` 下保持明文，直到执行计划 Task 8 把新房间默认改成 `transport=xmtp`。旧行不会被改写成密文。
+用户房间的 `transport` 是 `xmtp`。`_agent_` 内部通道仍是 `transport=hub`。旧的用户明文房间不会被改写成密文；本地库里的那些房间已经删除。生产库未清理。
 
-调度上，`@` 叫醒和 `MessageLoop` 今天放在 Hub，是因为 Hub 看得到明文。加密房间的这两项要移到成员进程，按 `docs/superpowers/plans/2026-09-22-xmtp-e2e.md` 的 Task 6 执行。
+`MessageLoop` 仍在 Hub 源码里，服务于现有测试和 `_agent_` 通道。加密房间回不回复以成员进程为准，按 `docs/superpowers/plans/2026-09-23-member-local-loop.md` 执行。
 
 A2A 继续负责 Agent Card 和任务 RPC。它不承担这套加密群聊。
 

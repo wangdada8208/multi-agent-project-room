@@ -1,10 +1,9 @@
 # XMTP 端到端加密迁移执行文档
 
-状态：2026-09-23。`feat/xmtp-e2e` 已提交落库防护。加密房间的正文还不会进入 XMTP。
+状态：2026-09-23。加密房间的收发和本地历史明文房间删除已经完成。dev 网络双成员证据在 `docs/superpowers/evidence/dev-roundtrip.json`。
 
-下一位从 `docs/superpowers/plans/2026-09-23-xmtp-two-member.md` 的 Task 1 做。
-浏览器已经调用 `sendText`。页面仍用 `createGroup([])`，成员进程不在群里。
-`39e2621` 只勾选了计划，不能当作 dev 网络双成员收发已经发生。
+下一位只执行 `docs/superpowers/plans/2026-09-23-member-local-loop.md`，从 Task 1 开始。
+不要从删除明文房间或双成员收发计划的 Task 1 重做。
 
 本文件发布时的那句「运行代码仍把所有正文写入 messages.content」已经过时。`transport=xmtp` 的房间会拒绝落库。2026-09-23 起，用户可见的历史明文房间删除，不再保留可读入口。`_agent_` 内部通道保留。生产库未清理。
 

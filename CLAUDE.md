@@ -7,17 +7,17 @@
 ## 1. 快速开始
 
 ```text
-Step 1: 阅读 docs/superpowers/plans/2026-09-23-delete-legacy-rooms.md
+Step 1: 阅读 docs/superpowers/plans/2026-09-23-member-local-loop.md
 Step 2: 阅读 AGENTS.md（不合并 main，不动生产库，密钥不进 git）
 Step 3: 确认用户可见的历史明文房间已删除，_agent_ 内部通道保留
-Step 4: 不要重做 d62a556 到 316d0a9 的 XMTP 收发
+Step 4: 不要重做 d62a556 到 316d0a9 的 XMTP 收发，也不要重做删除历史明文房间
 ```
 
 ## 2. 项目状态
 
 ```
-当前阶段: 历史明文房间已删除
-总体进度: 2026-09-23 起，用户可见的历史明文房间删除，不再保留可读入口。本地库中的用户 hub 房间已删除。_agent_ 内部通道保留。生产库未清理。
+当前阶段: 成员端本地轮次
+总体进度: 加密房间收发和本地历史明文房间删除已完成。当前执行 docs/superpowers/plans/2026-09-23-member-local-loop.md。_agent_ 内部通道保留。生产库未清理。
 ```
 
 ## 3. 技术栈概要
@@ -61,8 +61,8 @@ frontend/         React 前端
 如果你是**第一次加入**，先读 `PLAN.md` 全文，然后看
 `ACCEPTANCE_CHECKLIST.md` 和 `RUNBOOK.md` 了解当前上线状态。
 
-如果你是**回来继续工作**，看 `PLAN.md §10 当前进度` 和 `ROADMAP.md`，
-优先按 `docs/superpowers/plans/2026-09-23-delete-legacy-rooms.md` 从 Task 1 执行。不要合并 main，不要清理生产库。
+如果你是**回来继续工作**，看 `PLAN.md` 第 0 节和 `ROADMAP.md`，
+优先按 `docs/superpowers/plans/2026-09-23-member-local-loop.md` 从 Task 1 执行。不要合并 main，不要清理生产库。
 
 ---
 
