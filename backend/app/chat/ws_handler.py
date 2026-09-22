@@ -129,6 +129,15 @@ async def persist_incoming_message(
     async with async_session() as db:
         room = await db.get(Room, room_id)
         if room is None:
+            if not room_id.startswith("_agent_"):
+                room = Room(
+                    id=room_id,
+                    name=f"Room {room_id[:8]}",
+                    transport="xmtp",
+                )
+                db.add(room)
+                await db.commit()
+                return None
             room = await chat_service.get_or_create_room(
                 db, room_id, name=f"Room {room_id[:8]}"
             )

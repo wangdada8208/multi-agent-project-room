@@ -126,3 +126,28 @@ async def test_search_xmtp_room_has_no_body(client, auth_headers, db):
     body = found.json()
     assert body["results"] == []
     assert body["reason"] == "body_not_on_hub"
+
+
+@pytest.mark.asyncio
+async def test_unknown_room_does_not_store_plaintext(db):
+    from app.chat.ws_handler import persist_incoming_message
+    from app.models.room import Room
+
+    user_id = str(uuid.uuid4())
+    room_id = str(uuid.uuid4())
+    db.add(User(id=user_id, username="stranger", display_name="Stranger", user_type="human"))
+    await db.commit()
+
+    result = await persist_incoming_message(
+        room_id=room_id,
+        sender_id=user_id,
+        sender_type="human",
+        sender_name="Stranger",
+        content="不能因临时建房而落库",
+        msg_type="text",
+        parent_id=None,
+    )
+    assert result is None
+    room = await db.get(Room, room_id)
+    assert room is not None
+    assert room.transport == "xmtp"
