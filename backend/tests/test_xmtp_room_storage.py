@@ -161,3 +161,14 @@ async def test_create_room_rejects_unknown_transport(client, auth_headers):
         json={"name": "坏通道", "description": "", "transport": "plaintext"},
     )
     assert rejected.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_create_room_rejects_hub_transport(client, auth_headers):
+    rejected = await client.post(
+        "/api/v1/rooms",
+        headers=auth_headers,
+        json={"name": "旧房间", "description": "", "transport": "hub"},
+    )
+    assert rejected.status_code == 422
+

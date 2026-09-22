@@ -20,7 +20,7 @@ router = APIRouter(prefix="/api/v1/rooms", tags=["rooms"])
 class CreateRoomRequest(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     description: str = ""
-    transport: Literal["hub", "xmtp"] = "xmtp"
+    transport: Literal["xmtp"] = "xmtp"
 
 
 @router.get("")
