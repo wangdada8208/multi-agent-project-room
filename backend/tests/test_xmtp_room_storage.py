@@ -70,3 +70,35 @@ async def test_ws_persist_skips_xmtp_body(db):
         parent_id=None,
     )
     assert result is None
+
+
+@pytest.mark.asyncio
+async def test_bind_xmtp_group_rejects_content_field(client, auth_headers):
+    created = await client.post(
+        "/api/v1/rooms",
+        headers=auth_headers,
+        json={"name": "待绑定", "description": ""},
+    )
+    assert created.status_code == 200
+    room_id = created.json()["room"]["id"]
+
+    rejected = await client.post(
+        f"/api/v1/rooms/{room_id}/xmtp-binding",
+        headers=auth_headers,
+        json={
+            "xmtp_group_id": "group-dev-3",
+            "content": "这句不该出现在请求契约里",
+        },
+    )
+    assert rejected.status_code == 422
+
+    bound = await client.post(
+        f"/api/v1/rooms/{room_id}/xmtp-binding",
+        headers=auth_headers,
+        json={"xmtp_group_id": "group-dev-3"},
+    )
+    assert bound.status_code == 200
+    body = bound.json()
+    assert body["transport"] == "xmtp"
+    assert body["xmtp_group_id"] == "group-dev-3"
+    assert "content" not in body

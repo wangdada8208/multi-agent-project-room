@@ -163,3 +163,32 @@ async def get_shared_room_messages(
         "room_name": room.name if room else "Room",
         "messages": [m.to_dict() for m in messages],
     }
+
+
+class XmtpBindingRequest(BaseModel):
+    model_config = {"extra": "forbid"}
+    xmtp_group_id: str = Field(min_length=1, max_length=128)
+
+
+@router.post("/{room_id}/xmtp-binding")
+async def bind_xmtp_group(
+    room_id: str,
+    payload: XmtpBindingRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    from app.api.permissions import require_role
+
+    await require_role(room_id, current_user, db, min_role="member")
+
+    room = await db.get(Room, room_id)
+    if room is None:
+        raise HTTPException(status_code=404, detail="Room not found")
+
+    room.transport = "xmtp"
+    room.xmtp_group_id = payload.xmtp_group_id
+    db.add(room)
+    await db.commit()
+    await db.refresh(room)
+    return room.to_dict()
+
