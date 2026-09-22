@@ -55,7 +55,7 @@ async def test_rooms_require_auth(client: AsyncClient):
 async def test_message_service(db: AsyncSession):
     """Test chat service functions directly."""
     user = User(id=str(uuid.uuid4()), username="testuser", display_name="Test")
-    room = Room(name="Service Test")
+    room = Room(name="Service Test", transport="hub")
     db.add(user)
     db.add(room)
     await db.commit()
@@ -81,7 +81,7 @@ async def test_message_types(db: AsyncSession):
     """All message types should be saveable."""
     import uuid
     user = User(id=str(uuid.uuid4()), username="msgtester", display_name="MsgTester")
-    room = Room(name="Msg Types")
+    room = Room(name="Msg Types", transport="hub")
     db.add(user)
     db.add(room)
     await db.commit()

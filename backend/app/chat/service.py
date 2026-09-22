@@ -166,6 +166,7 @@ async def get_or_create_room(
         name=name,
         description=description,
         is_active=not is_agent_channel,
+        transport="hub" if is_agent_channel else "xmtp",
     )
     db.add(room)
     await db.commit()

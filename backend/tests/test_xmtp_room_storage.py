@@ -1,20 +1,33 @@
 import uuid
 import pytest
 from app.chat.plaintext_guard import PlaintextStorageForbidden
-from app.chat.service import save_message
+from app.chat.service import get_or_create_room, save_message
 from app.models.room import Room
 from app.models.user import User
 
 
-def test_room_transport_defaults_to_hub():
-    room = Room(name="旧房间")
-    assert room.transport == "hub"
+def test_room_transport_defaults_to_xmtp():
+    room = Room(name="新房间")
+    assert room.transport == "xmtp"
     assert room.xmtp_group_id is None
     payload = room.to_dict()
-    assert payload["transport"] == "hub"
+    assert payload["transport"] == "xmtp"
     assert payload["xmtp_group_id"] is None
     assert "wallet" not in payload
     assert "key" not in payload
+
+
+@pytest.mark.asyncio
+async def test_get_or_create_user_room_is_xmtp(db):
+    room = await get_or_create_room(db, "visible-room", name="可见房间")
+    assert room.transport == "xmtp"
+
+
+@pytest.mark.asyncio
+async def test_get_or_create_agent_channel_stays_hub(db):
+    room = await get_or_create_room(db, "_agent_codex", name="通道")
+    assert room.transport == "hub"
+    assert room.is_active is False
 
 
 @pytest.mark.asyncio
