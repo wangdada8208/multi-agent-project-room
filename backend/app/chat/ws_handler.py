@@ -115,6 +115,37 @@ async def _check_mentions_and_forward(
         })
 
 
+async def persist_incoming_message(
+    room_id: str,
+    sender_id: str,
+    sender_type: str,
+    sender_name: str | None,
+    content: str,
+    msg_type: str,
+    parent_id: str | None,
+):
+    from app.chat.plaintext_guard import PlaintextStorageForbidden
+
+    async with async_session() as db:
+        room = await db.get(Room, room_id)
+        if room is None:
+            room = await chat_service.get_or_create_room(
+                db, room_id, name=f"Room {room_id[:8]}"
+            )
+        if room.transport == "xmtp":
+            return None
+        return await chat_service.save_message(
+            db=db,
+            room_id=room_id,
+            sender_id=sender_id,
+            sender_type=sender_type,
+            sender_name=sender_name,
+            content=content,
+            msg_type=msg_type,
+            parent_id=parent_id,
+        )
+
+
 async def handle_chat(websocket: WebSocket, room_id: str, token: str = Query(default="")) -> None:
     """WebSocket endpoint for a chat room.
 
@@ -211,23 +242,20 @@ async def handle_chat(websocket: WebSocket, room_id: str, token: str = Query(def
                 # Agent responses include target_room for cross-room routing
                 target_room = raw.get("target_room") or room_id
 
-                async with async_session() as db:
-                    room = await db.get(Room, target_room)
-                    if room is None:
-                        room = await chat_service.get_or_create_room(
-                            db, target_room, name=f"Room {target_room[:8]}"
-                        )
-
-                    message = await chat_service.save_message(
-                        db=db,
-                        room_id=target_room,
-                        sender_id=str(raw.get("sender_id", authenticated_user_id)),
-                        sender_type=raw.get("sender_type", authenticated_user_type),
-                        sender_name=raw.get("sender_name"),
-                        content=content,
-                        msg_type=raw.get("msg_type", "text"),
-                        parent_id=raw.get("parent_id"),
+                message = await persist_incoming_message(
+                    room_id=target_room,
+                    sender_id=str(raw.get("sender_id", authenticated_user_id)),
+                    sender_type=raw.get("sender_type", authenticated_user_type),
+                    sender_name=raw.get("sender_name"),
+                    content=content,
+                    msg_type=raw.get("msg_type", "text"),
+                    parent_id=raw.get("parent_id"),
+                )
+                if message is None:
+                    await websocket.send_json(
+                        {"type": "error", "code": "body_not_on_hub", "message": "加密房间的正文不经过 Hub"}
                     )
+                    continue
 
                 await connection_manager.broadcast(
                     target_room,
