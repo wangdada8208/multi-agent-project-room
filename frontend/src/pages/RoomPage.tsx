@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
+import type { Client } from "@xmtp/browser-sdk";
 import { useWebSocket } from "../hooks/useWebSocket";
 import { SidePanel } from "../components/panels/SidePanel";
 import { MembersPanel } from "../components/panels/MembersPanel";
@@ -13,6 +14,8 @@ import { ChatInput } from "../components/chat/ChatInput";
 import { useNotification } from "../hooks/useNotification";
 import { useAnalytics } from "../hooks/useAnalytics";
 import { fetchMessages, fetchAgents, fetchTasks, searchMessages, apiFetch } from "../lib/api";
+import { loadOrCreateInboxKey, createLocalXmtpClient } from "../lib/xmtpLocalIdentity";
+import { sendXmtpMessage, toLocalChatMessage } from "../lib/xmtpSend";
 import { useAuthStore } from "../stores/authStore";
 import { useChatStore } from "../stores/chatStore";
 import type { Room, SenderType } from "../types/chat";
@@ -47,24 +50,110 @@ export function RoomPage() {
   const user = useAuthStore((state) => state.user);
   const messages = useChatStore((state) => state.messages);
   const setMessages = useChatStore((state) => state.setMessages);
+  const addMessage = useChatStore((state) => state.addMessage);
   const connectionStatus = useChatStore((state) => state.connectionStatus);
   const participants = useChatStore((state) => state.participants);
   const tasks = useChatStore((state) => state.tasks);
   const setTasks = useChatStore((state) => state.setTasks);
 
+  const [xmtpClient, setXmtpClient] = useState<Client<any> | null>(null);
+  const isEncrypted = roomQuery.data?.transport === "xmtp";
+
   useEffect(() => {
     track("room_enter", roomId);
   }, [roomId, track]);
 
-  // Fetch messages
+  // Fetch messages (only for non-xmtp rooms)
   const messagesQuery = useQuery({
     queryKey: ["rooms", roomId, "messages"],
     queryFn: () => fetchMessages(roomId),
-    enabled: !!roomId,
+    enabled: !!roomId && !isEncrypted,
   });
   useEffect(() => {
     if (messagesQuery.data) setMessages(messagesQuery.data);
   }, [messagesQuery.data, setMessages]);
+
+  // Initialize XMTP client for encrypted rooms and bind group if needed
+  useEffect(() => {
+    if (!isEncrypted) return;
+    let cancelled = false;
+
+    async function initXmtp() {
+      try {
+        const key = loadOrCreateInboxKey();
+        const client = await createLocalXmtpClient(key);
+        if (cancelled) {
+          client.close();
+          return;
+        }
+        setXmtpClient(client);
+
+        if (!roomQuery.data?.xmtp_group_id) {
+          const group = await client.conversations.createGroup([]);
+          if (cancelled) return;
+          const token = useAuthStore.getState().token ?? "";
+          const res = await apiFetch(`/api/v1/rooms/${roomId}/xmtp-binding`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ xmtp_group_id: group.id }),
+          });
+          if (res.ok) {
+            void roomQuery.refetch();
+          }
+        }
+      } catch (err) {
+        console.error("Failed to initialize XMTP:", err instanceof Error ? err.message : "unknown");
+      }
+    }
+
+    void initXmtp();
+    return () => {
+      cancelled = true;
+    };
+  }, [isEncrypted, roomQuery.data?.xmtp_group_id, roomId]);
+
+  // Stream messages from XMTP group
+  useEffect(() => {
+    if (!xmtpClient || !isEncrypted) return;
+    const targetGroupId = roomQuery.data?.xmtp_group_id;
+    let cancelled = false;
+
+    async function listenStream() {
+      try {
+        const stream = await xmtpClient!.conversations.streamAllMessages();
+        for await (const message of stream) {
+          if (cancelled) break;
+          if (targetGroupId && message.conversationId !== targetGroupId) continue;
+          if (xmtpClient?.inboxId && message.senderInboxId === xmtpClient.inboxId) {
+            continue;
+          }
+          if (typeof message.content === "string") {
+            addMessage(
+              toLocalChatMessage({
+                id: message.id,
+                roomId,
+                content: message.content,
+                senderId: message.senderInboxId,
+                senderName: `Member (${message.senderInboxId.slice(0, 6)}...)`,
+                senderType: "agent",
+                createdAt: message.sentAt ? message.sentAt.toISOString() : undefined,
+              }),
+            );
+          }
+        }
+      } catch {
+        // Stream aborted or network closed
+      }
+    }
+
+    void listenStream();
+    return () => {
+      cancelled = true;
+    };
+  }, [xmtpClient, isEncrypted, roomQuery.data?.xmtp_group_id, roomId, addMessage]);
 
   // Fetch tasks
   const tasksQuery = useQuery({
@@ -104,7 +193,16 @@ export function RoomPage() {
 
   const handleSend = (content: string, senderType: SenderType) => {
     track("message_send", roomId, { sender_type: senderType });
-    return sendMessage({ content, senderId: user?.id ?? "anon", senderType });
+    return sendMessage({
+      content,
+      senderId: user?.id ?? "anon",
+      senderType,
+      transport: roomQuery.data?.transport,
+      xmtpGroupId: roomQuery.data?.xmtp_group_id,
+      sendToXmtp: xmtpClient
+        ? (groupId, text) => sendXmtpMessage({ groupId, content: text, client: xmtpClient })
+        : undefined,
+    });
   };
 
   async function handleShare() {

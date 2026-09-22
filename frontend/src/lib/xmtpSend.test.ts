@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { deliverOutgoing, routeOutgoing, sendXmtpMessage } from "./xmtpSend";
+import { deliverOutgoing, routeOutgoing, sendXmtpMessage, toLocalChatMessage } from "./xmtpSend";
 
 describe("routeOutgoing", () => {
   it("keeps hub rooms on the websocket payload", () => {
@@ -64,5 +64,19 @@ describe("sendXmtpMessage", () => {
     });
     expect(sendText).toHaveBeenCalledWith("phase-send-text");
     expect(send).not.toHaveBeenCalled();
+  });
+});
+
+describe("toLocalChatMessage", () => {
+  it("builds a local chat message without a hub id", () => {
+    const message = toLocalChatMessage({
+      roomId: "room-1",
+      content: "成员端可见",
+      senderId: "me",
+      senderName: "我",
+    });
+    expect(message.room_id).toBe("room-1");
+    expect(message.content).toBe("成员端可见");
+    expect(message.id.length).toBeGreaterThan(0);
   });
 });

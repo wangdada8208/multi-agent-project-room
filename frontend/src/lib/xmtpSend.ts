@@ -1,3 +1,5 @@
+import type { ChatMessage, SenderType } from "../types/chat";
+
 export interface RouteOutgoingInput {
   transport?: string;
   content: string;
@@ -57,4 +59,31 @@ export async function sendXmtpMessage(options: {
     throw new Error(`Conversation ${options.groupId} not found`);
   }
   await conversation.sendText(options.content);
+}
+
+export function toLocalChatMessage(input: {
+  roomId: string;
+  content: string;
+  senderId: string;
+  senderName: string;
+  senderType?: SenderType;
+  id?: string;
+  createdAt?: string;
+}): ChatMessage {
+  const genId = () => {
+    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+      return crypto.randomUUID();
+    }
+    return `msg-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  };
+  return {
+    id: input.id ?? genId(),
+    room_id: input.roomId,
+    sender_id: input.senderId,
+    sender_type: input.senderType ?? "human",
+    sender_name: input.senderName,
+    msg_type: "text",
+    content: input.content,
+    created_at: input.createdAt ?? new Date().toISOString(),
+  };
 }

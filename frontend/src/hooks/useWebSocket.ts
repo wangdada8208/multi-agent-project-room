@@ -4,7 +4,7 @@ import type { ChatMessage, MessageType, RoomSocketEvent, SenderType } from "../t
 
 import { useAuthStore } from "../stores/authStore";
 import { websocketUrl, apiFetch } from "../lib/api";
-import { deliverOutgoing } from "../lib/xmtpSend";
+import { deliverOutgoing, toLocalChatMessage } from "../lib/xmtpSend";
 
 interface SendMessageInput {
   content: string;
@@ -80,6 +80,7 @@ export function useWebSocket(roomId: string, transport: string = "hub") {
     };
 
     const catchUpMissedMessages = async () => {
+      if (transport === "xmtp") return;
       const since = lastDisconnectRef.current;
       if (!since) return; // First connect, no gap to fill
       const missed = await fetchMissedMessages(roomId, since);
@@ -205,6 +206,8 @@ export function useWebSocket(roomId: string, transport: string = "hub") {
 
   const sendMessage = useCallback(async (input: SendMessageInput): Promise<boolean> => {
     const socket = socketRef.current;
+    const displayName = useAuthStore.getState().displayName;
+    const user = useAuthStore.getState().user;
 
     const delivery = await deliverOutgoing({
       transport: input.transport ?? transport,
@@ -215,15 +218,23 @@ export function useWebSocket(roomId: string, transport: string = "hub") {
 
     if (delivery.hubPayload === null) {
       // Encrypted room messages are delivered via XMTP, not Hub WebSocket
+      if (delivery.delivered) {
+        addMessage(
+          toLocalChatMessage({
+            roomId,
+            content: input.content,
+            senderId: user?.id ?? input.senderId,
+            senderName: user?.display_name ?? displayName,
+            senderType: input.senderType,
+          }),
+        );
+      }
       return delivery.delivered;
     }
 
     if (!socket || socket.readyState !== WebSocket.OPEN) {
       return false;
     }
-
-    const displayName = useAuthStore.getState().displayName;
-    const user = useAuthStore.getState().user;
 
     socket.send(
       JSON.stringify({
