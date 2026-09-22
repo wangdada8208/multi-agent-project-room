@@ -135,7 +135,7 @@ async def test_agent_message_distinct_sender_identity(client: AsyncClient, auth_
     """Verify that agent messages are saved with distinct agent composite sender_id and not the human user_id."""
     room_resp = await client.post(
         "/api/v1/rooms",
-        json={"name": "Identity Room", "description": "test"},
+        json={"name": "Identity Room", "description": "test", "transport": "hub"},
         headers=auth_headers,
     )
     room_id = room_resp.json()["room"]["id"]

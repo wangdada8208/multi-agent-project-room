@@ -19,6 +19,7 @@ router = APIRouter(prefix="/api/v1/rooms", tags=["rooms"])
 class CreateRoomRequest(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     description: str = ""
+    transport: str = "xmtp"
 
 
 @router.get("")
@@ -57,6 +58,7 @@ async def create_room(
         name=payload.name,
         description=payload.description,
         created_by=current_user.id,
+        transport=payload.transport,
     )
     db.add(room)
     await db.flush()

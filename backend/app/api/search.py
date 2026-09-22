@@ -21,6 +21,17 @@ async def search_messages(
     current_user: User = Depends(get_current_user),
 ) -> dict:
     """Full-text search messages in a room."""
+    from app.models.room import Room
+
+    room = await db.get(Room, room_id)
+    if room is not None and room.transport == "xmtp":
+        return {
+            "results": [],
+            "reason": "body_not_on_hub",
+            "query": q,
+            "total": 0,
+        }
+
     pattern = f"%{q}%"
     stmt = (
         select(Message)

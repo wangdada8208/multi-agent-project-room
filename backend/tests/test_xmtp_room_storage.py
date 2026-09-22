@@ -102,3 +102,27 @@ async def test_bind_xmtp_group_rejects_content_field(client, auth_headers):
     assert body["transport"] == "xmtp"
     assert body["xmtp_group_id"] == "group-dev-3"
     assert "content" not in body
+
+
+@pytest.mark.asyncio
+async def test_search_xmtp_room_has_no_body(client, auth_headers, db):
+    created = await client.post(
+        "/api/v1/rooms",
+        headers=auth_headers,
+        json={"name": "新加密房间", "description": ""},
+    )
+    room_id = created.json()["room"]["id"]
+    await client.post(
+        f"/api/v1/rooms/{room_id}/xmtp-binding",
+        headers=auth_headers,
+        json={"xmtp_group_id": "group-dev-8"},
+    )
+    found = await client.get(
+        f"/api/v1/rooms/{room_id}/messages/search",
+        headers=auth_headers,
+        params={"q": "任意正文"},
+    )
+    assert found.status_code == 200
+    body = found.json()
+    assert body["results"] == []
+    assert body["reason"] == "body_not_on_hub"
