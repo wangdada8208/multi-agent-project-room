@@ -1,5 +1,9 @@
+import uuid
 import pytest
+from app.chat.plaintext_guard import PlaintextStorageForbidden
+from app.chat.service import save_message
 from app.models.room import Room
+from app.models.user import User
 
 
 def test_room_transport_defaults_to_hub():
@@ -11,3 +15,31 @@ def test_room_transport_defaults_to_hub():
     assert payload["xmtp_group_id"] is None
     assert "wallet" not in payload
     assert "key" not in payload
+
+
+@pytest.mark.asyncio
+async def test_xmtp_room_rejects_message_body(db):
+    user = User(
+        id=str(uuid.uuid4()),
+        username="owner",
+        display_name="Owner",
+        user_type="human",
+    )
+    room = Room(
+        id=str(uuid.uuid4()),
+        name="加密房间",
+        transport="xmtp",
+        xmtp_group_id="group-dev-1",
+        created_by=user.id,
+    )
+    db.add(user)
+    db.add(room)
+    await db.commit()
+
+    with pytest.raises(PlaintextStorageForbidden):
+        await save_message(
+            db=db,
+            room_id=room.id,
+            sender_id=user.id,
+            content="这句正文不能进 Hub",
+        )

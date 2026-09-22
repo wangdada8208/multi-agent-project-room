@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 logger = logging.getLogger(__name__)
 
 from app.chat.models import Message
+from app.chat.plaintext_guard import PlaintextStorageForbidden
 from app.config import get_settings
 from app.models.room import Room
 from app.models.user import User
@@ -73,6 +74,10 @@ async def save_message(
     parent_id: str | None = None,
 ) -> Message:
     """Persist a message and return it."""
+    room = await db.get(Room, room_id)
+    if room is not None and room.transport == "xmtp":
+        raise PlaintextStorageForbidden(room_id)
+
     await cleanup_expired_messages(db)
 
     user = await db.get(User, sender_id)
