@@ -1,7 +1,10 @@
 import { Agent } from "@xmtp/agent-sdk";
 import { buildBindingPayload } from "./binding.ts";
+import { decideReply } from "./turnPolicy.ts";
 
 export interface MemberConfig {
+  selfName?: string;
+  participants?: string[];
   xmtpWalletKey?: string;
   xmtpDbEncryptionKey?: string;
   xmtpEnv?: string;
@@ -18,7 +21,15 @@ export function loadConfigFromEnv(): MemberConfig {
     .map((s) => s.trim())
     .filter(Boolean);
 
+  const participantsRaw = process.env.XMTP_PARTICIPANTS || "";
+  const participants = participantsRaw
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+
   return {
+    selfName: process.env.XMTP_SELF_NAME || "Codex",
+    participants: participants.length > 0 ? participants : ["Codex", "Claude"],
     xmtpWalletKey: process.env.XMTP_WALLET_KEY,
     xmtpDbEncryptionKey: process.env.XMTP_DB_ENCRYPTION_KEY,
     xmtpEnv: process.env.XMTP_ENV || "dev",
@@ -54,8 +65,36 @@ export async function bindGroupToHub(
 
 export async function startMember(): Promise<void> {
   const config = loadConfigFromEnv();
-
   const agent = await Agent.createFromEnv();
+
+  let turnIndex = 0;
+
+  agent.on("text", async (ctx: any) => {
+    const text =
+      typeof ctx.message?.content === "string"
+        ? ctx.message.content
+        : ctx.message?.content?.text || "";
+
+    const decision = decideReply({
+      text,
+      selfName: config.selfName || "Codex",
+      participants: config.participants || ["Codex", "Claude"],
+      turnIndex,
+    });
+
+    turnIndex++;
+
+    if (!decision.reply) {
+      return;
+    }
+
+    const placeholderReply = `收到，本轮由 ${config.selfName || "Codex"} 处理。`;
+    if (typeof ctx.sendText === "function") {
+      await ctx.sendText(placeholderReply);
+    } else if (ctx.conversation && typeof ctx.conversation.sendText === "function") {
+      await ctx.conversation.sendText(placeholderReply);
+    }
+  });
 
   if (
     config.hubBaseUrl &&
