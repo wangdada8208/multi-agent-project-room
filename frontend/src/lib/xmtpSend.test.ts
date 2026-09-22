@@ -2,15 +2,6 @@ import { describe, expect, it, vi } from "vitest";
 import { deliverOutgoing, routeOutgoing, sendXmtpMessage, toLocalChatMessage } from "./xmtpSend";
 
 describe("routeOutgoing", () => {
-  it("keeps hub rooms on the websocket payload", () => {
-    const route = routeOutgoing({
-      transport: "hub",
-      content: "hello",
-    });
-    expect(route.channel).toBe("hub");
-    expect(route.hubPayload?.content).toBe("hello");
-  });
-
   it("does not put xmtp room text into the hub payload", () => {
     const route = routeOutgoing({
       transport: "xmtp",
@@ -22,6 +13,15 @@ describe("routeOutgoing", () => {
 });
 
 describe("deliverOutgoing", () => {
+  it("treats a missing transport as not deliverable on the hub", async () => {
+    const result = await deliverOutgoing({
+      transport: "hub",
+      content: "旧明文",
+      xmtpGroupId: null,
+    });
+    expect(result.delivered).toBe(false);
+    expect(result.hubPayload).toBeNull();
+  });
   it("does not report success when the xmtp sender is missing", async () => {
     const result = await deliverOutgoing({
       transport: "xmtp",

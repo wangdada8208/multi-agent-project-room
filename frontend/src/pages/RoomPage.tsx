@@ -250,11 +250,6 @@ export function RoomPage() {
           <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
             <span className="chat-area__title">
               {roomQuery.data?.name || "房间"}
-              {roomQuery.data?.transport === "hub" && (
-                <span style={{ fontSize: 12, fontWeight: "normal", marginLeft: 8, color: "#f59e0b" }}>
-                  历史明文房间
-                </span>
-              )}
             </span>
             <span
               style={{

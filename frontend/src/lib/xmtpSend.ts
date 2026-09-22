@@ -11,18 +11,9 @@ export interface RouteOutgoingResult {
 }
 
 export function routeOutgoing(input: RouteOutgoingInput): RouteOutgoingResult {
-  if (input.transport === "xmtp") {
-    return {
-      channel: "xmtp",
-      hubPayload: null,
-    };
-  }
-
   return {
-    channel: "hub",
-    hubPayload: {
-      content: input.content,
-    },
+    channel: "xmtp",
+    hubPayload: null,
   };
 }
 
@@ -32,6 +23,9 @@ export async function deliverOutgoing(input: {
   xmtpGroupId?: string | null;
   sendToXmtp?: (groupId: string, content: string) => Promise<void>;
 }): Promise<{ delivered: boolean; hubPayload: { content: string } | null }> {
+  if (input.transport !== "xmtp") {
+    return { delivered: false, hubPayload: null };
+  }
   const route = routeOutgoing({
     transport: input.transport,
     content: input.content,

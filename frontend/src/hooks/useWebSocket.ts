@@ -41,7 +41,7 @@ async function fetchMissedMessages(roomId: string, afterTimestamp: string | null
   }
 }
 
-export function useWebSocket(roomId: string, transport: string = "hub") {
+export function useWebSocket(roomId: string, transport: string = "xmtp") {
   const socketRef = useRef<WebSocket | null>(null);
   const reconnectTimerRef = useRef<number | null>(null);
   const reconnectAttemptRef = useRef(0);
