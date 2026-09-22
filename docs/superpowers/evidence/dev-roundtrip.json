@@ -1,0 +1,11 @@
+{
+  "checked_at": "2026-09-22T17:46:24.601Z",
+  "env": "dev",
+  "group_id": "83daabb2dd40b35da1df5b19116838b6",
+  "probe_name": "member-send-dev-ping",
+  "probe_received_by_peer": true,
+  "reply_received_by_sender": true,
+  "hub_plaintext_count": 0,
+  "messages_table_present": true,
+  "hub_database": "agent_room.db"
+}
