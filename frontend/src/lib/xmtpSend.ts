@@ -24,6 +24,26 @@ export function routeOutgoing(input: RouteOutgoingInput): RouteOutgoingResult {
   };
 }
 
+export async function deliverOutgoing(input: {
+  transport?: string;
+  content: string;
+  xmtpGroupId?: string | null;
+  sendToXmtp?: (groupId: string, content: string) => Promise<void>;
+}): Promise<{ delivered: boolean; hubPayload: { content: string } | null }> {
+  const route = routeOutgoing({
+    transport: input.transport,
+    content: input.content,
+  });
+  if (route.hubPayload) {
+    return { delivered: true, hubPayload: route.hubPayload };
+  }
+  if (!input.xmtpGroupId || !input.sendToXmtp) {
+    return { delivered: false, hubPayload: null };
+  }
+  await input.sendToXmtp(input.xmtpGroupId, input.content);
+  return { delivered: true, hubPayload: null };
+}
+
 export async function sendXmtpMessage(options: {
   groupId: string;
   content: string;

@@ -4,7 +4,7 @@ import type { SenderType } from "../../types/chat";
 interface ChatInputProps {
   disabled: boolean;
   onlineAgents: string[];
-  onSend: (content: string, senderType: SenderType) => boolean;
+  onSend: (content: string, senderType: SenderType) => boolean | Promise<boolean>;
 }
 
 export function ChatInput({ disabled, onlineAgents, onSend }: ChatInputProps) {
@@ -22,7 +22,10 @@ export function ChatInput({ disabled, onlineAgents, onSend }: ChatInputProps) {
 
   const submit = () => {
     if (!text.trim() || disabled) return;
-    if (onSend(text.trim(), "human")) setText("");
+    const pending = text.trim();
+    void Promise.resolve(onSend(pending, "human")).then((ok) => {
+      if (ok) setText("");
+    });
   };
 
   return (

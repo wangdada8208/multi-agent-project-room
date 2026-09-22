@@ -4,7 +4,7 @@ import type { ChatMessage, MessageType, RoomSocketEvent, SenderType } from "../t
 
 import { useAuthStore } from "../stores/authStore";
 import { websocketUrl, apiFetch } from "../lib/api";
-import { routeOutgoing } from "../lib/xmtpSend";
+import { deliverOutgoing } from "../lib/xmtpSend";
 
 interface SendMessageInput {
   content: string;
@@ -12,6 +12,8 @@ interface SendMessageInput {
   senderType: SenderType;
   msgType?: MessageType;
   transport?: string;
+  xmtpGroupId?: string | null;
+  sendToXmtp?: (groupId: string, content: string) => Promise<void>;
 }
 
 function getWebSocketUrl(roomId: string): string {
@@ -201,17 +203,19 @@ export function useWebSocket(roomId: string, transport: string = "hub") {
     };
   }, [addMessage, markTyping, removeParticipant, roomId, setConnectionStatus, setParticipants, upsertParticipant, upsertTask]);
 
-  const sendMessage = useCallback((input: SendMessageInput) => {
+  const sendMessage = useCallback(async (input: SendMessageInput): Promise<boolean> => {
     const socket = socketRef.current;
 
-    const route = routeOutgoing({
+    const delivery = await deliverOutgoing({
       transport: input.transport ?? transport,
       content: input.content,
+      xmtpGroupId: input.xmtpGroupId,
+      sendToXmtp: input.sendToXmtp,
     });
 
-    if (route.hubPayload === null) {
-      // Encrypted room messages are not sent through Hub WebSocket
-      return true;
+    if (delivery.hubPayload === null) {
+      // Encrypted room messages are delivered via XMTP, not Hub WebSocket
+      return delivery.delivered;
     }
 
     if (!socket || socket.readyState !== WebSocket.OPEN) {
@@ -228,7 +232,7 @@ export function useWebSocket(roomId: string, transport: string = "hub") {
         sender_type: input.senderType,
         sender_name: user?.display_name ?? displayName,
         msg_type: input.msgType ?? "text",
-        content: route.hubPayload.content,
+        content: delivery.hubPayload.content,
       }),
     );
 
