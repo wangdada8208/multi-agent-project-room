@@ -29,7 +29,19 @@ export function RoomPage() {
   const params = useParams();
   const roomId = params.roomId ?? "demo-room";
 
-  const { sendMessage } = useWebSocket(roomId);
+  // Fetch room info
+  const roomQuery = useQuery({
+    queryKey: ["rooms", roomId],
+    queryFn: async () => {
+      const res = await apiFetch(`/api/v1/rooms/${roomId}`);
+      if (!res.ok) return null;
+      const data = await res.json();
+      return data.room as Room;
+    },
+    enabled: !!roomId,
+  });
+
+  const { sendMessage } = useWebSocket(roomId, roomQuery.data?.transport);
   const { enabled: notifEnabled, requestPermission: requestNotifPermission } = useNotification(roomId);
   const { track } = useAnalytics();
   const user = useAuthStore((state) => state.user);
@@ -43,18 +55,6 @@ export function RoomPage() {
   useEffect(() => {
     track("room_enter", roomId);
   }, [roomId, track]);
-
-  // Fetch room info
-  const roomQuery = useQuery({
-    queryKey: ["rooms", roomId],
-    queryFn: async () => {
-      const res = await apiFetch(`/api/v1/rooms/${roomId}`);
-      if (!res.ok) return null;
-      const data = await res.json();
-      return data.room as Room;
-    },
-    enabled: !!roomId,
-  });
 
   // Fetch messages
   const messagesQuery = useQuery({

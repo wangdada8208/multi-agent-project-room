@@ -4,12 +4,14 @@ import type { ChatMessage, MessageType, RoomSocketEvent, SenderType } from "../t
 
 import { useAuthStore } from "../stores/authStore";
 import { websocketUrl, apiFetch } from "../lib/api";
+import { routeOutgoing } from "../lib/xmtpSend";
 
 interface SendMessageInput {
   content: string;
   senderId: string;
   senderType: SenderType;
   msgType?: MessageType;
+  transport?: string;
 }
 
 function getWebSocketUrl(roomId: string): string {
@@ -37,7 +39,7 @@ async function fetchMissedMessages(roomId: string, afterTimestamp: string | null
   }
 }
 
-export function useWebSocket(roomId: string) {
+export function useWebSocket(roomId: string, transport: string = "hub") {
   const socketRef = useRef<WebSocket | null>(null);
   const reconnectTimerRef = useRef<number | null>(null);
   const reconnectAttemptRef = useRef(0);
@@ -202,6 +204,16 @@ export function useWebSocket(roomId: string) {
   const sendMessage = useCallback((input: SendMessageInput) => {
     const socket = socketRef.current;
 
+    const route = routeOutgoing({
+      transport: input.transport ?? transport,
+      content: input.content,
+    });
+
+    if (route.hubPayload === null) {
+      // Encrypted room messages are not sent through Hub WebSocket
+      return true;
+    }
+
     if (!socket || socket.readyState !== WebSocket.OPEN) {
       return false;
     }
@@ -216,12 +228,12 @@ export function useWebSocket(roomId: string) {
         sender_type: input.senderType,
         sender_name: user?.display_name ?? displayName,
         msg_type: input.msgType ?? "text",
-        content: input.content,
+        content: route.hubPayload.content,
       }),
     );
 
     return true;
-  }, []);
+  }, [transport]);
 
   return useMemo(() => ({ sendMessage }), [sendMessage]);
 }
