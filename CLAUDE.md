@@ -7,18 +7,17 @@
 ## 1. 快速开始
 
 ```text
-Step 1: 阅读 PLAN.md       → 了解当前阶段和你的任务
-Step 2: 阅读 CONTEXT.md    → 理解项目理念
-Step 3: 阅读 AGENTS.md     → 遵守 Agent 协作规则
-Step 4: 查看 PLAN.md §10   → 找到当前未完成的 W5 / Roadmap 项
-Step 5: 开始执行            → 完成后更新 PLAN.md 的 [ ] 为 [x]
+Step 1: 阅读 docs/superpowers/plans/2026-09-23-delete-legacy-rooms.md
+Step 2: 阅读 AGENTS.md（不合并 main，不动生产库，密钥不进 git）
+Step 3: 确认用户可见的历史明文房间已删除，_agent_ 内部通道保留
+Step 4: 不要重做 d62a556 到 316d0a9 的 XMTP 收发
 ```
 
 ## 2. 项目状态
 
 ```
-当前阶段: W5 稳定化与验收闭环
-总体进度: MVP 主链路已完成，剩余工作集中在生产验收、A2A 可靠性和文档收口
+当前阶段: 历史明文房间已删除
+总体进度: 2026-09-23 起，用户可见的历史明文房间删除，不再保留可读入口。本地库中的用户 hub 房间已删除。_agent_ 内部通道保留。生产库未清理。
 ```
 
 ## 3. 技术栈概要
@@ -30,7 +29,8 @@ Step 5: 开始执行            → 完成后更新 PLAN.md 的 [ ] 为 [x]
 | PostgreSQL 16 | 数据库 |
 | Redis | 缓存 / Pub/Sub |
 | Docker Compose | 部署 |
-| A2A (JSON-RPC) | Agent 间通信 |
+| A2A (JSON-RPC) | 任务发现与任务回传，不是加密聊天的底层 |
+| XMTP（`@xmtp/agent-sdk`，Node 22） | 计划中的端到端加密群聊。官方 SDK 不进 FastAPI 进程 |
 
 ## 4. Agent 行为守则
 
@@ -62,7 +62,7 @@ frontend/         React 前端
 `ACCEPTANCE_CHECKLIST.md` 和 `RUNBOOK.md` 了解当前上线状态。
 
 如果你是**回来继续工作**，看 `PLAN.md §10 当前进度` 和 `ROADMAP.md`，
-优先推进 W5 稳定化、验收和 A2A 可靠性任务。
+优先按 `docs/superpowers/plans/2026-09-23-delete-legacy-rooms.md` 从 Task 1 执行。不要合并 main，不要清理生产库。
 
 ---
 
