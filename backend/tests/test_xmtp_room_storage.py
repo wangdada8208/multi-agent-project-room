@@ -151,3 +151,13 @@ async def test_unknown_room_does_not_store_plaintext(db):
     room = await db.get(Room, room_id)
     assert room is not None
     assert room.transport == "xmtp"
+
+
+@pytest.mark.asyncio
+async def test_create_room_rejects_unknown_transport(client, auth_headers):
+    rejected = await client.post(
+        "/api/v1/rooms",
+        headers=auth_headers,
+        json={"name": "坏通道", "description": "", "transport": "plaintext"},
+    )
+    assert rejected.status_code == 422

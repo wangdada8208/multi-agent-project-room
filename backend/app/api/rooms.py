@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -19,7 +20,7 @@ router = APIRouter(prefix="/api/v1/rooms", tags=["rooms"])
 class CreateRoomRequest(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     description: str = ""
-    transport: str = "xmtp"
+    transport: Literal["hub", "xmtp"] = "xmtp"
 
 
 @router.get("")
