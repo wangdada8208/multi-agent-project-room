@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
+import { mkdtemp, readFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import test from "node:test";
-import { createLocalLoop, ingest } from "./localLoop.ts";
+import { createLocalLoop, ingest, saveLoopState, loadLoopState } from "./localLoop.ts";
 
 test("two inbound messages reply only when mentioned or on turn", () => {
   let state = createLocalLoop({
@@ -31,4 +34,22 @@ test("unmentioned message on own turn produces the placeholder", () => {
   assert.equal(result.reason, "turn");
   assert.equal(result.outbound, "收到，本轮由 Claude 处理。");
   assert.equal(result.state.turnIndex, 2);
+});
+
+test("saved loop state restores counters and omits message text", async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "loop-"));
+  const file = path.join(dir, "loop.json");
+  const secret = "这句不能进状态文件";
+  const state = ingest(
+    createLocalLoop({ participants: ["Codex", "Claude"], selfName: "Codex" }),
+    secret,
+  ).state;
+
+  await saveLoopState(file, state);
+  const raw = await readFile(file, "utf8");
+  assert.equal(raw.includes(secret), false);
+  assert.equal(raw.includes("content"), false);
+
+  const restored = await loadLoopState(file);
+  assert.deepEqual(restored, state);
 });

@@ -20,4 +20,5 @@ test_verify.db
 *.db3-*
 *.sqlcipher_salt
 workers/xmtp-member/node_modules/
+workers/xmtp-member/.state/
 

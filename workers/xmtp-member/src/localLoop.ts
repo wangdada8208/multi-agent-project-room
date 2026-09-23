@@ -1,3 +1,5 @@
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import path from "node:path";
 import { decideReply } from "./turnPolicy.ts";
 
 export interface LocalLoopState {
@@ -44,5 +46,57 @@ export function ingest(state: LocalLoopState, text: string): {
     state: next,
     reason: decision.reason,
     outbound: decision.reply ? `收到，本轮由 ${state.selfName} 处理。` : null,
+  };
+}
+
+export async function saveLoopState(file: string, state: LocalLoopState): Promise<void> {
+  const cleanState: LocalLoopState = {
+    participants: Array.isArray(state.participants) ? [...state.participants] : [],
+    selfName: String(state.selfName),
+    turnIndex: Number(state.turnIndex),
+    turnsSeen: Number(state.turnsSeen),
+    status: "active",
+  };
+
+  await mkdir(path.dirname(file), { recursive: true });
+  await writeFile(file, JSON.stringify(cleanState, null, 2), "utf8");
+}
+
+export async function loadLoopState(file: string): Promise<LocalLoopState> {
+  let raw: string;
+  try {
+    raw = await readFile(file, "utf8");
+  } catch (err: any) {
+    if (err?.code === "ENOENT") {
+      throw new Error(`Loop state file not found: ${file}`);
+    }
+    throw new Error(`Failed to read loop state file: ${file}`);
+  }
+
+  let parsed: any;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error(`Failed to parse loop state JSON from ${file}`);
+  }
+
+  if (
+    !parsed ||
+    !Array.isArray(parsed.participants) ||
+    !parsed.participants.every((p: unknown) => typeof p === "string") ||
+    typeof parsed.selfName !== "string" ||
+    typeof parsed.turnIndex !== "number" ||
+    typeof parsed.turnsSeen !== "number" ||
+    parsed.status !== "active"
+  ) {
+    throw new Error(`Invalid loop state structure in ${file}`);
+  }
+
+  return {
+    participants: parsed.participants,
+    selfName: parsed.selfName,
+    turnIndex: parsed.turnIndex,
+    turnsSeen: parsed.turnsSeen,
+    status: "active",
   };
 }
