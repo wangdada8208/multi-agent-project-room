@@ -7,6 +7,20 @@ export function ownerNotesBindAddress(): string {
   return "127.0.0.1";
 }
 
+export function allowOwnerNotesOrigin(origin: string | undefined | null): string | null {
+  if (!origin) return null;
+  try {
+    const url = new URL(origin);
+    const loopback = url.hostname === "127.0.0.1" || url.hostname === "localhost";
+    if ((url.protocol === "http:" || url.protocol === "https:") && loopback) {
+      return origin;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
 export interface HandleOwnerNotesInput {
   host?: string | null;
   notes: OwnerNote[];
@@ -73,7 +87,15 @@ export function createOwnerNotesServer(
   notesPathOrGetter: string | (() => Promise<OwnerNote[]> | OwnerNote[])
 ): http.Server {
   return http.createServer(async (req, res) => {
-    res.setHeader("Access-Control-Allow-Origin", "*");
+    const host = req.headers.host || "";
+    const originHeader = Array.isArray(req.headers.origin)
+      ? req.headers.origin[0]
+      : req.headers.origin;
+    const allowedOrigin = allowOwnerNotesOrigin(originHeader);
+    if (allowedOrigin) {
+      res.setHeader("Access-Control-Allow-Origin", allowedOrigin);
+      res.setHeader("Vary", "Origin");
+    }
     res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
     res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
@@ -83,7 +105,6 @@ export function createOwnerNotesServer(
       return;
     }
 
-    const host = req.headers.host || "";
     const parsedUrl = new URL(req.url || "/", `http://${host || "127.0.0.1"}`);
 
     if (req.method === "GET" && parsedUrl.pathname === "/owner-notes") {

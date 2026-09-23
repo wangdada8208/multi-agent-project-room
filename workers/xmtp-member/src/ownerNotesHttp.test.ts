@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  allowOwnerNotesOrigin,
   createOwnerNotesServer,
   handleOwnerNotes,
   ownerNotesBindAddress,
@@ -34,6 +35,11 @@ test("bind address is loopback only", () => {
   assert.equal(ownerNotesBindAddress(), "127.0.0.1");
 });
 
+test("does not allow a public origin", () => {
+  assert.equal(allowOwnerNotesOrigin("https://evil.example"), null);
+  assert.equal(allowOwnerNotesOrigin("http://127.0.0.1:5173"), "http://127.0.0.1:5173");
+});
+
 test("GET /owner-notes serves notes via http on loopback", async () => {
   const server = createOwnerNotesServer(() => [
     { self_name: "Codex", turns_seen: 3, action: "sent", block_reason: null },
@@ -48,9 +54,11 @@ test("GET /owner-notes serves notes via http on loopback", async () => {
     assert(address && typeof address === "object");
     const port = address.port;
 
-    const res = await fetch(`http://127.0.0.1:${port}/owner-notes`);
+    const res = await fetch(`http://127.0.0.1:${port}/owner-notes`, {
+      headers: { Origin: "http://127.0.0.1:5173" },
+    });
     assert.equal(res.status, 200);
-    assert.equal(res.headers.get("access-control-allow-origin"), "*");
+    assert.equal(res.headers.get("access-control-allow-origin"), "http://127.0.0.1:5173");
     const body = await res.json();
     assert.deepEqual(body, {
       notes: [
