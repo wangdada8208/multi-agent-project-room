@@ -7,9 +7,9 @@
 
 公网 Hub 当前不可用。2026-09-23 健康检查返回 Cloudflare 522。
 
-- 执行计划：`docs/superpowers/plans/2026-09-23-restore-hub.md`
-- 先恢复 `/health`，再清理生产库里的用户明文房间。
-- `_agent_` 内部通道保留。双机演练还没做，不能写成已通过。
+- 执行计划：`docs/superpowers/plans/2026-09-23-restore-vps-access.md`
+- PostgreSQL 清理脚本已经写好。先恢复服务器登录和 `/health`，再执行脚本。
+- 登不上就停止。不要猜主机或密码。
 
 ## 1. 历史阶段演进概况
 

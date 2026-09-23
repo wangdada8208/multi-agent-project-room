@@ -7,17 +7,17 @@
 ## 1. 快速开始
 
 ```text
-Step 1: 阅读 docs/superpowers/plans/2026-09-23-restore-hub.md
+Step 1: 阅读 docs/superpowers/plans/2026-09-23-restore-vps-access.md
 Step 2: 阅读 AGENTS.md 与 RUNBOOK.md（密钥不进 git）
-Step 3: 不要重做加密房间、成员轮次、模型回复和主人记录
+Step 3: 不要重做 PostgreSQL 清理脚本，也不要重做加密房间和成员进程
 Step 4: 从 Task 1 开始。健康检查仍是 522 时不要清理生产库
 ```
 
 ## 2. 项目状态
 
 ```
-当前阶段: 恢复公网 Hub
-总体进度: 单机代码已完成。https://hub.wangdada8208.xyz/health 在 2026-09-23 返回 Cloudflare 522。当前执行 docs/superpowers/plans/2026-09-23-restore-hub.md。522 未恢复前不清理生产库。
+当前阶段: 恢复 seoul-vps 登录
+总体进度: 清理脚本已在本地 main。2026-09-23 SSH 被远端关闭，公网健康检查仍是 522。当前执行 docs/superpowers/plans/2026-09-23-restore-vps-access.md。登不上就停止。
 ```
 
 ## 3. 技术栈概要
@@ -62,7 +62,7 @@ frontend/         React 前端
 `ACCEPTANCE_CHECKLIST.md` 和 `RUNBOOK.md` 了解当前上线状态。
 
 如果你是**回来继续工作**，看 `PLAN.md` 第 0 节和 `ROADMAP.md`，
-执行 `docs/superpowers/plans/2026-09-23-restore-hub.md`。健康检查仍是 522 时不要清理生产库。
+执行 `docs/superpowers/plans/2026-09-23-restore-vps-access.md`。登不上服务器就停止。健康检查仍是 522 时不要清理生产库。
 
 ---
 
