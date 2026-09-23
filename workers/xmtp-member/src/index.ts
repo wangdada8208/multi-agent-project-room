@@ -1,6 +1,14 @@
+import { existsSync } from "node:fs";
+import path from "node:path";
 import { Agent } from "@xmtp/agent-sdk";
 import { buildBindingPayload } from "./binding.ts";
-import { decideReply } from "./turnPolicy.ts";
+import {
+  createLocalLoop,
+  loadLoopState,
+  saveLoopState,
+  type LocalLoopState,
+} from "./localLoop.ts";
+import { onInboundText } from "./onInboundText.ts";
 
 export interface MemberConfig {
   selfName?: string;
@@ -12,6 +20,7 @@ export interface MemberConfig {
   hubBaseUrl?: string;
   hubToken?: string;
   hubRoomId?: string;
+  loopStatePath?: string;
 }
 
 export function loadConfigFromEnv(): MemberConfig {
@@ -27,6 +36,10 @@ export function loadConfigFromEnv(): MemberConfig {
     .map((s) => s.trim())
     .filter(Boolean);
 
+  const defaultStatePath = existsSync("workers/xmtp-member")
+    ? path.resolve("workers/xmtp-member/.state/loop.json")
+    : path.resolve(".state/loop.json");
+
   return {
     selfName: process.env.XMTP_SELF_NAME || "Codex",
     participants: participants.length > 0 ? participants : ["Codex", "Claude"],
@@ -37,6 +50,7 @@ export function loadConfigFromEnv(): MemberConfig {
     hubBaseUrl: process.env.HUB_BASE_URL,
     hubToken: process.env.HUB_TOKEN,
     hubRoomId: process.env.HUB_ROOM_ID,
+    loopStatePath: process.env.XMTP_LOOP_STATE_PATH || defaultStatePath,
   };
 }
 
@@ -67,7 +81,21 @@ export async function startMember(): Promise<void> {
   const config = loadConfigFromEnv();
   const agent = await Agent.createFromEnv();
 
-  let turnIndex = 0;
+  const statePath =
+    config.loopStatePath ||
+    (existsSync("workers/xmtp-member")
+      ? path.resolve("workers/xmtp-member/.state/loop.json")
+      : path.resolve(".state/loop.json"));
+
+  let loopState: LocalLoopState;
+  if (existsSync(statePath)) {
+    loopState = await loadLoopState(statePath);
+  } else {
+    loopState = createLocalLoop({
+      participants: config.participants || ["Codex", "Claude"],
+      selfName: config.selfName || "Codex",
+    });
+  }
 
   agent.on("text", async (ctx: any) => {
     const text =
@@ -75,24 +103,23 @@ export async function startMember(): Promise<void> {
         ? ctx.message.content
         : ctx.message?.content?.text || "";
 
-    const decision = decideReply({
-      text,
-      selfName: config.selfName || "Codex",
-      participants: config.participants || ["Codex", "Claude"],
-      turnIndex,
-    });
-
-    turnIndex++;
-
-    if (!decision.reply) {
-      return;
-    }
-
-    const placeholderReply = `收到，本轮由 ${config.selfName || "Codex"} 处理。`;
-    if (typeof ctx.sendText === "function") {
-      await ctx.sendText(placeholderReply);
-    } else if (ctx.conversation && typeof ctx.conversation.sendText === "function") {
-      await ctx.conversation.sendText(placeholderReply);
+    try {
+      loopState = await onInboundText({
+        state: loopState,
+        text,
+        sendText: async (body: string) => {
+          if (typeof ctx.sendText === "function") {
+            await ctx.sendText(body);
+          } else if (ctx.conversation && typeof ctx.conversation.sendText === "function") {
+            await ctx.conversation.sendText(body);
+          }
+        },
+        saveState: async (nextState: LocalLoopState) => {
+          await saveLoopState(statePath, nextState);
+        },
+      });
+    } catch (err: any) {
+      console.error("Worker process error:", err.message);
     }
   });
 
