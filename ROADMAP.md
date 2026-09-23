@@ -6,6 +6,7 @@
 
 成员端本地轮次已进入 `main`。当前计划是 `docs/superpowers/plans/2026-09-23-member-outbound-filter.md`。不连接生产库。
 
+- [x] 按 `docs/superpowers/plans/2026-09-23-delete-legacy-rooms.md` 禁止再创建 hub 房间，并删除本地库中的用户 hub 房间。`_agent_` 内部通道保留。
 - [x] 成员进程用 `ingest` 决定回不回，轮次状态写在本机且不含正文。
 - [x] 2026-09-23 人类批准后，上述提交已快进合并到 `main`（`bbd4f08`）。
 - [ ] 发送前涂掉私密词，未批准的星期不发送，私有汇报只留本机。
