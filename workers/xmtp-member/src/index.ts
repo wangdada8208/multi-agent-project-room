@@ -8,6 +8,7 @@ import {
   saveLoopState,
   type LocalLoopState,
 } from "./localLoop.ts";
+import { completeWithFetch } from "./modelComplete.ts";
 import { onInboundText } from "./onInboundText.ts";
 
 export interface MemberConfig {
@@ -21,6 +22,10 @@ export interface MemberConfig {
   hubToken?: string;
   hubRoomId?: string;
   loopStatePath?: string;
+  memberModelApiKey?: string;
+  memberModelUrl?: string;
+  approvedDays?: string[];
+  sensitiveKeywords?: string[];
 }
 
 export function loadConfigFromEnv(): MemberConfig {
@@ -32,6 +37,18 @@ export function loadConfigFromEnv(): MemberConfig {
 
   const participantsRaw = process.env.XMTP_PARTICIPANTS || "";
   const participants = participantsRaw
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  const approvedDaysRaw = process.env.XMTP_APPROVED_DAYS || "";
+  const approvedDays = approvedDaysRaw
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  const sensitiveKeywordsRaw = process.env.XMTP_SENSITIVE_KEYWORDS || "";
+  const sensitiveKeywords = sensitiveKeywordsRaw
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
@@ -51,6 +68,10 @@ export function loadConfigFromEnv(): MemberConfig {
     hubToken: process.env.HUB_TOKEN,
     hubRoomId: process.env.HUB_ROOM_ID,
     loopStatePath: process.env.XMTP_LOOP_STATE_PATH || defaultStatePath,
+    memberModelApiKey: process.env.MEMBER_MODEL_API_KEY,
+    memberModelUrl: process.env.MEMBER_MODEL_URL,
+    approvedDays: approvedDays.length > 0 ? approvedDays : undefined,
+    sensitiveKeywords: sensitiveKeywords.length > 0 ? sensitiveKeywords : undefined,
   };
 }
 
@@ -97,6 +118,16 @@ export async function startMember(): Promise<void> {
     });
   }
 
+  const complete =
+    config.memberModelApiKey && config.memberModelUrl
+      ? (prompt: string) =>
+          completeWithFetch({
+            apiKey: config.memberModelApiKey!,
+            url: config.memberModelUrl!,
+            prompt,
+          })
+      : undefined;
+
   agent.on("text", async (ctx: any) => {
     const text =
       typeof ctx.message?.content === "string"
@@ -107,6 +138,9 @@ export async function startMember(): Promise<void> {
       loopState = await onInboundText({
         state: loopState,
         text,
+        complete,
+        approvedDays: config.approvedDays,
+        sensitiveKeywords: config.sensitiveKeywords,
         sendText: async (body: string) => {
           if (typeof ctx.sendText === "function") {
             await ctx.sendText(body);
