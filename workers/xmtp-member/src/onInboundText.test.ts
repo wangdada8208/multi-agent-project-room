@@ -46,3 +46,23 @@ test("silent turn does not send and still saves the advanced counter", async () 
   assert.deepEqual(sent, []);
   assert.equal(turnIndex, 2);
 });
+
+test("blocked outbound is not sent", async () => {
+  const sent: string[] = [];
+  await onInboundText({
+    state: createLocalLoop({
+      participants: ["Codex", "Claude"],
+      selfName: "Codex",
+    }),
+    text: "@Codex 约时间",
+    complete: async () => "周五下午可以",
+    approvedDays: ["wed"],
+    sensitiveKeywords: [],
+    sendText: async (body) => {
+      sent.push(body);
+    },
+    saveState: async () => {},
+  });
+  assert.deepEqual(sent, []);
+});
+
