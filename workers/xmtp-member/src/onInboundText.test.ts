@@ -66,3 +66,31 @@ test("blocked outbound is not sent", async () => {
   assert.deepEqual(sent, []);
 });
 
+test("owner note is recorded and not sent to the room", async () => {
+  const sent: string[] = [];
+  const notes: string[] = [];
+  await onInboundText({
+    state: createLocalLoop({
+      participants: ["Codex", "Claude"],
+      selfName: "Codex",
+    }),
+    text: "@Codex 约时间",
+    complete: async () => "周五下午可以",
+    approvedDays: ["wed"],
+    sensitiveKeywords: [],
+    sendText: async (body) => {
+      sent.push(body);
+    },
+    saveState: async () => {},
+    recordOwner: async (note) => {
+      notes.push(JSON.stringify(note));
+    },
+  });
+  assert.deepEqual(sent, []);
+  assert.equal(notes.length, 1);
+  assert.equal(notes[0].includes("blocked"), true);
+  assert.equal(notes[0].includes("约时间"), false);
+  assert.equal(notes[0].includes("周五"), false);
+});
+
+

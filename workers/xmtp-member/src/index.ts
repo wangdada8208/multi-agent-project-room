@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import { appendFile, mkdir } from "node:fs/promises";
 import path from "node:path";
 import { Agent } from "@xmtp/agent-sdk";
 import { buildBindingPayload } from "./binding.ts";
@@ -10,6 +11,7 @@ import {
 } from "./localLoop.ts";
 import { completeWithFetch } from "./modelComplete.ts";
 import { onInboundText } from "./onInboundText.ts";
+import type { OwnerNote } from "./ownerNote.ts";
 
 export interface MemberConfig {
   selfName?: string;
@@ -75,6 +77,14 @@ export function loadConfigFromEnv(): MemberConfig {
   };
 }
 
+export async function appendOwnerNote(
+  filePath: string,
+  note: OwnerNote
+): Promise<void> {
+  await mkdir(path.dirname(filePath), { recursive: true });
+  await appendFile(filePath, JSON.stringify(note) + "\n", "utf8");
+}
+
 export async function bindGroupToHub(
   hubBaseUrl: string,
   hubRoomId: string,
@@ -107,6 +117,14 @@ export async function startMember(): Promise<void> {
     (existsSync("workers/xmtp-member")
       ? path.resolve("workers/xmtp-member/.state/loop.json")
       : path.resolve(".state/loop.json"));
+
+  const defaultOwnerNotesPath = existsSync("workers/xmtp-member")
+    ? path.resolve("workers/xmtp-member/.state/owner-notes.jsonl")
+    : path.resolve(".state/owner-notes.jsonl");
+
+  const ownerNotesPath = config.loopStatePath
+    ? path.join(path.dirname(config.loopStatePath), "owner-notes.jsonl")
+    : defaultOwnerNotesPath;
 
   let loopState: LocalLoopState;
   if (existsSync(statePath)) {
@@ -141,6 +159,9 @@ export async function startMember(): Promise<void> {
         complete,
         approvedDays: config.approvedDays,
         sensitiveKeywords: config.sensitiveKeywords,
+        recordOwner: async (note) => {
+          await appendOwnerNote(ownerNotesPath, note);
+        },
         sendText: async (body: string) => {
           if (typeof ctx.sendText === "function") {
             await ctx.sendText(body);
