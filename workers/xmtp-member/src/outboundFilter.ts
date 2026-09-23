@@ -26,16 +26,18 @@ const WEEKDAYS: Record<string, string> = {
 };
 
 export function filterOutbound(input: OutboundFilterInput): OutboundFilterResult {
-  const approvedSet = new Set(
-    (input.approvedDays ?? []).map((d) => d.trim().toLowerCase().slice(0, 3))
-  );
+  if (input.approvedDays !== undefined) {
+    const approvedSet = new Set(
+      input.approvedDays.map((d) => d.trim().toLowerCase().slice(0, 3))
+    );
 
-  const contentLower = input.content.toLowerCase();
+    const contentLower = input.content.toLowerCase();
 
-  for (const [word, code] of Object.entries(WEEKDAYS)) {
-    if (contentLower.includes(word)) {
-      if (!approvedSet.has(code)) {
-        return { blocked: true, text: null };
+    for (const [word, code] of Object.entries(WEEKDAYS)) {
+      if (contentLower.includes(word)) {
+        if (!approvedSet.has(code)) {
+          return { blocked: true, text: null };
+        }
       }
     }
   }

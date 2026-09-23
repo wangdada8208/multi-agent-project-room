@@ -22,3 +22,13 @@ test("blocks an unapproved weekday", () => {
   assert.equal(result.blocked, true);
   assert.equal(result.text, null);
 });
+
+test("does not block weekdays when no allowlist is configured", () => {
+  const result = filterOutbound({
+    content: "周五下午可以",
+    sensitiveKeywords: ["秘密会议室"],
+  });
+  assert.equal(result.blocked, false);
+  assert.equal(result.text, "周五下午可以");
+});
+
