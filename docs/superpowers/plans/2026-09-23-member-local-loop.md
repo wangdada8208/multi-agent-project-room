@@ -36,7 +36,7 @@
 
 `decideReply` 已经决定回不回。缺的是一个不碰网络的状态转移：同一份状态连续吃进两条文本，只有点名或轮到自己时产出待发送正文。
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 在 `workers/xmtp-member/src/localLoop.test.ts` 写入：
 
@@ -77,13 +77,13 @@ test("unmentioned message on own turn produces the placeholder", () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd workers/xmtp-member && node --experimental-strip-types --test src/localLoop.test.ts`
 
 Expected: FAIL，模块不存在。
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 `workers/xmtp-member/src/localLoop.ts`：
 
@@ -142,13 +142,13 @@ export function ingest(state: LocalLoopState, text: string): {
 
 `outbound` 只能是上面的占位句或 `null`。不要把 `text` 拼进占位句，不要把 `text` 放进返回的 `state`。
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `cd workers/xmtp-member && node --experimental-strip-types --test src/localLoop.test.ts`
 
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add workers/xmtp-member/src/localLoop.ts workers/xmtp-member/src/localLoop.test.ts
@@ -175,7 +175,7 @@ EOF
 
 进程重启后要能恢复「下一轮轮到谁」。恢复文件只保存计数字段。
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 在 `localLoop.test.ts` 追加：
 
@@ -204,13 +204,13 @@ test("saved loop state restores counters and omits message text", async () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd workers/xmtp-member && node --experimental-strip-types --test src/localLoop.test.ts`
 
 Expected: FAIL，`saveLoopState` 未导出。
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 `saveLoopState(file, state)` 只序列化 `LocalLoopState` 的五个字段，先 `mkdir` 父目录，再写文件。`loadLoopState(file)` 读回并校验这五个字段的类型；文件不存在时抛出带路径的错误，错误文本里不要带消息正文。
 
@@ -224,13 +224,13 @@ workers/xmtp-member/.state/
 
 默认路径约定写在 `index.ts` 里，本任务先不改 `index.ts`。环境变量名定为 `XMTP_LOOP_STATE_PATH`。未设置时使用 `workers/xmtp-member/.state/loop.json`。这个默认路径必须被上面的 gitignore 盖住。
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `cd workers/xmtp-member && node --experimental-strip-types --test src/localLoop.test.ts`
 
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add workers/xmtp-member/src/localLoop.ts workers/xmtp-member/src/localLoop.test.ts .gitignore
@@ -259,7 +259,7 @@ EOF
 
 现在 `index.ts` 自己持有 `turnIndex` 并直接调用 `decideReply`。改成调用 Task 1 和 Task 2。
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 import assert from "node:assert/strict";
@@ -312,13 +312,13 @@ test("silent turn does not send and still saves the advanced counter", async () 
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd workers/xmtp-member && node --experimental-strip-types --test src/onInboundText.test.ts`
 
 Expected: FAIL，模块不存在。
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 `onInboundText` 调用 `ingest`。`outbound` 为 `null` 时不调用 `sendText`。有占位句时只把该句传给 `sendText`。两种情况都调用 `saveState(nextState)`。这个函数不接收 Hub 地址、令牌或 `fetch`。
 
@@ -332,13 +332,13 @@ Expected: FAIL，模块不存在。
 
 建群和 `bindGroupToHub` 的现有代码保持不动。绑定请求体仍然只有 group id。
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `cd workers/xmtp-member && npm test`
 
 Expected: PASS。`turnPolicy`、`binding`、`evidence`、`localLoop`、`onInboundText` 都通过。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add workers/xmtp-member/src/onInboundText.ts workers/xmtp-member/src/onInboundText.test.ts workers/xmtp-member/src/index.ts
@@ -363,7 +363,7 @@ EOF
 
 成员进程改完后，Hub 侧的拒绝必须仍然有效。不要为了让成员进程「汇报轮次」而打开落库。
 
-- [ ] **Step 1: 先跑已有测试**
+- [x] **Step 1: 先跑已有测试**
 
 Run: `cd backend && ../.venv/bin/python -m pytest tests/test_xmtp_room_storage.py -q`
 
@@ -371,7 +371,7 @@ Expected: PASS。其中已包含 `test_xmtp_room_rejects_message_body`、`test_w
 
 若虚拟环境不在 `../.venv`，改用仓库里已经能跑 pytest 的那个解释器，不要新装一套无关依赖。
 
-- [ ] **Step 2: 测试失败时的处理**
+- [x] **Step 2: 测试失败时的处理**
 
 失败原因是断言过期：只改断言，让它符合「xmtp 房间正文不能进 `messages`」。
 
@@ -379,7 +379,7 @@ Expected: PASS。其中已包含 `test_xmtp_room_rejects_message_body`、`test_w
 
 本任务不新增 Hub 端点。
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 只有测试文件真有改动才提交。
 
@@ -420,9 +420,9 @@ EOF
 
 删掉仍写着「旧明文房间在迁移完成前继续可用」和「加密房间的正文还不会进入 XMTP」的句子。
 
-- [ ] **Step 1: 改入口并勾选本计划里已完成的任务**
+- [x] **Step 1: 改入口并勾选本计划里已完成的任务**
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add CLAUDE.md PLAN.md ROADMAP.md ARCHITECTURE.md docs/xmtp端到端加密-执行文档.md docs/superpowers/plans/2026-09-23-member-local-loop.md
