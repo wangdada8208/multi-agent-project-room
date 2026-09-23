@@ -17,6 +17,7 @@ import { fetchMessages, fetchAgents, fetchTasks, searchMessages, apiFetch } from
 import { loadOrCreateInboxKey, createLocalXmtpClient } from "../lib/xmtpLocalIdentity";
 import { sendXmtpMessage, toLocalChatMessage } from "../lib/xmtpSend";
 import { memberIdentifier, assertWorkerAddress } from "../lib/xmtpGroup";
+import { formatOwnerNoteAction, visibleOwnerNotes } from "../lib/ownerNotes";
 import { useAuthStore } from "../stores/authStore";
 import { useChatStore } from "../stores/chatStore";
 import type { Room, SenderType } from "../types/chat";
@@ -73,6 +74,21 @@ export function RoomPage() {
   useEffect(() => {
     if (messagesQuery.data) setMessages(messagesQuery.data);
   }, [messagesQuery.data, setMessages]);
+
+  const ownerNotesQuery = useQuery({
+    queryKey: ["ownerNotes"],
+    queryFn: async () => {
+      const res = await fetch("http://127.0.0.1:8787/owner-notes");
+      if (!res.ok) {
+        throw new Error("fail");
+      }
+      const data = await res.json();
+      return visibleOwnerNotes(data.notes || []);
+    },
+    enabled: isEncrypted,
+    refetchInterval: 3000,
+    retry: false,
+  });
 
   // Initialize XMTP client for encrypted rooms and bind group if needed
   useEffect(() => {
@@ -317,17 +333,60 @@ export function RoomPage() {
           </div>
         )}
         <div className="chat-area__messages" ref={listRef}>
-          {messagesQuery.isLoading && <p className="chat-loading">加载消息...</p>}
-          {messagesQuery.isError && <p className="chat-error">加载失败，请刷新重试。</p>}
-          {!messagesQuery.isLoading && messages.length === 0 && (
-            <div className="chat-empty">
-              <p>暂无消息</p>
-              <small>发送第一条消息，或 @Agent 开始协作。</small>
-            </div>
+          {isEncrypted ? (
+            <>
+              {ownerNotesQuery.isError && (
+                <p className="chat-error">本机成员进程未启动</p>
+              )}
+              {ownerNotesQuery.isLoading && <p className="chat-loading">加载中...</p>}
+              {!ownerNotesQuery.isLoading && !ownerNotesQuery.isError && (
+                ownerNotesQuery.data && ownerNotesQuery.data.length > 0 ? (
+                  <div
+                    className="owner-notes-list"
+                    style={{ display: "flex", flexDirection: "column", gap: 8, padding: 12 }}
+                  >
+                    {ownerNotesQuery.data.map((note, idx) => (
+                      <div
+                        key={idx}
+                        className="owner-note-row"
+                        style={{
+                          display: "flex",
+                          gap: 16,
+                          padding: "8px 12px",
+                          borderRadius: 6,
+                          background: "var(--bg-secondary, #f8f9fa)",
+                          border: "1px solid var(--border-color, #e5e7eb)",
+                          fontSize: 14,
+                        }}
+                      >
+                        <span>轮次: {note.turns_seen}</span>
+                        <span>动作: {formatOwnerNoteAction(note.action)}</span>
+                        <span>原因: {note.block_reason || "-"}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="chat-empty">
+                    <p>暂无轮次记录</p>
+                  </div>
+                )
+              )}
+            </>
+          ) : (
+            <>
+              {messagesQuery.isLoading && <p className="chat-loading">加载消息...</p>}
+              {messagesQuery.isError && <p className="chat-error">加载失败，请刷新重试。</p>}
+              {!messagesQuery.isLoading && messages.length === 0 && (
+                <div className="chat-empty">
+                  <p>暂无消息</p>
+                  <small>发送第一条消息，或 @Agent 开始协作。</small>
+                </div>
+              )}
+              {messages.map((msg) => (
+                <MessageItem key={msg.id} message={msg} isOwn={msg.sender_type !== "agent" && msg.sender_id === (user?.id ?? "")} />
+              ))}
+            </>
           )}
-          {messages.map((msg) => (
-            <MessageItem key={msg.id} message={msg} isOwn={msg.sender_type !== "agent" && msg.sender_id === (user?.id ?? "")} />
-          ))}
         </div>
 
         <ChatInput disabled={connectionStatus !== "open"} onlineAgents={onlineAgentNames} onSend={handleSend} />
