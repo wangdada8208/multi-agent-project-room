@@ -5,12 +5,12 @@
 
 ## 0. 当前执行入口（2026-09-23）
 
-成员端真实回复已经完成，不要从 `2026-09-23-member-model-reply.md` 的 Task 1 重做；也不要重做本地轮次、XMTP 收发和历史明文房间删除。
+成员端主人记录已经完成。不要从 `2026-09-23-member-owner-note.md` 的 Task 1 重做。
 
-- 执行计划：`docs/superpowers/plans/2026-09-23-member-owner-note.md`
-- 当前工作是本计划：主人记录只留在成员本机。
-- 没配置 `XMTP_APPROVED_DAYS` 时不拦截星期，显式空列表仍然拦截。
-- 不合并 `main`，不清理生产库，不把记录发进群或 Hub。
+- 执行计划：`docs/superpowers/plans/2026-09-23-member-finish.md`
+- 当前工作是本计划：页面只显示本机轮次结果，然后把功能分支推到远端。
+- 做完后不再写下一份编码计划。
+- 不合并 `main`，不清理生产库。
 
 
 ## 1. 历史阶段演进概况

@@ -7,17 +7,17 @@
 ## 1. 快速开始
 
 ```text
-Step 1: 阅读 docs/superpowers/plans/2026-09-23-member-owner-note.md
+Step 1: 阅读 docs/superpowers/plans/2026-09-23-member-finish.md
 Step 2: 阅读 AGENTS.md（不合并 main，不动生产库，密钥不进 git）
-Step 3: 成员端真实回复已经完成，不要从 2026-09-23-member-model-reply.md 的 Task 1 重做；也不要重做本地轮次、XMTP 收发和历史明文房间删除
-Step 4: 当前工作是主人记录计划：主人记录只留在成员本机。没配置 XMTP_APPROVED_DAYS 时不拦截星期，显式空列表仍然拦截。不合并 main，不清理生产库，不把记录发进群或 Hub
+Step 3: 不要重做主人记录、真实回复、本地轮次、XMTP 收发和历史明文房间删除
+Step 4: 从收尾计划的 Task 1 做到 Task 4。做完后不要再写下一份编码计划
 ```
 
 ## 2. 项目状态
 
 ```
-当前阶段: 成员端主人记录
-总体进度: 成员端真实回复已经完成，不要从 2026-09-23-member-model-reply.md 的 Task 1 重做。当前工作是 docs/superpowers/plans/2026-09-23-member-owner-note.md：主人记录只留在成员本机。没配置 XMTP_APPROVED_DAYS 时不拦截星期，显式空列表仍然拦截。记录不进群、不进 Hub、不进 loop.json。生产库未清理。不合并 main。
+当前阶段: 收尾，让主人在页面上看见本机轮次结果
+总体进度: 主人记录已写入本机文件。当前执行 docs/superpowers/plans/2026-09-23-member-finish.md。做完后不再写成员进程编码计划。不合并 main。生产库未清理。
 ```
 
 ## 3. 技术栈概要
@@ -62,7 +62,7 @@ frontend/         React 前端
 `ACCEPTANCE_CHECKLIST.md` 和 `RUNBOOK.md` 了解当前上线状态。
 
 如果你是**回来继续工作**，看 `PLAN.md` 第 0 节和 `ROADMAP.md`，
-执行 `docs/superpowers/plans/2026-09-23-member-owner-note.md`。不要重做真实回复计划。不要合并 main，不要清理生产库。
+执行 `docs/superpowers/plans/2026-09-23-member-finish.md`。做完 Task 4 后不要再写下一份编码计划。不要合并 main，不要清理生产库。
 
 ---
 

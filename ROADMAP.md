@@ -2,9 +2,9 @@
 
 本文档记录系统的近期推进计划、中长期演进方向以及历史完成里程碑。
 
-## 0. 当前推进重点：成员端主人记录
+## 0. 当前推进重点：收尾
 
-成员端真实回复已经完成，不要从 `2026-09-23-member-model-reply.md` 的 Task 1 重做；也不要重做本地轮次、XMTP 收发和历史明文房间删除。当前工作是 `docs/superpowers/plans/2026-09-23-member-owner-note.md`：主人记录只留在成员本机。没配置 `XMTP_APPROVED_DAYS` 时不拦截星期，显式空列表仍然拦截。不合并 `main`，不清理生产库，不把记录发进群或 Hub。
+主人记录已经留在本机文件。当前计划是 `docs/superpowers/plans/2026-09-23-member-finish.md`。做完后没有下一份成员进程编码计划。不合并 `main`。生产库未清理。
 
 - [x] 按 `docs/superpowers/plans/2026-09-23-delete-legacy-rooms.md` 禁止再创建 hub 房间，去掉界面标记，并删除本地库中的用户 hub 房间。
 - [x] `_agent_` 内部通道保留。生产库不清理。
