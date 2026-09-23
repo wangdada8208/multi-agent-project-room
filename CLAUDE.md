@@ -7,17 +7,17 @@
 ## 1. 快速开始
 
 ```text
-Step 1: 阅读 docs/superpowers/plans/2026-09-23-member-local-loop.md，Task 1 到 Task 5 已完成并已进入 main
-Step 2: 阅读 AGENTS.md（后续合并与生产变更仍须人类批准，密钥不进 git）
-Step 3: 确认用户可见的历史明文房间已在本地删除，_agent_ 内部通道保留。生产库清理已批准，尚未执行
+Step 1: 阅读 docs/superpowers/plans/2026-09-23-member-outbound-filter.md
+Step 2: 阅读 AGENTS.md（不合并 main，不连接生产库，密钥不进 git）
+Step 3: 确认成员端本地轮次已进入 main。生产库清理已批准但未执行，不属于当前计划
 Step 4: 不要重做 d62a556 到 316d0a9 的 XMTP 收发，也不要重做成员端本地轮次
 ```
 
 ## 2. 项目状态
 
 ```
-当前阶段: 成员端本地轮次已合并到 main
-总体进度: 该计划已于 2026-09-23 快进合并到 main（bbd4f08）。_agent_ 内部通道保留。生产库中的用户 hub 房间清理已获批准，尚未执行。
+当前阶段: 成员端出站过滤
+总体进度: 成员端本地轮次已进入 main。当前执行 docs/superpowers/plans/2026-09-23-member-outbound-filter.md。生产库清理已批准但未执行，不属于这份计划。
 ```
 
 ## 3. 技术栈概要
@@ -61,8 +61,8 @@ frontend/         React 前端
 如果你是**第一次加入**，先读 `PLAN.md` 全文，然后看
 `ACCEPTANCE_CHECKLIST.md` 和 `RUNBOOK.md` 了解当前上线状态。
 
-如果你是**回来继续工作**，看 `PLAN.md` 第 0 节和 `ROADMAP.md`。
-`docs/superpowers/plans/2026-09-23-member-local-loop.md` 的 Task 1 到 Task 5 已完成并已进入 `main`，不要重做。生产库清理已获批准，但还没有执行。
+如果你是**回来继续工作**，看 `PLAN.md` 第 0 节和 `ROADMAP.md`，
+优先按 `docs/superpowers/plans/2026-09-23-member-outbound-filter.md` 从 Task 1 执行。不要合并 main，不要连接生产库。
 
 ---
 

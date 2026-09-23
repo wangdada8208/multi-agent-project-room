@@ -13,7 +13,7 @@
 
 用户房间的 `transport` 是 `xmtp`。`_agent_` 内部通道仍是 `transport=hub`。旧的用户明文房间不会被改写成密文；本地库里的那些房间已经删除。生产库中的用户 hub 房间清理已于 2026-09-23 获人类批准，尚未执行。
 
-`MessageLoop` 仍在 Hub 源码里，服务于现有测试和 `_agent_` 通道。加密房间回不回复以成员进程为准，按 `docs/superpowers/plans/2026-09-23-member-local-loop.md` 执行。
+`MessageLoop` 仍在 Hub 源码里，服务于现有测试和 `_agent_` 通道。加密房间回不回复以成员进程为准，发送前的私密词和星期过滤按 `docs/superpowers/plans/2026-09-23-member-outbound-filter.md` 执行。
 
 A2A 继续负责 Agent Card 和任务 RPC。它不承担这套加密群聊。
 
