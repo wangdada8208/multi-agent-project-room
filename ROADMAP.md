@@ -2,9 +2,9 @@
 
 本文档记录系统的近期推进计划、中长期演进方向以及历史完成里程碑。
 
-## 0. 当前推进重点：加密房间可同时看对话和轮次
+## 0. 当前推进重点：恢复公网 Hub
 
-收尾计划已完成。加密房间显示对话，轮次记录单独放在上方。主人记录接口只对本机页面开放。
+单机功能已完成。`https://hub.wangdada8208.xyz/health` 在 2026-09-23 返回 Cloudflare 522。当前计划是 `docs/superpowers/plans/2026-09-23-restore-hub.md`。服务恢复之前不清理生产库。
 
 - [x] 按 `docs/superpowers/plans/2026-09-23-delete-legacy-rooms.md` 禁止再创建 hub 房间，去掉界面标记，并删除本地库中的用户 hub 房间。
 - [x] `_agent_` 内部通道保留。

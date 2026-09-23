@@ -7,17 +7,17 @@
 ## 1. 快速开始
 
 ```text
-Step 1: 阅读 PLAN.md 第 0 节和 ROADMAP.md
-Step 2: 阅读 AGENTS.md（生产库清理已批准但尚未执行，密钥不进 git）
-Step 3: 不要重做主人记录、真实回复、本地轮次、XMTP 收发和历史明文房间删除
-Step 4: 加密房间同时显示对话和本机轮次结果。主人记录接口只对本机页面开放
+Step 1: 阅读 docs/superpowers/plans/2026-09-23-restore-hub.md
+Step 2: 阅读 AGENTS.md 与 RUNBOOK.md（密钥不进 git）
+Step 3: 不要重做加密房间、成员轮次、模型回复和主人记录
+Step 4: 从 Task 1 开始。健康检查仍是 522 时不要清理生产库
 ```
 
 ## 2. 项目状态
 
 ```
-当前阶段: 加密房间同时显示对话和本机轮次结果
-总体进度: 收尾计划已完成。生产库中的用户 hub 房间清理已获批准，尚未执行。
+当前阶段: 恢复公网 Hub
+总体进度: 单机代码已完成。https://hub.wangdada8208.xyz/health 在 2026-09-23 返回 Cloudflare 522。当前执行 docs/superpowers/plans/2026-09-23-restore-hub.md。522 未恢复前不清理生产库。
 ```
 
 ## 3. 技术栈概要
@@ -61,8 +61,8 @@ frontend/         React 前端
 如果你是**第一次加入**，先读 `PLAN.md` 全文，然后看
 `ACCEPTANCE_CHECKLIST.md` 和 `RUNBOOK.md` 了解当前上线状态。
 
-如果你是**回来继续工作**，看 `PLAN.md` 第 0 节和 `ROADMAP.md`。
-不要重做已完成的成员端计划。生产库清理已获批准，但还没有执行。
+如果你是**回来继续工作**，看 `PLAN.md` 第 0 节和 `ROADMAP.md`，
+执行 `docs/superpowers/plans/2026-09-23-restore-hub.md`。健康检查仍是 522 时不要清理生产库。
 
 ---
 
