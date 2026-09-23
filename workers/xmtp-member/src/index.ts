@@ -12,6 +12,10 @@ import {
 import { completeWithFetch } from "./modelComplete.ts";
 import { onInboundText } from "./onInboundText.ts";
 import type { OwnerNote } from "./ownerNote.ts";
+import {
+  createOwnerNotesServer,
+  ownerNotesBindAddress,
+} from "./ownerNotesHttp.ts";
 
 export interface MemberConfig {
   selfName?: string;
@@ -28,6 +32,7 @@ export interface MemberConfig {
   memberModelUrl?: string;
   approvedDays?: string[];
   sensitiveKeywords?: string[];
+  ownerNotesPort?: string;
 }
 
 export function loadConfigFromEnv(): MemberConfig {
@@ -74,6 +79,7 @@ export function loadConfigFromEnv(): MemberConfig {
     memberModelUrl: process.env.MEMBER_MODEL_URL,
     approvedDays: approvedDays.length > 0 ? approvedDays : undefined,
     sensitiveKeywords: sensitiveKeywords.length > 0 ? sensitiveKeywords : undefined,
+    ownerNotesPort: process.env.OWNER_NOTES_PORT,
   };
 }
 
@@ -125,6 +131,13 @@ export async function startMember(): Promise<void> {
   const ownerNotesPath = config.loopStatePath
     ? path.join(path.dirname(config.loopStatePath), "owner-notes.jsonl")
     : defaultOwnerNotesPath;
+
+  const ownerNotesServer = createOwnerNotesServer(ownerNotesPath);
+  const ownerNotesPort = parseInt(
+    config.ownerNotesPort || process.env.OWNER_NOTES_PORT || "8787",
+    10
+  );
+  ownerNotesServer.listen(ownerNotesPort, ownerNotesBindAddress());
 
   let loopState: LocalLoopState;
   if (existsSync(statePath)) {
