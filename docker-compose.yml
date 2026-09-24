@@ -25,6 +25,7 @@ services:
       timeout: 3s
 
   backend:
+    image: ghcr.io/wangdada8208/multi-agent-project-room-backend:${IMAGE_TAG:-latest}
     build:
       context: .
       dockerfile: backend/Dockerfile
@@ -45,6 +46,7 @@ services:
       - kb:/data/knowledge
 
   frontend:
+    image: ghcr.io/wangdada8208/multi-agent-project-room-frontend:${IMAGE_TAG:-latest}
     build:
       context: ./frontend
       dockerfile: Dockerfile
