@@ -182,11 +182,17 @@ async def bind_xmtp_group(
 ) -> dict:
     from app.api.permissions import require_role
 
-    await require_role(room_id, current_user, db, min_role="member")
+    await require_role(room_id, current_user, db, min_role="owner")
 
     room = await db.get(Room, room_id)
     if room is None:
         raise HTTPException(status_code=404, detail="Room not found")
+    if room.transport != "xmtp":
+        raise HTTPException(status_code=409, detail="Only xmtp rooms can be bound")
+    if room.xmtp_group_id:
+        if room.xmtp_group_id == payload.xmtp_group_id:
+            return room.to_dict()
+        raise HTTPException(status_code=409, detail="Room is already bound to another group")
 
     room.transport = "xmtp"
     room.xmtp_group_id = payload.xmtp_group_id
