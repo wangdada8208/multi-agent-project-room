@@ -3,6 +3,9 @@ import { appendFile, mkdir } from "node:fs/promises";
 import path from "node:path";
 import { Agent } from "@xmtp/agent-sdk";
 import { buildBindingPayload } from "./binding.ts";
+import { missingMembers } from "./groupMembers.ts";
+import { fetchHubGroupId, resolveGroupPlan } from "./groupPlan.ts";
+import { appendLedger, buildLedgerEntry } from "./ledger.ts";
 import {
   createLocalLoop,
   loadLoopState,
@@ -16,6 +19,7 @@ import {
   createOwnerNotesServer,
   ownerNotesBindAddress,
 } from "./ownerNotesHttp.ts";
+import { isAllowedSender, parseAllowedSenders } from "./senderPolicy.ts";
 
 export interface MemberConfig {
   selfName?: string;
@@ -24,6 +28,8 @@ export interface MemberConfig {
   xmtpDbEncryptionKey?: string;
   xmtpEnv?: string;
   xmtpPeerAddresses?: string[];
+  xmtpGroupId?: string;
+  allowedSenders: string[];
   hubBaseUrl?: string;
   hubToken?: string;
   hubRoomId?: string;
@@ -35,30 +41,17 @@ export interface MemberConfig {
   ownerNotesPort?: string;
 }
 
+function splitList(raw: string | undefined): string[] {
+  return (raw || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
 export function loadConfigFromEnv(): MemberConfig {
-  const peerAddressesRaw = process.env.XMTP_PEER_ADDRESSES || "";
-  const peerAddresses = peerAddressesRaw
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
-
-  const participantsRaw = process.env.XMTP_PARTICIPANTS || "";
-  const participants = participantsRaw
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
-
-  const approvedDaysRaw = process.env.XMTP_APPROVED_DAYS || "";
-  const approvedDays = approvedDaysRaw
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
-
-  const sensitiveKeywordsRaw = process.env.XMTP_SENSITIVE_KEYWORDS || "";
-  const sensitiveKeywords = sensitiveKeywordsRaw
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
+  const participants = splitList(process.env.XMTP_PARTICIPANTS);
+  const approvedDays = splitList(process.env.XMTP_APPROVED_DAYS);
+  const sensitiveKeywords = splitList(process.env.XMTP_SENSITIVE_KEYWORDS);
 
   const defaultStatePath = existsSync("workers/xmtp-member")
     ? path.resolve("workers/xmtp-member/.state/loop.json")
@@ -70,7 +63,9 @@ export function loadConfigFromEnv(): MemberConfig {
     xmtpWalletKey: process.env.XMTP_WALLET_KEY,
     xmtpDbEncryptionKey: process.env.XMTP_DB_ENCRYPTION_KEY,
     xmtpEnv: process.env.XMTP_ENV || "dev",
-    xmtpPeerAddresses: peerAddresses,
+    xmtpPeerAddresses: splitList(process.env.XMTP_PEER_ADDRESSES).map((s) => s.toLowerCase()),
+    xmtpGroupId: process.env.XMTP_GROUP_ID || undefined,
+    allowedSenders: parseAllowedSenders(process.env.XMTP_ALLOWED_SENDERS),
     hubBaseUrl: process.env.HUB_BASE_URL,
     hubToken: process.env.HUB_TOKEN,
     hubRoomId: process.env.HUB_ROOM_ID,
@@ -116,27 +111,23 @@ export async function bindGroupToHub(
 
 export async function startMember(): Promise<void> {
   const config = loadConfigFromEnv();
+  if (config.allowedSenders.length === 0) {
+    throw new Error("XMTP_ALLOWED_SENDERS is empty; refusing to start");
+  }
   const agent = await Agent.createFromEnv();
+  const selfAddress = (agent.address || "").toLowerCase();
 
   const statePath =
     config.loopStatePath ||
     (existsSync("workers/xmtp-member")
       ? path.resolve("workers/xmtp-member/.state/loop.json")
       : path.resolve(".state/loop.json"));
-
-  const defaultOwnerNotesPath = existsSync("workers/xmtp-member")
-    ? path.resolve("workers/xmtp-member/.state/owner-notes.jsonl")
-    : path.resolve(".state/owner-notes.jsonl");
-
-  const ownerNotesPath = config.loopStatePath
-    ? path.join(path.dirname(config.loopStatePath), "owner-notes.jsonl")
-    : defaultOwnerNotesPath;
+  const stateDir = path.dirname(statePath);
+  const ownerNotesPath = path.join(stateDir, "owner-notes.jsonl");
+  const ledgerPath = path.join(stateDir, "ledger.jsonl");
 
   const ownerNotesServer = createOwnerNotesServer(ownerNotesPath);
-  const ownerNotesPort = parseInt(
-    config.ownerNotesPort || process.env.OWNER_NOTES_PORT || "8787",
-    10
-  );
+  const ownerNotesPort = parseInt(config.ownerNotesPort || "8787", 10);
   ownerNotesServer.listen(ownerNotesPort, ownerNotesBindAddress());
 
   let loopState: LocalLoopState;
@@ -159,7 +150,38 @@ export async function startMember(): Promise<void> {
           })
       : undefined;
 
+  async function ensurePeersInGroup(groupId: string, peers: string[]): Promise<void> {
+    if (peers.length === 0) return;
+    await agent.client.conversations.syncAll();
+    const ctx = await agent.getConversationContext(groupId);
+    if (!ctx || !ctx.isGroup()) {
+      console.warn(`[member] group ${groupId} not found locally; is this member in the group?`);
+      return;
+    }
+    const members = await ctx.conversation.members();
+    const present = members.flatMap((m) => m.accountIdentifiers.map((i) => i.identifier));
+    const missing = missingMembers(present, peers);
+    if (missing.length === 0) return;
+    await agent.addMembersWithAddresses(ctx.conversation, missing as `0x${string}`[]);
+    console.log(`[member] added ${missing.length} peer(s) to group`);
+  }
+
   agent.on("text", async (ctx: any) => {
+    const sender = ((await ctx.getSenderAddress()) || "").toLowerCase();
+    if (sender && sender === selfAddress) return;
+    if (!isAllowedSender(sender, config.allowedSenders)) {
+      await appendLedger(
+        ledgerPath,
+        buildLedgerEntry({
+          now: new Date(),
+          kind: "sender_dropped",
+          peer: sender || null,
+          reason: "sender_not_allowed",
+        })
+      );
+      return;
+    }
+
     const text =
       typeof ctx.message?.content === "string"
         ? ctx.message.content
@@ -176,11 +198,7 @@ export async function startMember(): Promise<void> {
           await appendOwnerNote(ownerNotesPath, note);
         },
         sendText: async (body: string) => {
-          if (typeof ctx.sendText === "function") {
-            await ctx.sendText(body);
-          } else if (ctx.conversation && typeof ctx.conversation.sendText === "function") {
-            await ctx.conversation.sendText(body);
-          }
+          await ctx.conversation.sendText(body);
         },
         saveState: async (nextState: LocalLoopState) => {
           await saveLoopState(statePath, nextState);
@@ -191,25 +209,37 @@ export async function startMember(): Promise<void> {
     }
   });
 
-  if (
-    config.hubBaseUrl &&
-    config.hubRoomId &&
-    config.hubToken &&
-    config.xmtpPeerAddresses &&
-    config.xmtpPeerAddresses.length > 0
-  ) {
+  const hubConfigured = Boolean(config.hubBaseUrl && config.hubRoomId && config.hubToken);
+  const hubGroupId = hubConfigured
+    ? await fetchHubGroupId({
+        hubBaseUrl: config.hubBaseUrl!,
+        hubRoomId: config.hubRoomId!,
+        hubToken: config.hubToken!,
+      })
+    : null;
+
+  const plan = resolveGroupPlan({
+    envGroupId: config.xmtpGroupId,
+    hubGroupId,
+    peerAddresses: config.xmtpPeerAddresses || [],
+  });
+
+  if (plan.action === "create") {
     const group = await agent.createGroupWithAddresses(
-      config.xmtpPeerAddresses
+      (config.xmtpPeerAddresses || []) as `0x${string}`[]
     );
-    const groupId = group.id;
-    await bindGroupToHub(
-      config.hubBaseUrl,
-      config.hubRoomId,
-      config.hubToken,
-      groupId
-    );
+    console.log(`[member] created group ${group.id}`);
+    if (hubConfigured) {
+      await bindGroupToHub(config.hubBaseUrl!, config.hubRoomId!, config.hubToken!, group.id);
+    }
+  } else if (plan.action === "use") {
+    console.log(`[member] using group ${plan.groupId} from ${plan.source}`);
+    await ensurePeersInGroup(plan.groupId, config.xmtpPeerAddresses || []);
+  } else {
+    console.log("[member] no group configured; listening only");
   }
 
+  console.log(`[member] address ${selfAddress}`);
   await agent.start();
 }
 
