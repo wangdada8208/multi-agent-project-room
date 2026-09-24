@@ -14,7 +14,7 @@ import { ChatInput } from "../components/chat/ChatInput";
 import { useNotification } from "../hooks/useNotification";
 import { useAnalytics } from "../hooks/useAnalytics";
 import { fetchMessages, fetchAgents, fetchTasks, searchMessages, apiFetch } from "../lib/api";
-import { loadOrCreateInboxKey, createLocalXmtpClient } from "../lib/xmtpLocalIdentity";
+import { loadOrCreateInboxKey, createLocalXmtpClient, inboxAddress } from "../lib/xmtpLocalIdentity";
 import { sendXmtpMessage, toLocalChatMessage } from "../lib/xmtpSend";
 import { memberIdentifier, assertWorkerAddress } from "../lib/xmtpGroup";
 import { formatOwnerNoteAction, visibleOwnerNotes } from "../lib/ownerNotes";
@@ -59,6 +59,7 @@ export function RoomPage() {
   const setTasks = useChatStore((state) => state.setTasks);
 
   const [xmtpClient, setXmtpClient] = useState<Client<any> | null>(null);
+  const [myXmtpAddress, setMyXmtpAddress] = useState<string>("");
   const isEncrypted = roomQuery.data?.transport === "xmtp";
 
   useEffect(() => {
@@ -98,6 +99,7 @@ export function RoomPage() {
     async function initXmtp() {
       try {
         const key = loadOrCreateInboxKey();
+        setMyXmtpAddress(inboxAddress(key));
         const client = await createLocalXmtpClient(key);
         if (cancelled) {
           client.close();
@@ -122,6 +124,10 @@ export function RoomPage() {
             body: JSON.stringify({ xmtp_group_id: group.id }),
           });
           if (res.ok) {
+            void roomQuery.refetch();
+          } else if (res.status === 403) {
+            console.warn("只有房主可以绑定加密群");
+          } else if (res.status === 409) {
             void roomQuery.refetch();
           }
         }
@@ -285,6 +291,17 @@ export function RoomPage() {
             >
               ID: {roomId} 📋
             </span>
+            {isEncrypted && myXmtpAddress && (
+              <span
+                style={{ fontSize: 11, color: "var(--text-secondary)", cursor: "pointer", fontFamily: "monospace" }}
+                title="点击复制本机加密身份地址，填进对方成员进程的 XMTP_ALLOWED_SENDERS"
+                onClick={async () => {
+                  await navigator.clipboard.writeText(myXmtpAddress);
+                }}
+              >
+                我的加密地址: {myXmtpAddress} 📋
+              </span>
+            )}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: "auto" }}>
             {!notifEnabled && (

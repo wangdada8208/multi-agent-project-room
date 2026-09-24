@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createBrowserSigner, hubSafeIdentity, loadOrCreateInboxKey } from "./xmtpLocalIdentity";
+import { createBrowserSigner, hubSafeIdentity, inboxAddress, loadOrCreateInboxKey } from "./xmtpLocalIdentity";
 
 describe("xmtpLocalIdentity", () => {
   it("hub payload contains the address and not the private key", () => {
@@ -37,5 +37,12 @@ describe("xmtpLocalIdentity", () => {
     const sig = await signer.signMessage("test-message");
     expect(sig).toBeInstanceOf(Uint8Array);
     expect(sig.length).toBe(65);
+  });
+});
+describe("inboxAddress", () => {
+  it("derives the lowercase address of a public test key", () => {
+    expect(
+      inboxAddress("0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"),
+    ).toBe("0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266");
   });
 });

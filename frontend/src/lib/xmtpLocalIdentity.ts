@@ -1,6 +1,7 @@
 import { hexToBytes } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { Client, IdentifierKind, type Signer } from "@xmtp/browser-sdk";
+import { xmtpEnvFromVite } from "./xmtpEnv";
 
 const STORAGE_KEY = "mapr-xmtp-inbox-key";
 
@@ -42,7 +43,12 @@ export function createBrowserSigner(privateKey: string): Signer {
   };
 }
 
+export function inboxAddress(privateKey: string): string {
+  return privateKeyToAccount(privateKey as `0x${string}`).address.toLowerCase();
+}
+
 export async function createLocalXmtpClient(privateKey: string): Promise<Client<any>> {
   const signer = createBrowserSigner(privateKey);
-  return Client.create(signer, { env: "dev" } as any);
+  const env = xmtpEnvFromVite(import.meta.env.VITE_XMTP_ENV as string | undefined);
+  return Client.create(signer, { env } as any);
 }

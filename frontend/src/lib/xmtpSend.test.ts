@@ -67,6 +67,35 @@ describe("sendXmtpMessage", () => {
   });
 });
 
+describe("sendXmtpMessage after being added to a group", () => {
+  it("syncs once when the group is not known locally yet", async () => {
+    const sendText = vi.fn(async (_text: string) => {});
+    let synced = false;
+    const client = {
+      conversations: {
+        syncAll: vi.fn(async () => {
+          synced = true;
+        }),
+        getConversationById: async () => (synced ? { sendText } : undefined),
+      },
+    };
+    await sendXmtpMessage({ groupId: "group-new", content: "hi", client });
+    expect(client.conversations.syncAll).toHaveBeenCalledTimes(1);
+    expect(sendText).toHaveBeenCalledWith("hi");
+  });
+
+  it("still throws when the group is missing after sync", async () => {
+    const client = {
+      conversations: {
+        syncAll: async () => {},
+        getConversationById: async () => undefined,
+      },
+    };
+    await expect(sendXmtpMessage({ groupId: "group-x", content: "hi", client })).rejects.toThrow("not found");
+  });
+});
+
+
 describe("toLocalChatMessage", () => {
   it("builds a local chat message without a hub id", () => {
     const message = toLocalChatMessage({

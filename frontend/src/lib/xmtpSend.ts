@@ -48,7 +48,11 @@ export async function sendXmtpMessage(options: {
   if (!options.client) {
     throw new Error("XMTP client is not initialized");
   }
-  const conversation = await options.client.conversations.getConversationById(options.groupId);
+  let conversation = await options.client.conversations.getConversationById(options.groupId);
+  if (!conversation && typeof options.client.conversations.syncAll === "function") {
+    await options.client.conversations.syncAll();
+    conversation = await options.client.conversations.getConversationById(options.groupId);
+  }
   if (!conversation) {
     throw new Error(`Conversation ${options.groupId} not found`);
   }
