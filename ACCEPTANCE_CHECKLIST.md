@@ -23,6 +23,13 @@ item with the date, tester, environment, and evidence link or log snippet.
 
 Run these commands from the repository root:
 
+First-time setup (creates the `.venv` the commands below expect):
+
+```bash
+python3.12 -m venv .venv
+.venv/bin/pip install -r backend/requirements.txt
+```
+
 ```bash
 cd backend
 ../.venv/bin/pytest tests -q
@@ -42,6 +49,15 @@ npm run build
 ```
 
 Expected: TypeScript and Vite production build pass.
+
+```bash
+cd workers/xmtp-member
+npm install
+npm run typecheck
+npm test
+```
+
+Expected: typecheck prints nothing and all member tests pass.
 
 ## Production Smoke Test
 
