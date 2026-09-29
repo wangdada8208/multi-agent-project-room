@@ -13,3 +13,12 @@ backend/test.db
 test.db
 frontend/vite.config.js
 frontend/vite.config.d.ts
+test_verify.db
+
+*.db
+*.db3
+*.db3-*
+*.sqlcipher_salt
+workers/xmtp-member/node_modules/
+workers/xmtp-member/.state/
+

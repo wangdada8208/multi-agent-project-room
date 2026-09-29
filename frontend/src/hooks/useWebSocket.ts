@@ -4,12 +4,16 @@ import type { ChatMessage, MessageType, RoomSocketEvent, SenderType } from "../t
 
 import { useAuthStore } from "../stores/authStore";
 import { websocketUrl, apiFetch } from "../lib/api";
+import { deliverOutgoing, toLocalChatMessage } from "../lib/xmtpSend";
 
 interface SendMessageInput {
   content: string;
   senderId: string;
   senderType: SenderType;
   msgType?: MessageType;
+  transport?: string;
+  xmtpGroupId?: string | null;
+  sendToXmtp?: (groupId: string, content: string) => Promise<void>;
 }
 
 function getWebSocketUrl(roomId: string): string {
@@ -37,7 +41,7 @@ async function fetchMissedMessages(roomId: string, afterTimestamp: string | null
   }
 }
 
-export function useWebSocket(roomId: string) {
+export function useWebSocket(roomId: string, transport: string = "xmtp") {
   const socketRef = useRef<WebSocket | null>(null);
   const reconnectTimerRef = useRef<number | null>(null);
   const reconnectAttemptRef = useRef(0);
@@ -76,6 +80,7 @@ export function useWebSocket(roomId: string) {
     };
 
     const catchUpMissedMessages = async () => {
+      if (transport === "xmtp") return;
       const since = lastDisconnectRef.current;
       if (!since) return; // First connect, no gap to fill
       const missed = await fetchMissedMessages(roomId, since);
@@ -87,6 +92,11 @@ export function useWebSocket(roomId: string) {
 
     const connect = () => {
       clearReconnectTimer();
+      const token = localStorage.getItem("mapr-auth-token");
+      if (!token) {
+        setConnectionStatus("idle");
+        return;
+      }
       setConnectionStatus("connecting");
 
       const socket = new WebSocket(getWebSocketUrl(roomId));
@@ -109,9 +119,13 @@ export function useWebSocket(roomId: string) {
         catchUpMissedMessages();
       });
 
-      socket.addEventListener("close", () => {
+      socket.addEventListener("close", (event) => {
         if (disposed || socketRef.current !== socket) return;
         setConnectionStatus("closed");
+        if (event.code === 4001) {
+          // Authentication required; do not endlessly hammer the server
+          return;
+        }
         scheduleReconnect(socket);
       });
 
@@ -190,15 +204,37 @@ export function useWebSocket(roomId: string) {
     };
   }, [addMessage, markTyping, removeParticipant, roomId, setConnectionStatus, setParticipants, upsertParticipant, upsertTask]);
 
-  const sendMessage = useCallback((input: SendMessageInput) => {
+  const sendMessage = useCallback(async (input: SendMessageInput): Promise<boolean> => {
     const socket = socketRef.current;
+    const displayName = useAuthStore.getState().displayName;
+    const user = useAuthStore.getState().user;
+
+    const delivery = await deliverOutgoing({
+      transport: input.transport ?? transport,
+      content: input.content,
+      xmtpGroupId: input.xmtpGroupId,
+      sendToXmtp: input.sendToXmtp,
+    });
+
+    if (delivery.hubPayload === null) {
+      // Encrypted room messages are delivered via XMTP, not Hub WebSocket
+      if (delivery.delivered) {
+        addMessage(
+          toLocalChatMessage({
+            roomId,
+            content: input.content,
+            senderId: user?.id ?? input.senderId,
+            senderName: user?.display_name ?? displayName,
+            senderType: input.senderType,
+          }),
+        );
+      }
+      return delivery.delivered;
+    }
 
     if (!socket || socket.readyState !== WebSocket.OPEN) {
       return false;
     }
-
-    const displayName = useAuthStore.getState().displayName;
-    const user = useAuthStore.getState().user;
 
     socket.send(
       JSON.stringify({
@@ -207,12 +243,12 @@ export function useWebSocket(roomId: string) {
         sender_type: input.senderType,
         sender_name: user?.display_name ?? displayName,
         msg_type: input.msgType ?? "text",
-        content: input.content,
+        content: delivery.hubPayload.content,
       }),
     );
 
     return true;
-  }, []);
+  }, [transport]);
 
   return useMemo(() => ({ sendMessage }), [sendMessage]);
 }

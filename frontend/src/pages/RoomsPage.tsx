@@ -1,17 +1,23 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { createRoom, fetchRooms } from "../lib/api";
+import { createRoom, fetchRooms, fetchTemplates } from "../lib/api";
+import { useAnalytics } from "../hooks/useAnalytics";
 import { useAuthStore } from "../stores/authStore";
 import type { Room } from "../types/chat";
 
 export function RoomsPage() {
   const navigate = useNavigate();
+  const { track } = useAnalytics();
   const queryClient = useQueryClient();
   const [showCreate, setShowCreate] = useState(false);
   const [roomName, setRoomName] = useState("");
   const [creating, setCreating] = useState(false);
+  const [joinRoomId, setJoinRoomId] = useState("");
+  const [showJoin, setShowJoin] = useState(false);
   const [error, setError] = useState("");
+  const [templates, setTemplates] = useState<Array<{key:string,name:string,description:string|null,icon:string}>>([]);
+  const [showTemplates, setShowTemplates] = useState(false);
 
   const roomsQuery = useQuery({
     queryKey: ["rooms"],
@@ -21,18 +27,37 @@ export function RoomsPage() {
 
   const rooms: Room[] = roomsQuery.data ?? [];
 
+  useState(() => {
+    fetchTemplates().then(setTemplates).catch(() => {});
+    return null;
+  });
+
   async function handleCreate() {
     if (!roomName.trim()) return;
     setCreating(true);
     setError("");
     try {
       const room = await createRoom(roomName.trim());
+      track("room_create", room.id);
       await queryClient.invalidateQueries({ queryKey: ["rooms"] });
       navigate(`/rooms/${room.id}`);
     } catch {
       setError("创建失败，请重试。");
     } finally {
       setCreating(false);
+    }
+  }
+
+  function handleJoin() {
+    const trimmed = joinRoomId.trim();
+    if (!trimmed) return;
+    const matched = rooms.find(
+      (r) => r.id === trimmed || r.name.toLowerCase() === trimmed.toLowerCase()
+    );
+    if (matched) {
+      navigate(`/rooms/${matched.id}`);
+    } else {
+      navigate(`/rooms/${trimmed}`);
     }
   }
 
@@ -55,15 +80,46 @@ export function RoomsPage() {
       </header>
       <div className="rooms-header">
         <h1>房间列表</h1>
-        <button
-          type="button"
-          className="btn-primary"
-          style={{ width: "auto", padding: "8px 20px" }}
-          onClick={() => setShowCreate(!showCreate)}
-        >
-          + 新建房间
-        </button>
+        <div style={{ display: "flex", gap: 8 }}>
+          {templates.length > 0 && (
+            <button type="button" className="btn-ghost" style={{ padding: "8px 16px" }} onClick={() => setShowTemplates(!showTemplates)}>
+              📋 模板
+            </button>
+          )}
+          <button type="button" className="btn-ghost" style={{ padding: "8px 16px" }} onClick={() => setShowJoin(!showJoin)}>
+            🔑 加入房间
+          </button>
+          <button type="button" className="btn-primary" style={{ width: "auto", padding: "8px 20px" }} onClick={() => setShowCreate(!showCreate)}>
+            + 新建房间
+          </button>
+        </div>
       </div>
+
+      
+      {showJoin && (
+        <div className="create-room-card">
+          <input
+            value={joinRoomId}
+            onChange={(e) => setJoinRoomId(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                handleJoin();
+              }
+            }}
+            placeholder="输入房间 ID 或房间名称..."
+            autoFocus
+          />
+          <button
+            type="button"
+            className="btn-primary"
+            style={{ width: "auto", padding: "8px 16px" }}
+            onClick={handleJoin}
+            disabled={!joinRoomId.trim()}
+          >
+            进入
+          </button>
+        </div>
+      )}
 
       {showCreate && (
         <div className="create-room-card">
@@ -77,6 +133,40 @@ export function RoomsPage() {
           <button type="button" className="btn-primary" style={{ width: "auto", padding: "8px 16px" }} onClick={handleCreate} disabled={creating || !roomName.trim()}>
             {creating ? "创建中..." : "创建"}
           </button>
+        </div>
+      )}
+
+      {showTemplates && templates.length > 0 && (
+        <div className="create-room-card" style={{ flexDirection: "column", alignItems: "stretch" }}>
+          <p style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 8 }}>从模板创建：</p>
+          <div className="onboarding-template-grid">
+            {templates.map((t) => (
+              <button key={t.key} type="button"
+                className="room-card"
+                onClick={async () => {
+                  try {
+                    const token = localStorage.getItem("mapr-auth-token") ?? "";
+                    const res = await fetch("/api/v1/templates/create-room", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+                      body: JSON.stringify({ template_key: t.key, name: `${t.name} - ${new Date().toLocaleDateString("zh-CN")}` }),
+                    });
+                    const data = await res.json();
+                    if (data.room) {
+                      await queryClient.invalidateQueries({ queryKey: ["rooms"] });
+                      navigate(`/rooms/${data.room.id}`);
+                    }
+                  } catch { /* silent */ }
+                }}>
+                <span className="room-card__icon">{t.icon}</span>
+                <div className="room-card__info">
+                  <strong>{t.name}</strong>
+                  <small>{t.description}</small>
+                </div>
+                <span className="room-card__arrow">→</span>
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
@@ -102,6 +192,9 @@ export function RoomsPage() {
             <span className="room-card__icon">🏠</span>
             <div className="room-card__info">
               <strong>{room.name}</strong>
+              <small style={{ fontFamily: "monospace", color: "var(--text-secondary)", fontSize: 11 }}>
+                ID: {room.id}
+              </small>
               {room.description && <small>{room.description}</small>}
               <small>{new Date(room.created_at).toLocaleDateString("zh-CN")}</small>
             </div>

@@ -17,6 +17,8 @@ export interface Room {
   description: string;
   created_by?: string | null;
   created_at: string;
+  transport?: string;
+  xmtp_group_id?: string | null;
 }
 
 export interface ChatMessage {

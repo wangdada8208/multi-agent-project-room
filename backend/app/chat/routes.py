@@ -20,14 +20,15 @@ async def list_messages(
     current_user: User = Depends(get_current_user),
 ) -> dict:
     """Get paginated messages for a room (newest last)."""
-    room = await db.get(Room, room_id)
+    room = await chat_service.resolve_room(db, room_id)
     if room is None:
         # Room doesn't exist yet — auto-create so it's ready for first message
         room = await chat_service.get_or_create_room(
             db, room_id, name=f"Room {room_id[:8]}"
         )
+    actual_room_id = room.id
 
-    messages = await chat_service.list_messages(db, room_id, page=page, limit=limit)
+    messages = await chat_service.list_messages(db, actual_room_id, page=page, limit=limit)
     return {
         "messages": [m.to_dict() for m in messages],
         "retention_days": chat_service.settings.message_retention_days,

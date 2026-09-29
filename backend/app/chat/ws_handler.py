@@ -32,24 +32,31 @@ logger = logging.getLogger(__name__)
 
 
 def _find_mentioned_agents(content: str, agent_names: set[str]) -> list[str]:
-    """Case-insensitive @mention detection. Returns matched agent names."""
+    """Case-insensitive @mention detection with boundary guard."""
     content_lower = content.lower()
     mentioned = []
-    for name in agent_names:
-        if re.search(rf'@{re.escape(name.lower())}\b', content_lower):
+    sorted_names = sorted(agent_names, key=len, reverse=True)
+    for name in sorted_names:
+        escaped = re.escape(name.lower())
+        pattern = rf"@{escaped}(?:(?=[^a-zA-Z0-9_-])|$)"
+        if re.search(pattern, content_lower):
             mentioned.append(name)
     return mentioned
 
 
-async def _get_active_agent_names() -> set[str]:
-    """Query all active agent names from the AgentCardRecord table."""
+async def _get_active_agent_names(room_id: str | None = None) -> set[str]:
+    """Query active agent names from both AgentCardRecord and WebSocket connections."""
+    active_names = connection_manager.get_online_agent_names(room_id)
     async with async_session() as db:
         result = await db.execute(
             select(AgentCardRecord.agent_name).where(
                 AgentCardRecord.is_active == True
             )
         )
-        return {row[0] for row in result.fetchall()}
+        for row in result.fetchall():
+            if row[0]:
+                active_names.add(row[0])
+    return active_names
 
 
 async def _check_mentions_and_forward(
@@ -58,7 +65,7 @@ async def _check_mentions_and_forward(
     content: str,
 ) -> None:
     """Detect @mentions and forward agent_task messages to agent channels."""
-    agent_names = await _get_active_agent_names()
+    agent_names = await _get_active_agent_names(source_room_id)
     mentioned = _find_mentioned_agents(content, agent_names)
     if not mentioned:
         return
@@ -108,6 +115,46 @@ async def _check_mentions_and_forward(
         })
 
 
+async def persist_incoming_message(
+    room_id: str,
+    sender_id: str,
+    sender_type: str,
+    sender_name: str | None,
+    content: str,
+    msg_type: str,
+    parent_id: str | None,
+):
+    from app.chat.plaintext_guard import PlaintextStorageForbidden
+
+    async with async_session() as db:
+        room = await db.get(Room, room_id)
+        if room is None:
+            if not room_id.startswith("_agent_"):
+                room = Room(
+                    id=room_id,
+                    name=f"Room {room_id[:8]}",
+                    transport="xmtp",
+                )
+                db.add(room)
+                await db.commit()
+                return None
+            room = await chat_service.get_or_create_room(
+                db, room_id, name=f"Room {room_id[:8]}"
+            )
+        if room.transport == "xmtp":
+            return None
+        return await chat_service.save_message(
+            db=db,
+            room_id=room_id,
+            sender_id=sender_id,
+            sender_type=sender_type,
+            sender_name=sender_name,
+            content=content,
+            msg_type=msg_type,
+            parent_id=parent_id,
+        )
+
+
 async def handle_chat(websocket: WebSocket, room_id: str, token: str = Query(default="")) -> None:
     """WebSocket endpoint for a chat room.
 
@@ -122,6 +169,12 @@ async def handle_chat(websocket: WebSocket, room_id: str, token: str = Query(def
 
     authenticated_user_id = payload.get("sub", "")
     authenticated_user_type = payload.get("typ", "human")
+
+    # ── Resolve room identifier (support both room id and room name) ──
+    async with async_session() as db:
+        resolved = await chat_service.resolve_room(db, room_id)
+        if resolved:
+            room_id = resolved.id
 
     await connection_manager.connect(room_id, websocket)
     logger.info("ws connected room=%s user=%s", room_id[:8], authenticated_user_id[:8])
@@ -149,18 +202,23 @@ async def handle_chat(websocket: WebSocket, room_id: str, token: str = Query(def
 
             # ── Presence identity (must match authenticated user) ──
             if msg_type == "identify":
-                # Force sender_id to match the token subject
-                raw["sender_id"] = authenticated_user_id
+                # Ensure agent identities have unique composite sender_id to prevent collision with human owner
+                if str(raw.get("sender_type") or "").lower() == "agent":
+                    agent_name_slug = str(raw.get("sender_name") or "agent").lower().replace(" ", "_")
+                    raw["sender_id"] = f"agent_{agent_name_slug}_{authenticated_user_id}"
+                else:
+                    raw["sender_id"] = authenticated_user_id
                 participant = await connection_manager.identify(room_id, websocket, raw)
                 await connection_manager.broadcast(
                     room_id,
                     {"type": "user_online", "participant": participant},
                 )
-                await websocket.send_json(
+                await connection_manager.broadcast(
+                    room_id,
                     {
                         "type": "presence_snapshot",
                         "participants": connection_manager.presence_snapshot(room_id),
-                    }
+                    },
                 )
                 continue
 
@@ -174,7 +232,14 @@ async def handle_chat(websocket: WebSocket, room_id: str, token: str = Query(def
 
             # ── Chat message ──
             if msg_type == "message":
-                raw["sender_id"] = authenticated_user_id  # Force identity from token
+                sender_type = str(raw.get("sender_type") or authenticated_user_type).lower()
+                if sender_type == "agent":
+                    agent_name_slug = str(raw.get("sender_name") or "agent").lower().replace(" ", "_")
+                    raw["sender_id"] = f"agent_{agent_name_slug}_{authenticated_user_id}"
+                    raw["sender_type"] = "agent"
+                else:
+                    raw["sender_id"] = authenticated_user_id
+                    raw["sender_type"] = authenticated_user_type
                 participant = await connection_manager.identify(room_id, websocket, raw)
                 content = str(raw.get("content", "")).strip()
                 if not content:
@@ -186,23 +251,20 @@ async def handle_chat(websocket: WebSocket, room_id: str, token: str = Query(def
                 # Agent responses include target_room for cross-room routing
                 target_room = raw.get("target_room") or room_id
 
-                async with async_session() as db:
-                    room = await db.get(Room, target_room)
-                    if room is None:
-                        room = await chat_service.get_or_create_room(
-                            db, target_room, name=f"Room {target_room[:8]}"
-                        )
-
-                    message = await chat_service.save_message(
-                        db=db,
-                        room_id=target_room,
-                        sender_id=str(raw.get("sender_id", authenticated_user_id)),
-                        sender_type=raw.get("sender_type", authenticated_user_type),
-                        sender_name=raw.get("sender_name"),
-                        content=content,
-                        msg_type=raw.get("msg_type", "text"),
-                        parent_id=raw.get("parent_id"),
+                message = await persist_incoming_message(
+                    room_id=target_room,
+                    sender_id=str(raw.get("sender_id", authenticated_user_id)),
+                    sender_type=raw.get("sender_type", authenticated_user_type),
+                    sender_name=raw.get("sender_name"),
+                    content=content,
+                    msg_type=raw.get("msg_type", "text"),
+                    parent_id=raw.get("parent_id"),
+                )
+                if message is None:
+                    await websocket.send_json(
+                        {"type": "error", "code": "body_not_on_hub", "message": "加密房间的正文不经过 Hub"}
                     )
+                    continue
 
                 await connection_manager.broadcast(
                     target_room,
@@ -235,6 +297,13 @@ async def handle_chat(websocket: WebSocket, room_id: str, token: str = Query(def
             )
         await connection_manager.broadcast(
             room_id,
+            {
+                "type": "presence_snapshot",
+                "participants": connection_manager.presence_snapshot(room_id),
+            },
+        )
+        await connection_manager.broadcast(
+            room_id,
             {"type": "system", "content": "A participant left the room."},
         )
     except Exception as e:
@@ -245,6 +314,13 @@ async def handle_chat(websocket: WebSocket, room_id: str, token: str = Query(def
                 room_id,
                 {"type": "user_offline", "participant": participant},
             )
+        await connection_manager.broadcast(
+            room_id,
+            {
+                "type": "presence_snapshot",
+                "participants": connection_manager.presence_snapshot(room_id),
+            },
+        )
         await connection_manager.broadcast(
             room_id,
             {"type": "system", "content": f"Connection error: {str(e)}"},

@@ -44,6 +44,10 @@ async def init_db():
     import app.agent.models  # noqa: F401
     import app.knowledge.models  # noqa: F401
     import app.files.models  # noqa: F401
+    import app.models.room_template  # noqa: F401
+    import app.models.room_permission  # noqa: F401
+    import app.models.analytics  # noqa: F401
+    import app.models.room_share  # noqa: F401
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)

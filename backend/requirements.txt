@@ -17,3 +17,4 @@ sse-starlette>=2.0,<3
 aiofiles>=24,<26
 aiofiles>=24,<26
 python-multipart>=0.0.9
+websockets>=13.0

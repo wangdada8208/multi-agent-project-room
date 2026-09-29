@@ -73,7 +73,7 @@ export function TeamConfigEditor({ initialConfig, onSave }: TeamConfigEditorProp
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           placeholder="例如：项目开发组"
-          style={{ width: "100%", padding: "8px", borderRadius: 6, border: "1px solid #d1d5db" }}
+          style={{ width: "100%", padding: "8px", borderRadius: 12, border: "1px solid var(--border-medium)" }}
         />
       </div>
 
@@ -137,7 +137,7 @@ export function TeamConfigEditor({ initialConfig, onSave }: TeamConfigEditorProp
             </div>
           </div>
         ))}
-        <button type="button" onClick={addRole} style={{ padding: "6px 16px", borderRadius: 6, border: "1px dashed #9ca3af", background: "none", cursor: "pointer" }}>
+        <button type="button" onClick={addRole} style={{ padding: "6px 16px", borderRadius: 12, border: "1px dashed var(--border-strong)", background: "none", cursor: "pointer" }}>
           + 添加角色
         </button>
       </div>
@@ -149,13 +149,13 @@ export function TeamConfigEditor({ initialConfig, onSave }: TeamConfigEditorProp
           onChange={(e) => setRules(e.target.value)}
           rows={5}
           placeholder={"每行一条规则\n开发者完成代码后必须提交给审查者\n审查者发现问题直接反馈给开发者"}
-          style={{ width: "100%", padding: 8, borderRadius: 6, border: "1px solid #d1d5db", resize: "vertical" }}
+          style={{ width: "100%", padding: 8, borderRadius: 12, border: "1px solid var(--border-medium)", resize: "vertical" }}
         />
       </div>
 
       <div style={{ display: "flex", gap: 8 }}>
         {onSave && (
-          <button type="button" onClick={handleSave} style={{ padding: "8px 20px", borderRadius: 6, background: "#2563eb", color: "#fff", border: "none", cursor: "pointer" }}>
+          <button type="button" onClick={handleSave} style={{ padding: "8px 20px", borderRadius: 12, background: "var(--accent-strong)", color: "#fff", border: "none", cursor: "pointer" }}>
             保存配置
           </button>
         )}
@@ -165,17 +165,17 @@ export function TeamConfigEditor({ initialConfig, onSave }: TeamConfigEditorProp
             const md = exportMarkdown();
             navigator.clipboard.writeText(md);
           }}
-          style={{ padding: "8px 20px", borderRadius: 6, background: "#f3f4f6", border: "1px solid #d1d5db", cursor: "pointer" }}
+          style={{ padding: "8px 20px", borderRadius: 12, background: "#f3f4f6", border: "1px solid var(--border-medium)", cursor: "pointer" }}
         >
           复制 Markdown
         </button>
       </div>
 
       <details>
-        <summary style={{ cursor: "pointer", fontSize: "0.8rem", color: "#6b7280" }}>
+        <summary style={{ cursor: "pointer", fontSize: "0.8rem", color: "var(--text-tertiary)" }}>
           预览 Markdown
         </summary>
-        <pre style={{ whiteSpace: "pre-wrap", fontSize: "0.75rem", background: "#f9fafb", padding: 12, borderRadius: 8, marginTop: 8 }}>
+        <pre style={{ whiteSpace: "pre-wrap", fontSize: "0.75rem", background: "var(--bg-elevated)", padding: 12, borderRadius: 12, marginTop: 8 }}>
           {exportMarkdown()}
         </pre>
       </details>

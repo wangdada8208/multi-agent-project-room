@@ -58,7 +58,8 @@ async def test_forward_mention_creates_hidden_agent_channel(db):
             is_active=True,
         )
     )
-    await chat_service.get_or_create_room(db, "demo-room", name="Demo Room")
+    db.add(Room(id="demo-room", name="Demo Room", transport="hub"))
+    await db.commit()
     source_message = await chat_service.save_message(
         db=db,
         room_id="demo-room",

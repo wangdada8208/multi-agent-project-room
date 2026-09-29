@@ -14,6 +14,7 @@ export function DialoguePanel({ roomId, onlineAgents }: DialoguePanelProps) {
   const [loop, setLoop] = useState<MessageLoopState | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [injectText, setInjectText] = useState("");
 
   const all_participants = 2; // initiator + participant
 
@@ -116,6 +117,51 @@ export function DialoguePanel({ roomId, onlineAgents }: DialoguePanelProps) {
     }
   }
 
+  async function injectHumanMessage() {
+    if (!loop || !injectText.trim()) return;
+    setLoading(true);
+    try {
+      const token = localStorage.getItem("mapr-auth-token") ?? "";
+      await fetch("/a2a/dialogue-rpc", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          method: "dialogues/inject",
+          params: { dialogue_id: loop.loop_id, content: injectText.trim(), sender_type: "human" },
+          id: Date.now(),
+        }),
+      });
+      setInjectText("");
+    } catch {
+      // Silent fail
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function skipTurn() {
+    if (!loop) return;
+    setLoading(true);
+    try {
+      const token = localStorage.getItem("mapr-auth-token") ?? "";
+      await fetch("/a2a/dialogue-rpc", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          method: "dialogues/skip",
+          params: { dialogue_id: loop.loop_id },
+          id: Date.now(),
+        }),
+      });
+    } catch {
+      // Silent
+    } finally {
+      setLoading(false);
+    }
+  }
+
   const isActive = loop?.status === "active";
 
   return (
@@ -164,9 +210,30 @@ export function DialoguePanel({ roomId, onlineAgents }: DialoguePanelProps) {
           <p className="panel-hint">Agent 回复会实时出现在聊天区。</p>
 
           {isActive && (
-            <button type="button" className="btn-danger" onClick={endDialogue} disabled={loading}>
-              ⏹ 停止对话
-            </button>
+            <>
+              <div className="dialogue-interventions">
+                <button type="button" className="btn-ghost dialogue-btn-skip" onClick={skipTurn} disabled={loading}>
+                  ⏭ 跳过当前轮
+                </button>
+                <button type="button" className="btn-danger" onClick={endDialogue} disabled={loading}>
+                  ⏹ 停止对话
+                </button>
+              </div>
+              <div className="panel-field dialogue-inject">
+                <label>注入人类消息</label>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <input
+                    value={injectText}
+                    onChange={(e) => setInjectText(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && injectHumanMessage()}
+                    placeholder="输入你的意见或引导方向..."
+                  />
+                  <button type="button" className="btn-primary" onClick={injectHumanMessage} disabled={!injectText.trim() || loading} style={{ width: "auto", padding: "8px 14px" }}>
+                    注入
+                  </button>
+                </div>
+              </div>
+            </>
           )}
         </>
       )}

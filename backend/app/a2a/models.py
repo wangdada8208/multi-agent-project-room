@@ -31,7 +31,7 @@ class A2ATask(Base):
         String(36), ForeignKey("rooms.id"), nullable=True, index=True
     )
     source_message_id: Mapped[Optional[str]] = mapped_column(
-        String(36), ForeignKey("messages.id"), nullable=True
+        String(36), ForeignKey("messages.id", ondelete="SET NULL"), nullable=True
     )
     approval_id: Mapped[Optional[str]] = mapped_column(
         String(36), ForeignKey("approvals.id"), nullable=True

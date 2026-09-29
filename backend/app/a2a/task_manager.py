@@ -105,6 +105,13 @@ async def complete_task(task_id: str, result_data: list[dict]) -> dict:
         db_task = await db.get(A2ATask, task_id)
         if not db_task:
             return {"error": "Task not found"}
+        if db_task.status in ("canceled", "completed", "failed"):
+            logger.warning("Rejecting completion for finalized task id=%s status=%s", task_id, db_task.status)
+            return {
+                "id": task_id,
+                "status": db_task.status,
+                "info": f"Task already finalized as {db_task.status}; late result discarded",
+            }
         db_task.status = "completed"
         db_task.result = result_data
         db_task.completed_at = datetime.now(timezone.utc)
@@ -121,6 +128,13 @@ async def fail_task(task_id: str, error: str) -> dict:
         db_task = await db.get(A2ATask, task_id)
         if not db_task:
             return {"error": "Task not found"}
+        if db_task.status in ("canceled", "completed", "failed"):
+            logger.warning("Rejecting failure for finalized task id=%s status=%s", task_id, db_task.status)
+            return {
+                "id": task_id,
+                "status": db_task.status,
+                "info": f"Task already finalized as {db_task.status}",
+            }
         db_task.status = "failed"
         db_task.result = {"error": error}
         db_task.completed_at = datetime.now(timezone.utc)
@@ -201,6 +215,16 @@ async def cancel_task(task_id: str) -> dict:
         await db.commit()
         await db.refresh(db_task)
         await _broadcast_task_update(db_task)
+        if db_task.room_id:
+            await connection_manager.broadcast(
+                db_task.room_id,
+                {
+                    "type": "task_canceled",
+                    "task_id": task_id,
+                    "room_id": db_task.room_id,
+                    "agent_id": db_task.target_agent or "",
+                },
+            )
         logger.info("task canceled id=%s", task_id)
     return {"id": task_id, "status": "canceled"}
 

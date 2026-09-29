@@ -109,7 +109,29 @@ export async function register(input: {
     method: "POST",
     body: JSON.stringify(input),
   });
-  if (!response.ok) throw new Error(await response.text());
+  if (!response.ok) {
+    const errorText = await response.text();
+    try {
+      const errorJson = JSON.parse(errorText);
+      if (Array.isArray(errorJson.detail)) {
+        const msgs = errorJson.detail.map((d: any) => {
+          if (d.loc && d.loc.includes("password")) {
+            return "密码长度至少需要 8 位，请重新输入";
+          }
+          if (d.loc && d.loc.includes("username")) {
+            return "用户名格式不符合要求";
+          }
+          return d.msg || "输入格式不符合要求";
+        });
+        throw new Error(msgs.join("；"));
+      } else if (typeof errorJson.detail === "string") {
+        throw new Error(errorJson.detail);
+      }
+    } catch (e) {
+      if (e instanceof Error && e.message !== errorText) throw e;
+    }
+    throw new Error(errorText);
+  }
   return response.json();
 }
 
@@ -259,4 +281,29 @@ export async function fetchTasks(roomId: string): Promise<RoomTask[]> {
   if (!response.ok) throw new Error("Failed to load tasks");
   const payload = (await response.json()) as { tasks?: RoomTask[] };
   return payload.tasks ?? [];
+}
+
+
+export interface RoomTemplateInfo {
+  id: string;
+  key: string;
+  name: string;
+  description: string | null;
+  icon: string;
+  team_config_markdown: string | null;
+}
+
+export async function fetchTemplates(): Promise<RoomTemplateInfo[]> {
+  const response = await apiFetch("/api/v1/templates");
+  if (!response.ok) throw new Error("Failed to load templates");
+  const payload = (await response.json()) as { templates?: RoomTemplateInfo[] };
+  return payload.templates ?? [];
+}
+
+export async function searchMessages(roomId: string, query: string): Promise<ChatMessage[]> {
+  if (!query.trim()) return [];
+  const response = await apiFetch(`/api/v1/rooms/${roomId}/messages/search?q=${encodeURIComponent(query)}`);
+  if (!response.ok) throw new Error("Failed to search messages");
+  const payload = (await response.json()) as { results?: ChatMessage[] };
+  return payload.results ?? [];
 }

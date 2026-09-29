@@ -30,7 +30,7 @@ class Message(Base):
         String(128), nullable=True, default=None
     )
     parent_id: Mapped[Optional[str]] = mapped_column(
-        String(36), ForeignKey("messages.id"), nullable=True
+        String(36), ForeignKey("messages.id", ondelete="SET NULL"), nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
