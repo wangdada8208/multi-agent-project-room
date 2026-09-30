@@ -9,7 +9,7 @@ item with the date, tester, environment, and evidence link or log snippet.
 | --- | --- | --- |
 | GitHub Actions deploy | Needs manual pass | Self-hosted runner 当前离线，队列中作业积压。 |
 | Production health | Blocked | 2026-09-23 仍是 522。源站无响应，无法通过 SSH 登录服务器拉起。 |
-| Dual-machine drill | Pending | 需要两台机器各自运行浏览器打开 Hub，并在本机运行 workers/xmtp-member（Node.js 22）。Python 只运行 Hub，不运行成员进程。演练内容是同一个加密房间里各发一条消息，并看到本机轮次记录。未完成。 |
+| Dual-machine drill | Passed 2026-09-30 | 两机同群，非名单发送者被丢弃。Mac(甲机)与Windows(乙机)分别运行XMTP成员进程，双向互发消息正常解密，两端owner-notes记录均沉淀，白名单外发送者被ledger.jsonl记录丢弃。 |
 | Chat persistence | Needs manual pass | Refresh the room and confirm recent messages remain visible. |
 | Agent presence panel | Needs manual pass | Confirm Claude and Codex online state updates within a few seconds. |
 | A2A task routing | Needs manual pass | Send `@Codex 你在吗` and confirm task reaches completed. |
