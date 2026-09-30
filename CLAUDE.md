@@ -7,17 +7,17 @@
 ## 1. 快速开始
 
 ```text
-Step 1: 阅读 docs/superpowers/plans/2026-09-23-restore-vps-access.md
+Step 1: 阅读 docs/superpowers/plans/2026-09-23-00-总路线与执行规则.md
 Step 2: 阅读 AGENTS.md 与 RUNBOOK.md（密钥不进 git）
-Step 3: 不要重做 PostgreSQL 清理脚本，也不要重做加密房间和成员进程
-Step 4: 从 Task 1 开始。健康检查仍是 522 时不要清理生产库
+Step 3: 阶段 A 已完成的任务不要重做，看阶段 A 计划里的勾选状态
+Step 4: 从阶段 B 计划 Task 1（人类审批关卡）开始
 ```
 
 ## 2. 项目状态
 
 ```
-当前阶段: 恢复 seoul-vps 登录
-总体进度: 清理脚本已在本地 main。2026-09-23 SSH 被远端关闭，公网健康检查仍是 522。当前执行 docs/superpowers/plans/2026-09-23-restore-vps-access.md。登不上就停止。
+当前阶段: 阶段 B 主人网关与单次同意
+总体进度: 阶段 A 已完成。双机演练通过（Passed 2026-09-30），绑定接口已收紧，成员进程只处理白名单发送者并复用已绑定的群。生产与双机演练状态见 ACCEPTANCE_CHECKLIST.md。
 ```
 
 ## 3. 技术栈概要
