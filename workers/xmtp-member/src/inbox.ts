@@ -1,14 +1,14 @@
 import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import type { FreeBusyPayload } from "./envelope.ts";
+import type { DisclosurePayload } from "./envelope.ts";
 
 export interface InboxEntry {
   received_at: string;
   from: string;
   request_id: string;
   grant_id: string;
-  payload: FreeBusyPayload;
+  payload: DisclosurePayload;
 }
 
 export async function readInbox(file: string): Promise<InboxEntry[]> {

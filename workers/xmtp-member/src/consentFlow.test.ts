@@ -118,7 +118,7 @@ test("approve sends only busy slots; the requester verifies and stores it", asyn
   const outcome = await handleEnvelope({ envelope: disclosure, sender: B, conversationId: "c1" }, s.aDeps);
   assert.equal(outcome, "stored");
   assert.equal(s.stored.length, 1);
-  assert.deepEqual(s.stored[0].payload.busy, [{ start: "2026-10-06T09:00:00.000Z", end: "2026-10-06T10:00:00.000Z" }]);
+  assert.deepEqual((s.stored[0].payload as any).busy, [{ start: "2026-10-06T09:00:00.000Z", end: "2026-10-06T10:00:00.000Z" }]);
 });
 
 test("approving twice sends only one disclosure", async () => {
@@ -147,7 +147,7 @@ test("a disclosure with edited payload is rejected", async () => {
   await handleEnvelope({ envelope: request, sender: A, conversationId: "c1" }, s.bDeps);
   await approveConsent("req-1", s.bActions);
   const disclosure = decodeEnvelope(s.sent[s.sent.length - 1].text) as DisclosureEnvelope;
-  const edited = decodeEnvelope(encodeEnvelope({ ...disclosure, payload: { ...disclosure.payload, busy: [] } }))!;
+  const edited = decodeEnvelope(encodeEnvelope({ ...disclosure, payload: { ...(disclosure.payload as any), busy: [] } }))!;
   assert.equal(await handleEnvelope({ envelope: edited, sender: B, conversationId: "c1" }, s.aDeps), "rejected");
 });
 

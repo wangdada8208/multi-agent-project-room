@@ -1,4 +1,6 @@
 import { freeBusy, type CalendarEvent } from "./calendar.ts";
+import { findConnector } from "./connectors/registry.ts";
+import type { Connector } from "./connectors/types.ts";
 import type { ConsentQueue } from "./consentQueue.ts";
 import { encodeEnvelope } from "./envelope.ts";
 import { buildGrant, signGrant } from "./grant.ts";
@@ -10,19 +12,37 @@ export interface ConsentActionDeps {
   selfAddress: string;
   privateKey: string;
   queue: ConsentQueue;
-  loadCalendar: () => Promise<CalendarEvent[]>;
+  loadCalendar?: () => Promise<CalendarEvent[]>;
+  connectors?: Connector[];
   send: (conversationId: string, text: string) => Promise<void>;
   appendLedger: (entry: LedgerEntry) => Promise<void>;
   now: () => Date;
 }
 
-export type ActionResult = { ok: true } | { ok: false; reason: "not_pending" | "send_failed" };
+export type ActionResult =
+  | { ok: true }
+  | { ok: false; reason: "not_pending" | "send_failed" | "no_connector" };
 
 export async function approveConsent(requestId: string, deps: ConsentActionDeps): Promise<ActionResult> {
   const item = await deps.queue.claim(requestId, "approved");
   if (!item) return { ok: false, reason: "not_pending" };
   const now = deps.now();
-  const payload = freeBusy(await deps.loadCalendar(), item.constraints);
+
+  let payload: any;
+  if (deps.connectors && deps.connectors.length > 0) {
+    const connector = findConnector(item.scope, deps.connectors);
+    if (!connector) return { ok: false, reason: "no_connector" };
+    try {
+      payload = await connector.fetch(item.scope, item.constraints);
+    } catch {
+      return { ok: false, reason: "no_connector" };
+    }
+  } else if (item.scope === "calendar.free_busy" && deps.loadCalendar) {
+    payload = freeBusy(await deps.loadCalendar(), item.constraints);
+  } else {
+    return { ok: false, reason: "no_connector" };
+  }
+
   const grant = buildGrant({
     owner: deps.selfAddress,
     audience: item.requester,
