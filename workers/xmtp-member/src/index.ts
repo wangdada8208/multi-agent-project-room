@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { appendFile, mkdir } from "node:fs/promises";
 import path from "node:path";
@@ -6,7 +7,7 @@ import { buildBindingPayload } from "./binding.ts";
 import { loadCalendar } from "./calendar.ts";
 import { approveConsent, denyConsent, expireDue, type ConsentActionDeps } from "./consentActions.ts";
 import { ConsentQueue } from "./consentQueue.ts";
-import { decodeEnvelope, encodeEnvelope, ENVELOPE_PREFIX } from "./envelope.ts";
+import { decodeEnvelope, encodeEnvelope, ENVELOPE_PREFIX, isAddress, type TaskEnvelope } from "./envelope.ts";
 import { missingMembers } from "./groupMembers.ts";
 import { fetchHubGroupId, resolveGroupPlan } from "./groupPlan.ts";
 import { handleEnvelope, type HandleEnvelopeDeps } from "./handleEnvelope.ts";
@@ -25,7 +26,9 @@ import type { OwnerNote } from "./ownerNote.ts";
 import { createOwnerConsoleServer } from "./ownerConsole.ts";
 import { ownerNotesBindAddress, readOwnerNotesFile } from "./ownerNotesHttp.ts";
 import { loadPolicy } from "./policy.ts";
+import { scoreboard } from "./scoreboard.ts";
 import { isAllowedSender, parseAllowedSenders } from "./senderPolicy.ts";
+import { TaskStore } from "./taskStore.ts";
 
 export interface MemberConfig {
   selfName?: string;
@@ -139,11 +142,14 @@ export async function startMember(): Promise<void> {
   const policyPath = path.join(stateDir, "policy.json");
   const consentsPath = path.join(stateDir, "consents.json");
   const inboxPath = path.join(stateDir, "inbox.json");
+  const tasksPath = path.join(stateDir, "tasks.json");
   const calendarPath = config.calendarFile || path.join(stateDir, "calendar.json");
 
   const policy = await loadPolicy(policyPath);
   const queue = new ConsentQueue(consentsPath);
   await queue.load();
+  const taskStore = new TaskStore(tasksPath);
+  await taskStore.load();
 
   let loopState: LocalLoopState;
   if (existsSync(statePath)) {
@@ -197,6 +203,8 @@ export async function startMember(): Promise<void> {
     selfAddress,
     policy,
     queue,
+    taskStore,
+    completeModel: complete,
     send: sendToConversation,
     appendLedger: writeLedger,
     storeDisclosure: (disclosure, from) =>
@@ -228,6 +236,8 @@ export async function startMember(): Promise<void> {
     readLedger: () => readLedger(ledgerPath),
     readInbox: () => readInbox(inboxPath),
     readOwnerNotes: () => readOwnerNotesFile(ownerNotesPath),
+    readScoreboard: async () => scoreboard(await readLedger(ledgerPath)),
+    readTasks: () => taskStore.list(),
     approve: (id) => approveConsent(id, actionDeps),
     deny: (id) => denyConsent(id, "owner_denied", actionDeps),
     sendRequest: async (body) => {
@@ -245,6 +255,36 @@ export async function startMember(): Promise<void> {
         })
       );
       return { ok: true, request_id: built.envelope.request_id };
+    },
+    sendTask: async (body) => {
+      if (!activeGroupId) return { ok: false, reason: "no_group" };
+      if (!isAddress(body?.to)) return { ok: false, reason: "invalid_to" };
+      if (typeof body?.goal !== "string" || body.goal.trim().length === 0 || body.goal.length > 500) {
+        return { ok: false, reason: "invalid_goal" };
+      }
+      if (!Array.isArray(body?.acceptance) || body.acceptance.length === 0 || body.acceptance.length > 5) {
+        return { ok: false, reason: "invalid_acceptance" };
+      }
+      const taskEnv: TaskEnvelope = {
+        kind: "task",
+        request_id: randomUUID(),
+        to: body.to.toLowerCase(),
+        goal: body.goal.trim(),
+        acceptance: body.acceptance.map((a: any) => String(a).slice(0, 200)),
+        round: 1,
+      };
+      await taskStore.add(taskEnv);
+      await sendToConversation(activeGroupId, encodeEnvelope(taskEnv));
+      await writeLedger(
+        buildLedgerEntry({
+          now: new Date(),
+          kind: "task_sent",
+          requestId: taskEnv.request_id,
+          peer: taskEnv.to,
+          scope: "task.run",
+        })
+      );
+      return { ok: true, request_id: taskEnv.request_id };
     },
   });
   const consolePort = parseInt(config.ownerNotesPort || "8787", 10);
