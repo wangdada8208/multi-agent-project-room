@@ -27,9 +27,18 @@ export function describeEnvelope(text: string): string | null {
     case "denial":
       return `【拒绝】${DENIAL_LABEL[raw.reason] ?? raw.reason}`;
     case "disclosure": {
+      if (raw?.payload?.scope === "email.receipt") {
+        return `【已披露收据】发给 ${short(raw.to)}：${raw.payload.subject || "客票凭证"}`;
+      }
       const count = Array.isArray(raw?.payload?.busy) ? raw.payload.busy.length : 0;
       return `【已披露】发给 ${short(raw.to)}：${raw?.payload?.date_from} 到 ${raw?.payload?.date_to} 共 ${count} 个忙碌时段`;
     }
+    case "task":
+      return `【派单】向 ${short(raw.to)} 派发任务：${raw.goal}（第 ${raw.round} 轮）`;
+    case "result":
+      return `【成果】向 ${short(raw.to)} 提交第 ${raw.round} 轮成果：${raw.summary?.slice(0, 40) || ""}`;
+    case "verdict":
+      return `【裁决】向 ${short(raw.to)} 裁决：${raw.accepted ? "验收通过" : "质疑 - " + (raw.challenge || "")}`;
     default:
       return "【无法识别的结构化消息】";
   }
