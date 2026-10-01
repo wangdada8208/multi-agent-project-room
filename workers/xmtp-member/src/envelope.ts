@@ -1,6 +1,6 @@
 export const ENVELOPE_PREFIX = "MAPR1 ";
 
-export const KNOWN_SCOPES = ["calendar.free_busy"] as const;
+export const KNOWN_SCOPES = ["calendar.free_busy", "task.run"] as const;
 
 export interface DateRange {
   date_from: string;
@@ -64,11 +64,41 @@ export interface DisclosureEnvelope {
   payload: FreeBusyPayload;
 }
 
+export interface TaskEnvelope {
+  kind: "task";
+  request_id: string;
+  to: string;
+  goal: string;
+  acceptance: string[];
+  round: number;
+}
+
+export interface ResultEnvelope {
+  kind: "result";
+  request_id: string;
+  to: string;
+  round: number;
+  summary: string;
+  evidence: string[];
+}
+
+export interface VerdictEnvelope {
+  kind: "verdict";
+  request_id: string;
+  to: string;
+  round: number;
+  accepted: boolean;
+  challenge: string;
+}
+
 export type Envelope =
   | RequestEnvelope
   | PendingEnvelope
   | DenialEnvelope
-  | DisclosureEnvelope;
+  | DisclosureEnvelope
+  | TaskEnvelope
+  | ResultEnvelope
+  | VerdictEnvelope;
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const ADDRESS_RE = /^0x[0-9a-f]{40}$/;
@@ -142,6 +172,62 @@ export function decodeEnvelope(text: string): Envelope | null {
         signature: raw.signature,
         payload: raw.payload,
       };
+    case "task": {
+      if (!isShortString(raw.goal, 500)) return null;
+      if (
+        !Array.isArray(raw.acceptance) ||
+        raw.acceptance.length < 1 ||
+        raw.acceptance.length > 5 ||
+        !raw.acceptance.every((s: any) => isShortString(s, 200))
+      ) {
+        return null;
+      }
+      if (!Number.isInteger(raw.round) || raw.round < 1 || raw.round > 3) return null;
+      return {
+        kind: "task",
+        request_id: raw.request_id,
+        to: raw.to,
+        goal: raw.goal,
+        acceptance: raw.acceptance.slice(),
+        round: raw.round,
+      };
+    }
+    case "result": {
+      if (!Number.isInteger(raw.round) || raw.round < 1 || raw.round > 3) return null;
+      if (!isShortString(raw.summary, 2000)) return null;
+      if (
+        !Array.isArray(raw.evidence) ||
+        raw.evidence.length > 10 ||
+        !raw.evidence.every((s: any) => isShortString(s, 500))
+      ) {
+        return null;
+      }
+      return {
+        kind: "result",
+        request_id: raw.request_id,
+        to: raw.to,
+        round: raw.round,
+        summary: raw.summary,
+        evidence: raw.evidence.slice(),
+      };
+    }
+    case "verdict": {
+      if (!Number.isInteger(raw.round) || raw.round < 1 || raw.round > 3) return null;
+      if (typeof raw.accepted !== "boolean") return null;
+      if (raw.accepted) {
+        if (typeof raw.challenge !== "string" || raw.challenge !== "") return null;
+      } else {
+        if (!isShortString(raw.challenge, 500)) return null;
+      }
+      return {
+        kind: "verdict",
+        request_id: raw.request_id,
+        to: raw.to,
+        round: raw.round,
+        accepted: raw.accepted,
+        challenge: raw.challenge,
+      };
+    }
     default:
       return null;
   }
