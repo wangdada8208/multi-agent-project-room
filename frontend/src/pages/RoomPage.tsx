@@ -16,6 +16,7 @@ import { useAnalytics } from "../hooks/useAnalytics";
 import { fetchMessages, fetchAgents, fetchTasks, searchMessages, apiFetch } from "../lib/api";
 import { loadOrCreateInboxKey, createLocalXmtpClient, inboxAddress } from "../lib/xmtpLocalIdentity";
 import { sendXmtpMessage, toLocalChatMessage } from "../lib/xmtpSend";
+import { describeEnvelope } from "../lib/envelopeView";
 import { memberIdentifier, assertWorkerAddress } from "../lib/xmtpGroup";
 import { formatOwnerNoteAction, visibleOwnerNotes } from "../lib/ownerNotes";
 import { useAuthStore } from "../stores/authStore";
@@ -162,7 +163,7 @@ export function RoomPage() {
               toLocalChatMessage({
                 id: message.id,
                 roomId,
-                content: message.content,
+                content: describeEnvelope(message.content) ?? message.content,
                 senderId: message.senderInboxId,
                 senderName: `Member (${message.senderInboxId.slice(0, 6)}...)`,
                 senderType: "agent",

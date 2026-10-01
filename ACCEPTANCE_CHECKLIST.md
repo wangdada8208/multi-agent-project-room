@@ -18,6 +18,7 @@ item with the date, tester, environment, and evidence link or log snippet.
 | Repository module | Needs manual pass | Confirm branch, latest commit, status, log, and diff render correctly. |
 | Approval flow | Needs manual pass | Create, approve, reject, and observe WebSocket updates. |
 | Responsive/dark UI | Needs manual pass | Check desktop, narrow window, and dark mode toggle. |
+| Owner gateway consent (dev) | Passed 2026-10-01 | 单机双网关：批准后只收到时段，越界自动拒绝，重复批准被拒，缺请求头 403。 |
 
 ## Automated Verification
 

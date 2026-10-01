@@ -3,9 +3,15 @@ import { appendFile, mkdir } from "node:fs/promises";
 import path from "node:path";
 import { Agent } from "@xmtp/agent-sdk";
 import { buildBindingPayload } from "./binding.ts";
+import { loadCalendar } from "./calendar.ts";
+import { approveConsent, denyConsent, expireDue, type ConsentActionDeps } from "./consentActions.ts";
+import { ConsentQueue } from "./consentQueue.ts";
+import { decodeEnvelope, encodeEnvelope, ENVELOPE_PREFIX } from "./envelope.ts";
 import { missingMembers } from "./groupMembers.ts";
 import { fetchHubGroupId, resolveGroupPlan } from "./groupPlan.ts";
-import { appendLedger, buildLedgerEntry } from "./ledger.ts";
+import { handleEnvelope, type HandleEnvelopeDeps } from "./handleEnvelope.ts";
+import { appendInboxOnce, readInbox } from "./inbox.ts";
+import { appendLedger, buildLedgerEntry, readLedger, type LedgerEntry } from "./ledger.ts";
 import {
   createLocalLoop,
   loadLoopState,
@@ -14,11 +20,11 @@ import {
 } from "./localLoop.ts";
 import { completeWithFetch } from "./modelComplete.ts";
 import { onInboundText } from "./onInboundText.ts";
+import { buildRequestEnvelope } from "./outgoingRequest.ts";
 import type { OwnerNote } from "./ownerNote.ts";
-import {
-  createOwnerNotesServer,
-  ownerNotesBindAddress,
-} from "./ownerNotesHttp.ts";
+import { createOwnerConsoleServer } from "./ownerConsole.ts";
+import { ownerNotesBindAddress, readOwnerNotesFile } from "./ownerNotesHttp.ts";
+import { loadPolicy } from "./policy.ts";
 import { isAllowedSender, parseAllowedSenders } from "./senderPolicy.ts";
 
 export interface MemberConfig {
@@ -39,6 +45,7 @@ export interface MemberConfig {
   approvedDays?: string[];
   sensitiveKeywords?: string[];
   ownerNotesPort?: string;
+  calendarFile?: string;
 }
 
 function splitList(raw: string | undefined): string[] {
@@ -75,6 +82,7 @@ export function loadConfigFromEnv(): MemberConfig {
     approvedDays: approvedDays.length > 0 ? approvedDays : undefined,
     sensitiveKeywords: sensitiveKeywords.length > 0 ? sensitiveKeywords : undefined,
     ownerNotesPort: process.env.OWNER_NOTES_PORT,
+    calendarFile: process.env.MAPR_CALENDAR_FILE || undefined,
   };
 }
 
@@ -114,6 +122,9 @@ export async function startMember(): Promise<void> {
   if (config.allowedSenders.length === 0) {
     throw new Error("XMTP_ALLOWED_SENDERS is empty; refusing to start");
   }
+  if (!config.xmtpWalletKey) {
+    throw new Error("XMTP_WALLET_KEY is required");
+  }
   const agent = await Agent.createFromEnv();
   const selfAddress = (agent.address || "").toLowerCase();
 
@@ -125,10 +136,14 @@ export async function startMember(): Promise<void> {
   const stateDir = path.dirname(statePath);
   const ownerNotesPath = path.join(stateDir, "owner-notes.jsonl");
   const ledgerPath = path.join(stateDir, "ledger.jsonl");
+  const policyPath = path.join(stateDir, "policy.json");
+  const consentsPath = path.join(stateDir, "consents.json");
+  const inboxPath = path.join(stateDir, "inbox.json");
+  const calendarPath = config.calendarFile || path.join(stateDir, "calendar.json");
 
-  const ownerNotesServer = createOwnerNotesServer(ownerNotesPath);
-  const ownerNotesPort = parseInt(config.ownerNotesPort || "8787", 10);
-  ownerNotesServer.listen(ownerNotesPort, ownerNotesBindAddress());
+  const policy = await loadPolicy(policyPath);
+  const queue = new ConsentQueue(consentsPath);
+  await queue.load();
 
   let loopState: LocalLoopState;
   if (existsSync(statePath)) {
@@ -150,6 +165,18 @@ export async function startMember(): Promise<void> {
           })
       : undefined;
 
+  const writeLedger = (entry: LedgerEntry) => appendLedger(ledgerPath, entry);
+
+  async function sendToConversation(conversationId: string, text: string): Promise<void> {
+    let ctx = await agent.getConversationContext(conversationId);
+    if (!ctx) {
+      await agent.client.conversations.syncAll();
+      ctx = await agent.getConversationContext(conversationId);
+    }
+    if (!ctx) throw new Error("conversation not found");
+    await ctx.conversation.sendText(text);
+  }
+
   async function ensurePeersInGroup(groupId: string, peers: string[]): Promise<void> {
     if (peers.length === 0) return;
     await agent.client.conversations.syncAll();
@@ -166,12 +193,73 @@ export async function startMember(): Promise<void> {
     console.log(`[member] added ${missing.length} peer(s) to group`);
   }
 
+  const envelopeDeps: HandleEnvelopeDeps = {
+    selfAddress,
+    policy,
+    queue,
+    send: sendToConversation,
+    appendLedger: writeLedger,
+    storeDisclosure: (disclosure, from) =>
+      appendInboxOnce(inboxPath, {
+        received_at: new Date().toISOString(),
+        from,
+        request_id: disclosure.request_id,
+        grant_id: disclosure.grant.grant_id,
+        payload: disclosure.payload,
+      }),
+    now: () => new Date(),
+  };
+
+  const actionDeps: ConsentActionDeps = {
+    selfAddress,
+    privateKey: config.xmtpWalletKey,
+    queue,
+    loadCalendar: () => loadCalendar(calendarPath),
+    send: sendToConversation,
+    appendLedger: writeLedger,
+    now: () => new Date(),
+  };
+
+  let activeGroupId: string | null = null;
+
+  const consoleServer = createOwnerConsoleServer({
+    selfAddress,
+    queue,
+    readLedger: () => readLedger(ledgerPath),
+    readInbox: () => readInbox(inboxPath),
+    readOwnerNotes: () => readOwnerNotesFile(ownerNotesPath),
+    approve: (id) => approveConsent(id, actionDeps),
+    deny: (id) => denyConsent(id, "owner_denied", actionDeps),
+    sendRequest: async (body) => {
+      if (!activeGroupId) return { ok: false, reason: "no_group" };
+      const built = buildRequestEnvelope(body, selfAddress);
+      if (!built.ok) return { ok: false, reason: built.reason };
+      await sendToConversation(activeGroupId, encodeEnvelope(built.envelope));
+      await writeLedger(
+        buildLedgerEntry({
+          now: new Date(),
+          kind: "request_sent",
+          requestId: built.envelope.request_id,
+          peer: built.envelope.to,
+          scope: built.envelope.scope,
+        })
+      );
+      return { ok: true, request_id: built.envelope.request_id };
+    },
+  });
+  const consolePort = parseInt(config.ownerNotesPort || "8787", 10);
+  consoleServer.listen(consolePort, ownerNotesBindAddress());
+
+  const expiryTimer = setInterval(() => {
+    expireDue(actionDeps).catch((err) => console.error("Expiry error:", err.message));
+  }, 30_000);
+  expiryTimer.unref();
+
   agent.on("text", async (ctx: any) => {
     const sender = ((await ctx.getSenderAddress()) || "").toLowerCase();
     if (sender && sender === selfAddress) return;
     if (!isAllowedSender(sender, config.allowedSenders)) {
-      await appendLedger(
-        ledgerPath,
+      await writeLedger(
         buildLedgerEntry({
           now: new Date(),
           kind: "sender_dropped",
@@ -186,6 +274,17 @@ export async function startMember(): Promise<void> {
       typeof ctx.message?.content === "string"
         ? ctx.message.content
         : ctx.message?.content?.text || "";
+
+    const envelope = decodeEnvelope(text);
+    if (envelope) {
+      try {
+        await handleEnvelope({ envelope, sender, conversationId: ctx.conversation.id }, envelopeDeps);
+      } catch (err: any) {
+        console.error("Envelope error:", err.message);
+      }
+      return;
+    }
+    if (text.startsWith(ENVELOPE_PREFIX)) return;
 
     try {
       loopState = await onInboundText({
@@ -228,11 +327,13 @@ export async function startMember(): Promise<void> {
     const group = await agent.createGroupWithAddresses(
       (config.xmtpPeerAddresses || []) as `0x${string}`[]
     );
+    activeGroupId = group.id;
     console.log(`[member] created group ${group.id}`);
     if (hubConfigured) {
       await bindGroupToHub(config.hubBaseUrl!, config.hubRoomId!, config.hubToken!, group.id);
     }
   } else if (plan.action === "use") {
+    activeGroupId = plan.groupId;
     console.log(`[member] using group ${plan.groupId} from ${plan.source}`);
     await ensurePeersInGroup(plan.groupId, config.xmtpPeerAddresses || []);
   } else {
@@ -240,6 +341,7 @@ export async function startMember(): Promise<void> {
   }
 
   console.log(`[member] address ${selfAddress}`);
+  console.log(`[member] owner console http://127.0.0.1:${consolePort}/`);
   await agent.start();
 }
 

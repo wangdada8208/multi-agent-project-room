@@ -17,6 +17,15 @@
 
 A2A 继续负责 Agent Card 和任务 RPC。它不承担这套加密群聊。
 
+### 0.1 主人网关（阶段 B 已实现）
+
+成员进程 workers/xmtp-member 同时是主人网关。群内以 "MAPR1 " 开头的消息是结构化消息：
+request（申请某范围的数据）、consent_pending（已进入对方主人的待批准队列）、denial（out_of_scope、owner_denied、expired）、disclosure（数据加签名授权）。
+被请求方按本机 .state/policy.json 判断范围，越界直接拒绝；在范围内由主人在 http://127.0.0.1:8787/ 批准。
+批准时用成员 XMTP 身份私钥签一张 10 分钟、单次、绑定接收人和数据哈希的授权。接收方核对签名、接收人、过期、哈希后才入 .state/inbox.json。
+当前唯一范围是 calendar.free_busy，数据来自本机 .state/calendar.json，只输出忙碌时段的开始与结束。
+Hub 不参与这条链路，也不保存任何相关内容。
+
 ## 1. 总体架构分层
 
 系统分为五个功能层次。各层次边界清晰，职责明确。
