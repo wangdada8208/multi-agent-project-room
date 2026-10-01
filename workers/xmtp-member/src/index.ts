@@ -29,6 +29,10 @@ import { loadPolicy } from "./policy.ts";
 import { scoreboard } from "./scoreboard.ts";
 import { isAllowedSender, parseAllowedSenders } from "./senderPolicy.ts";
 import { TaskStore } from "./taskStore.ts";
+import type { Connector } from "./connectors/types.ts";
+import { LocalCalendarConnector } from "./connectors/localCalendar.ts";
+import { GoogleCalendarConnector } from "./connectors/googleCalendar.ts";
+import { GmailReceiptConnector } from "./connectors/gmailReceipt.ts";
 
 export interface MemberConfig {
   selfName?: string;
@@ -151,6 +155,20 @@ export async function startMember(): Promise<void> {
   const taskStore = new TaskStore(tasksPath);
   await taskStore.load();
 
+  const credDir = path.join(stateDir, "credentials");
+  const googleCred = path.join(credDir, "google.json");
+  const gmailCred = path.join(credDir, "gmail.json");
+
+  const connectors: Connector[] = [];
+  if (existsSync(googleCred)) {
+    connectors.push(new GoogleCalendarConnector({ credentialPath: googleCred }));
+  } else {
+    connectors.push(new LocalCalendarConnector(calendarPath));
+  }
+  if (existsSync(gmailCred)) {
+    connectors.push(new GmailReceiptConnector({ credentialPath: gmailCred }));
+  }
+
   let loopState: LocalLoopState;
   if (existsSync(statePath)) {
     loopState = await loadLoopState(statePath);
@@ -222,6 +240,7 @@ export async function startMember(): Promise<void> {
     selfAddress,
     privateKey: config.xmtpWalletKey,
     queue,
+    connectors,
     loadCalendar: () => loadCalendar(calendarPath),
     send: sendToConversation,
     appendLedger: writeLedger,

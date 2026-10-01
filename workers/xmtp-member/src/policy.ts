@@ -35,7 +35,7 @@ export async function loadPolicy(file: string): Promise<Policy> {
 export function checkRequest(
   policy: Policy,
   sender: string,
-  request: { scope: string; constraints?: DateRange }
+  request: { scope: string; constraints?: any }
 ): { ok: true } | { ok: false; reason: "out_of_scope" } {
   const denied = { ok: false as const, reason: "out_of_scope" as const };
   const known = (KNOWN_SCOPES as readonly string[]).includes(request.scope);
@@ -45,6 +45,17 @@ export function checkRequest(
     return { ok: true };
   }
   if (!request.constraints) return denied;
+
+  if (request.scope === "email.receipt") {
+    if (
+      typeof request.constraints.query !== "string" ||
+      request.constraints.query.length === 0 ||
+      request.constraints.query.length > 200
+    ) {
+      return denied;
+    }
+  }
+
   const from = Date.parse(`${request.constraints.date_from}T00:00:00Z`);
   const to = Date.parse(`${request.constraints.date_to}T00:00:00Z`);
   if (!Number.isFinite(from) || !Number.isFinite(to) || to < from) return denied;

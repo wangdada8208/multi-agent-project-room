@@ -65,3 +65,38 @@ test("task.run scope skips date constraints check", () => {
   );
 });
 
+test("email.receipt validates query length and date span", () => {
+  const emailPolicy = normalizePolicy({
+    allow: { [PEER]: ["email.receipt"] },
+    max_range_days: 7,
+  });
+
+  // 合法请求通过
+  assert.deepEqual(
+    checkRequest(emailPolicy, PEER, {
+      scope: "email.receipt",
+      constraints: { query: "from:12306", date_from: "2026-10-05", date_to: "2026-10-09" } as any,
+    }),
+    { ok: true }
+  );
+
+  // query 超过 200 字符失败
+  assert.equal(
+    checkRequest(emailPolicy, PEER, {
+      scope: "email.receipt",
+      constraints: { query: "a".repeat(201), date_from: "2026-10-05", date_to: "2026-10-09" } as any,
+    }).ok,
+    false
+  );
+
+  // 跨度超过 max_range_days 失败
+  assert.equal(
+    checkRequest(emailPolicy, PEER, {
+      scope: "email.receipt",
+      constraints: { query: "from:12306", date_from: "2026-10-01", date_to: "2026-10-30" } as any,
+    }).ok,
+    false
+  );
+});
+
+

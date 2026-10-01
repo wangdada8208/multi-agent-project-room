@@ -1,6 +1,6 @@
 export const ENVELOPE_PREFIX = "MAPR1 ";
 
-export const KNOWN_SCOPES = ["calendar.free_busy", "task.run"] as const;
+export const KNOWN_SCOPES = ["calendar.free_busy", "task.run", "email.receipt"] as const;
 
 export interface DateRange {
   date_from: string;
@@ -18,6 +18,17 @@ export interface FreeBusyPayload {
   date_to: string;
   busy: BusySlot[];
 }
+
+export interface EmailReceiptPayload {
+  scope: "email.receipt";
+  subject: string;
+  sent_at: string;
+  attachment_name: string | null;
+  attachment_sha256: string | null;
+  body_excerpt: string;
+}
+
+export type DisclosurePayload = FreeBusyPayload | EmailReceiptPayload;
 
 export interface Grant {
   grant_id: string;
@@ -61,7 +72,7 @@ export interface DisclosureEnvelope {
   to: string;
   grant: Grant;
   signature: string;
-  payload: FreeBusyPayload;
+  payload: DisclosurePayload;
 }
 
 export interface TaskEnvelope {
