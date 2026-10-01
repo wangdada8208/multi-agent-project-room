@@ -9,6 +9,9 @@ section { border: 1px solid #ddd; border-radius: 8px; padding: 12px 16px; margin
 .row { border-top: 1px solid #eee; padding: 8px 0; }
 button { margin-right: 8px; }
 code { font-size: 12px; }
+table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+th, td { text-align: left; padding: 8px; border-bottom: 1px solid #eee; }
+th { background-color: #f9f9f9; }
 </style>
 </head>
 <body>
@@ -16,8 +19,23 @@ code { font-size: 12px; }
 <p>本机地址：<code id="self"></code></p>
 
 <section>
+<h2>成果计分板</h2>
+<div id="scoreboard">加载中...</div>
+</section>
+
+<section>
 <h2>待批准</h2>
 <div id="consents">加载中...</div>
+</section>
+
+<section>
+<h2>派发新任务</h2>
+<form id="task-form">
+<p>执行者地址 <input name="to" size="46" required></p>
+<p>任务目标 <input name="goal" size="46" maxlength="500" required></p>
+<p>验收标准（每行一条）<br><textarea name="acceptance" rows="3" cols="50" required placeholder="如：地点数量必须恰好为3个&#10;每个地点附带一句风景特色"></textarea></p>
+<button type="submit">派发任务</button> <span id="task-result"></span>
+</form>
 </section>
 
 <section>
@@ -28,6 +46,11 @@ code { font-size: 12px; }
 <p>用途 <input name="purpose" size="46" maxlength="280"></p>
 <button type="submit">发送请求</button> <span id="request-result"></span>
 </form>
+</section>
+
+<section>
+<h2>任务执行状态</h2>
+<div id="tasks"></div>
 </section>
 
 <section>
@@ -56,9 +79,28 @@ async function refresh() {
   const state = await (await fetch("/api/state")).json();
   text(document.getElementById("self"), state.self);
 
+  const sbEl = document.getElementById("scoreboard");
+  sbEl.replaceChildren();
+  if (!state.scoreboard || state.scoreboard.length === 0) {
+    text(sbEl, "暂无成果计分数据");
+  } else {
+    const table = document.createElement("table");
+    const thead = document.createElement("thead");
+    thead.innerHTML = "<tr><th>智能体成员地址</th><th>采纳交付数 (Accepted)</th><th>质疑驳回数 (Rejected)</th></tr>";
+    table.append(thead);
+    const tbody = document.createElement("tbody");
+    for (const item of state.scoreboard) {
+      const tr = document.createElement("tr");
+      tr.innerHTML = "<td><code>" + item.peer + "</code></td><td>" + item.accepted + "</td><td>" + item.rejected + "</td>";
+      tbody.append(tr);
+    }
+    table.append(tbody);
+    sbEl.append(table);
+  }
+
   const consents = document.getElementById("consents");
   consents.replaceChildren();
-  const pending = state.consents.filter((c) => c.status === "pending");
+  const pending = (state.consents || []).filter((c) => c.status === "pending");
   if (pending.length === 0) text(consents, "没有待批准的请求");
   for (const c of pending) {
     const row = div("row");
@@ -74,9 +116,28 @@ async function refresh() {
     consents.append(row);
   }
 
+  const tasksEl = document.getElementById("tasks");
+  tasksEl.replaceChildren();
+  const tasks = state.tasks || [];
+  if (tasks.length === 0) text(tasksEl, "暂无执行中的任务");
+  for (const t of tasks.slice().reverse()) {
+    const row = div("row");
+    row.append(text(div(), "任务 [" + t.request_id + "] -> " + t.task.to + " | 状态: " + t.status));
+    row.append(text(div(), "目标: " + t.task.goal + " (轮次: " + t.task.round + ")"));
+    if (t.results && t.results.length > 0) {
+      const lastRes = t.results[t.results.length - 1];
+      row.append(text(div(), "最新成果: " + lastRes.summary));
+    }
+    if (t.verdicts && t.verdicts.length > 0) {
+      const lastVer = t.verdicts[t.verdicts.length - 1];
+      row.append(text(div(), "最新裁决: " + (lastVer.accepted ? "通过" : "质疑: " + lastVer.challenge)));
+    }
+    tasksEl.append(row);
+  }
+
   const inbox = document.getElementById("inbox");
   inbox.replaceChildren();
-  for (const e of state.inbox) {
+  for (const e of state.inbox || []) {
     const row = div("row");
     row.append(text(div(), "来自 " + e.from + "，" + e.payload.date_from + " 到 " + e.payload.date_to));
     row.append(text(div(), "忙碌时段：" + (e.payload.busy.map((b) => b.start + " ~ " + b.end).join("；") || "无")));
@@ -85,7 +146,7 @@ async function refresh() {
 
   const ledger = document.getElementById("ledger");
   ledger.replaceChildren();
-  for (const e of state.ledger.slice(-30).reverse()) {
+  for (const e of (state.ledger || []).slice(-30).reverse()) {
     ledger.append(text(div("row"), e.at + "  " + e.kind + "  " + (e.peer || "") + "  " + (e.reason || "")));
   }
 }
@@ -97,6 +158,27 @@ document.getElementById("request-form").onsubmit = async (ev) => {
   const res = await fetch("/api/requests", { method: "POST", headers: H, body: JSON.stringify(data) });
   const body = await res.json();
   text(document.getElementById("request-result"), body.ok ? "已发送" : "失败：" + body.reason);
+  refresh();
+};
+
+document.getElementById("task-form").onsubmit = async (ev) => {
+  ev.preventDefault();
+  const formData = new FormData(ev.target);
+  const to = formData.get("to");
+  const goal = formData.get("goal");
+  const acceptanceRaw = formData.get("acceptance") || "";
+  const acceptance = String(acceptanceRaw)
+    .split("\\n")
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  const res = await fetch("/api/tasks", {
+    method: "POST",
+    headers: H,
+    body: JSON.stringify({ to, goal, acceptance }),
+  });
+  const body = await res.json();
+  text(document.getElementById("task-result"), body.ok ? "已派发" : "失败：" + body.reason);
   refresh();
 };
 

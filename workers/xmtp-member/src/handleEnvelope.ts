@@ -1,13 +1,25 @@
 import type { ConsentQueue } from "./consentQueue.ts";
-import { encodeEnvelope, type DisclosureEnvelope, type Envelope } from "./envelope.ts";
+import { buildVerdictPrompt, nextStep, parseVerdict } from "./coordinator.ts";
+import {
+  encodeEnvelope,
+  type DisclosureEnvelope,
+  type Envelope,
+  type ResultEnvelope,
+  type TaskEnvelope,
+  type VerdictEnvelope,
+} from "./envelope.ts";
+import { buildResult, buildTaskPrompt } from "./executor.ts";
 import { verifyGrant } from "./grant.ts";
 import { buildLedgerEntry, type LedgerEntry } from "./ledger.ts";
 import { checkRequest, type Policy } from "./policy.ts";
+import type { TaskStore } from "./taskStore.ts";
 
 export interface HandleEnvelopeDeps {
   selfAddress: string;
   policy: Policy;
   queue: ConsentQueue;
+  taskStore?: TaskStore;
+  completeModel?: (prompt: string) => Promise<string>;
   send: (conversationId: string, text: string) => Promise<void>;
   appendLedger: (entry: LedgerEntry) => Promise<void>;
   storeDisclosure: (disclosure: DisclosureEnvelope, from: string) => Promise<boolean>;
@@ -21,7 +33,9 @@ export type HandleOutcome =
   | "duplicate"
   | "stored"
   | "rejected"
-  | "noted";
+  | "noted"
+  | "task_executed"
+  | "verdict_processed";
 
 export async function handleEnvelope(
   input: { envelope: Envelope; sender: string; conversationId: string },
@@ -106,6 +120,109 @@ export async function handleEnvelope(
     await deps.appendLedger(
       buildLedgerEntry({ now, kind: "denial_received", requestId: env.request_id, peer: sender, reason: env.reason })
     );
+    return "noted";
+  }
+
+  if (env.kind === "task") {
+    const check = checkRequest(deps.policy, sender, { scope: "task.run" });
+    if (!check.ok) {
+      await deps.send(
+        input.conversationId,
+        encodeEnvelope({ kind: "denial", request_id: env.request_id, to: sender, reason: "out_of_scope" })
+      );
+      await deps.appendLedger(
+        buildLedgerEntry({
+          now,
+          kind: "request_denied",
+          requestId: env.request_id,
+          peer: sender,
+          scope: "task.run",
+          reason: "out_of_scope",
+        })
+      );
+      return "denied";
+    }
+    if (deps.completeModel) {
+      const prompt = buildTaskPrompt(env);
+      const modelText = await deps.completeModel(prompt);
+      const res = buildResult(env, modelText, sender);
+      await deps.send(input.conversationId, encodeEnvelope(res));
+      return "task_executed";
+    }
+    return "noted";
+  }
+
+  if (env.kind === "result") {
+    if (deps.taskStore && deps.completeModel) {
+      const record = deps.taskStore.get(env.request_id);
+      if (!record) return "ignored";
+      await deps.taskStore.recordResult(env.request_id, env);
+
+      const prompt = buildVerdictPrompt(record.task, env);
+      const modelText = await deps.completeModel(prompt);
+      let outcome = parseVerdict(modelText);
+      if (!outcome) {
+        outcome = { accepted: false, challenge: "解析模型验收结果失败" };
+      }
+
+      const step = nextStep(record.task, outcome);
+      const verdict: VerdictEnvelope = {
+        kind: "verdict",
+        request_id: env.request_id,
+        to: sender,
+        round: env.round,
+        accepted: outcome.accepted,
+        challenge: outcome.challenge,
+      };
+
+      await deps.send(input.conversationId, encodeEnvelope(verdict));
+      await deps.appendLedger(
+        buildLedgerEntry({
+          now,
+          kind: "verdict_sent",
+          requestId: env.request_id,
+          peer: sender,
+          scope: "task.run",
+          reason: outcome.accepted ? "accepted" : "rejected",
+        })
+      );
+
+      if (step === "done") {
+        await deps.taskStore.recordVerdict(env.request_id, verdict, "completed");
+      } else if (step === "retry") {
+        await deps.taskStore.recordVerdict(env.request_id, verdict, "retrying");
+        const nextTask: TaskEnvelope = {
+          ...record.task,
+          round: env.round + 1,
+        };
+        await deps.send(input.conversationId, encodeEnvelope(nextTask));
+        await deps.appendLedger(
+          buildLedgerEntry({
+            now,
+            kind: "task_sent",
+            requestId: env.request_id,
+            peer: sender,
+            scope: "task.run",
+          })
+        );
+      } else if (step === "escalate") {
+        await deps.taskStore.recordVerdict(env.request_id, verdict, "escalated");
+        await deps.appendLedger(
+          buildLedgerEntry({
+            now,
+            kind: "task_escalated",
+            requestId: env.request_id,
+            peer: sender,
+            scope: "task.run",
+          })
+        );
+      }
+      return "verdict_processed";
+    }
+    return "noted";
+  }
+
+  if (env.kind === "verdict") {
     return "noted";
   }
 

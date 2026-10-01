@@ -51,3 +51,17 @@ test("missing policy file means nobody may ask anything", async () => {
   assert.equal(loaded2.max_range_days, 14);
   assert.deepEqual(loaded2.allow[PEER], ["calendar.free_busy"]);
 });
+
+test("task.run scope skips date constraints check", () => {
+  const taskPolicy = normalizePolicy({
+    allow: { [PEER]: ["task.run"] },
+  });
+  // 允许 task.run，不提供 constraints 也能通过
+  assert.deepEqual(checkRequest(taskPolicy, PEER, { scope: "task.run" } as any), { ok: true });
+  // 未允许 task.run 的调用方返回 out_of_scope
+  assert.deepEqual(
+    checkRequest(taskPolicy, "0x1111111111111111111111111111111111111111", { scope: "task.run" } as any),
+    { ok: false, reason: "out_of_scope" }
+  );
+});
+

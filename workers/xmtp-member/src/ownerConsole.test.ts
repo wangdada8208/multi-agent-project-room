@@ -97,3 +97,62 @@ test("the old /owner-notes route still works", async () => {
     server.close();
   }
 });
+
+test("POST /api/tasks with owner header dispatches task", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "console-"));
+  const queue = new ConsentQueue(path.join(dir, "consents.json"));
+  const taskCalls: any[] = [];
+  const server = createOwnerConsoleServer({
+    selfAddress: "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266",
+    queue,
+    readLedger: async () => [
+      {
+        at: "2026-10-01T08:00:00.000Z",
+        kind: "verdict_sent",
+        request_id: "t-1",
+        peer: "0x70997970c51812dc3a010c7d01b50e0d17dc79c8",
+        scope: "task.run",
+        reason: "accepted",
+        payload_hash: null,
+      },
+    ],
+    readInbox: async () => [],
+    readOwnerNotes: async () => [],
+    approve: async () => ({ ok: true }),
+    deny: async () => ({ ok: true }),
+    sendRequest: async () => ({ ok: true }),
+    sendTask: async (body) => {
+      taskCalls.push(body);
+      return { ok: true, request_id: "task-123" };
+    },
+  });
+
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const port = (server.address() as AddressInfo).port;
+  const base = `http://127.0.0.1:${port}`;
+
+  try {
+    const state = await (await fetch(`${base}/api/state`)).json();
+    assert.ok(Array.isArray(state.scoreboard));
+    assert.equal(state.scoreboard.length, 1);
+    assert.equal(state.scoreboard[0].accepted, 1);
+
+    const res = await fetch(`${base}/api/tasks`, {
+      method: "POST",
+      headers: { "X-MAPR-Owner": "1", "Content-Type": "application/json" },
+      body: JSON.stringify({
+        to: "0x70997970c51812dc3a010c7d01b50e0d17dc79c8",
+        goal: "测试任务",
+        acceptance: ["必须通过测试"],
+      }),
+    });
+    assert.equal(res.status, 200);
+    const data = await res.json();
+    assert.equal(data.ok, true);
+    assert.equal(data.request_id, "task-123");
+    assert.equal(taskCalls.length, 1);
+  } finally {
+    server.close();
+  }
+});
+

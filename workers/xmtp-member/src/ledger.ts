@@ -14,7 +14,10 @@ export type LedgerKind =
   | "disclosure_stored"
   | "disclosure_rejected"
   | "denial_received"
-  | "pending_received";
+  | "pending_received"
+  | "task_sent"
+  | "verdict_sent"
+  | "task_escalated";
 
 export interface LedgerEntry {
   at: string;

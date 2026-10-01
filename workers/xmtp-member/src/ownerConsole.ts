@@ -6,6 +6,8 @@ import { checkLocalRequest, OWNER_HEADER } from "./localGuard.ts";
 import { OWNER_CONSOLE_HTML } from "./ownerConsoleHtml.ts";
 import type { OwnerNote } from "./ownerNote.ts";
 import { allowOwnerNotesOrigin, handleOwnerNotes } from "./ownerNotesHttp.ts";
+import { scoreboard, type ScoreboardItem } from "./scoreboard.ts";
+import type { TaskRecord } from "./taskStore.ts";
 
 export interface OwnerConsoleDeps {
   selfAddress: string;
@@ -13,9 +15,12 @@ export interface OwnerConsoleDeps {
   readLedger: () => Promise<LedgerEntry[]>;
   readInbox: () => Promise<InboxEntry[]>;
   readOwnerNotes: () => Promise<OwnerNote[]>;
+  readScoreboard?: () => Promise<ScoreboardItem[]> | ScoreboardItem[];
+  readTasks?: () => Promise<TaskRecord[]> | TaskRecord[];
   approve: (requestId: string) => Promise<{ ok: boolean; reason?: string }>;
   deny: (requestId: string) => Promise<{ ok: boolean; reason?: string }>;
   sendRequest: (body: any) => Promise<{ ok: boolean; reason?: string; request_id?: string }>;
+  sendTask?: (body: any) => Promise<{ ok: boolean; reason?: string; request_id?: string }>;
 }
 
 const MAX_BODY = 16 * 1024;
@@ -96,11 +101,14 @@ export function createOwnerConsoleServer(deps: OwnerConsoleDeps): http.Server {
         return;
       }
       if (method === "GET" && url.pathname === "/api/state") {
+        const ledger = await deps.readLedger();
         sendJson(res, 200, {
           self: deps.selfAddress,
           consents: deps.queue.list(),
           inbox: await deps.readInbox(),
-          ledger: await deps.readLedger(),
+          ledger,
+          scoreboard: deps.readScoreboard ? await deps.readScoreboard() : scoreboard(ledger),
+          tasks: deps.readTasks ? await deps.readTasks() : [],
         });
         return;
       }
@@ -116,9 +124,18 @@ export function createOwnerConsoleServer(deps: OwnerConsoleDeps): http.Server {
         sendJson(res, result.ok ? 200 : 400, result);
         return;
       }
+      if (method === "POST" && url.pathname === "/api/tasks") {
+        if (!deps.sendTask) {
+          sendJson(res, 501, { ok: false, reason: "not_implemented" });
+          return;
+        }
+        const result = await deps.sendTask(await readJson(req));
+        sendJson(res, result.ok ? 200 : 400, result);
+        return;
+      }
       sendJson(res, 404, { ok: false, reason: "not_found" });
     } catch (err: any) {
-      sendJson(res, 400, { ok: false, reason: err?.message === "body too large" ? "body_too_large" : "bad_request" });
+      sendJson(res, 500, { ok: false, reason: err.message || "server_error" });
     }
   });
 }

@@ -19,6 +19,7 @@ item with the date, tester, environment, and evidence link or log snippet.
 | Approval flow | Needs manual pass | Create, approve, reject, and observe WebSocket updates. |
 | Responsive/dark UI | Needs manual pass | Check desktop, narrow window, and dark mode toggle. |
 | Owner gateway consent (dev) | Passed 2026-10-01 | 单机双网关：批准后只收到时段，越界自动拒绝，重复批准被拒，缺请求头 403。 |
+| Coordinator and scoreboard (dev) | Passed 2026-10-01 | 单机三网关：未授权 task.run 拒发且不调模型，第一轮质疑重试、第二轮通过完成，计分板准确统计采纳与拒发次数。 |
 
 ## Automated Verification
 
