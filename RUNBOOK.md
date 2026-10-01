@@ -132,3 +132,20 @@ Latest workflow expectations:
 - Deploy job runs on the self-hosted runner labeled `multi-agent`.
 - Deploy command pulls `/opt/multi-agent-project-room`, rebuilds backend and
   frontend containers, runs Alembic, and applies compatibility SQL fixes.
+
+## 主人网关
+
+本机文件（都在 workers/xmtp-member/.state/，不要提交）：
+
+- policy.json：谁能申请什么。示例：{"allow": {"0x对方地址小写": ["calendar.free_busy"]}, "max_range_days": 14}。缺少 policy.json 时默认无人可申请任何范围（自动回复 out_of_scope 拒绝）。
+- calendar.json：本机日历，JSON 数组，每项至少有 start、end（ISO 时间）。也可以用 MAPR_CALENDAR_FILE 指向别处。
+- consents.json、inbox.json、ledger.jsonl：网关自己写，不要手改。
+
+控制台：启动成员进程后打开 http://127.0.0.1:8787/（端口由 OWNER_NOTES_PORT 决定）。控制台所有写操作（批准、拒绝、发起申请）均受 localGuard 保护，必须来自本机回环地址且必须携带 `X-MAPR-Owner: 1` 请求头，跨站表单无法伪造。
+
+从命令行发申请：
+
+```bash
+curl -s -X POST http://127.0.0.1:8787/api/requests -H 'X-MAPR-Owner: 1' -H 'Content-Type: application/json' \
+  -d '{"to":"0x对方地址","scope":"calendar.free_busy","purpose":"用途","date_from":"2026-10-05","date_to":"2026-10-09"}'
+```

@@ -3,13 +3,11 @@
 本文档是多智能体项目协作室的统一实施规划。
 文档整合了历史阶段成果，并以可信协作指导意见作为后续推进依据。
 
-## 0. 当前执行入口（2026-09-23）
+## 0. 当前执行入口（2026-10-01）
 
-公网 Hub 当前不可用。2026-09-23 健康检查返回 Cloudflare 522。
-
-- 执行计划：`docs/superpowers/plans/2026-09-23-restore-vps-access.md`
-- PostgreSQL 清理脚本已经写好。先恢复服务器登录和 `/health`，再执行脚本。
-- 登不上就停止。不要猜主机或密码。
+当前执行 docs/superpowers/plans/2026-09-23-00-总路线与执行规则.md。
+阶段 B 开发与单机双网关 XMTP dev 实测已在 feat/owner-gateway 完成（阶段 A 双机演练在验收清单中仍为 Pending），未合并 main。
+下一步：请人类决定是否合并 feat/owner-gateway 到 main，以及是否开始阶段 C。阶段 C 的三项人类决定（C-Q1 执行者逐次批准或 policy 长期 task.run 授权、C-Q2 验收模型配置、C-Q3 计分板本机或 Hub 范围）均待决定。
 
 ## 1. 历史阶段演进概况
 
