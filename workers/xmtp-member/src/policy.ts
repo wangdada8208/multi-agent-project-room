@@ -35,12 +35,16 @@ export async function loadPolicy(file: string): Promise<Policy> {
 export function checkRequest(
   policy: Policy,
   sender: string,
-  request: { scope: string; constraints: DateRange }
+  request: { scope: string; constraints?: DateRange }
 ): { ok: true } | { ok: false; reason: "out_of_scope" } {
   const denied = { ok: false as const, reason: "out_of_scope" as const };
   const known = (KNOWN_SCOPES as readonly string[]).includes(request.scope);
   const allowed = policy.allow[sender.toLowerCase()] ?? [];
   if (!known || !allowed.includes(request.scope)) return denied;
+  if (request.scope === "task.run") {
+    return { ok: true };
+  }
+  if (!request.constraints) return denied;
   const from = Date.parse(`${request.constraints.date_from}T00:00:00Z`);
   const to = Date.parse(`${request.constraints.date_to}T00:00:00Z`);
   if (!Number.isFinite(from) || !Number.isFinite(to) || to < from) return denied;
