@@ -28,6 +28,7 @@ from app.api.search import router as search_router
 from app.api.analytics import router as analytics_router
 from app.api.permissions import router as permissions_router
 from app.api.templates import router as templates_router
+from app.api.invites import router as invites_router
 from app.chat.ws_handler import handle_chat
 
 settings = get_settings()
@@ -70,6 +71,7 @@ async def global_exception_handler(request: Request, exc: Exception) -> JSONResp
 app.include_router(gateway_router)    # GET /health
 app.include_router(auth_router)       # /api/v1/auth
 app.include_router(rooms_router)      # /api/v1/rooms
+app.include_router(invites_router)    # /api/v1/rooms/{id}/invites & /api/v1/invites
 app.include_router(chat_router)       # /api/v1/rooms/{id}/messages
 app.include_router(task_router)       # /api/v1/tasks
 app.include_router(approval_router)   # /api/v1/approvals
