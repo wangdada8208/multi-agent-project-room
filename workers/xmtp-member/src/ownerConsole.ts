@@ -11,6 +11,7 @@ import type { TaskRecord } from "./taskStore.ts";
 
 export interface OwnerConsoleDeps {
   selfAddress: string;
+  role?: string;
   queue: ConsentQueue;
   readLedger: () => Promise<LedgerEntry[]>;
   readInbox: () => Promise<InboxEntry[]>;
@@ -104,6 +105,7 @@ export function createOwnerConsoleServer(deps: OwnerConsoleDeps): http.Server {
         const ledger = await deps.readLedger();
         sendJson(res, 200, {
           self: deps.selfAddress,
+          role: deps.role || "member",
           consents: deps.queue.list(),
           inbox: await deps.readInbox(),
           ledger,
@@ -120,11 +122,19 @@ export function createOwnerConsoleServer(deps: OwnerConsoleDeps): http.Server {
         return;
       }
       if (method === "POST" && url.pathname === "/api/requests") {
+        if (deps.role === "observer") {
+          sendJson(res, 403, { ok: false, reason: "observer_readonly" });
+          return;
+        }
         const result = await deps.sendRequest(await readJson(req));
         sendJson(res, result.ok ? 200 : 400, result);
         return;
       }
       if (method === "POST" && url.pathname === "/api/tasks") {
+        if (deps.role === "observer") {
+          sendJson(res, 403, { ok: false, reason: "observer_readonly" });
+          return;
+        }
         if (!deps.sendTask) {
           sendJson(res, 501, { ok: false, reason: "not_implemented" });
           return;

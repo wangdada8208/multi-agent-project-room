@@ -156,3 +156,52 @@ test("POST /api/tasks with owner header dispatches task", async () => {
   }
 });
 
+test("observer role returns role in state and rejects requests and tasks", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "console-obs-"));
+  const queue = new ConsentQueue(path.join(dir, "consents.json"));
+  const server = createOwnerConsoleServer({
+    selfAddress: "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266",
+    role: "observer",
+    queue,
+    readLedger: async () => [],
+    readInbox: async () => [],
+    readOwnerNotes: async () => [],
+    approve: async () => ({ ok: true }),
+    deny: async () => ({ ok: true }),
+    sendRequest: async () => ({ ok: true }),
+    sendTask: async () => ({ ok: true }),
+  });
+
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const port = (server.address() as AddressInfo).port;
+  const base = `http://127.0.0.1:${port}`;
+
+  try {
+    const state = await (await fetch(`${base}/api/state`)).json();
+    assert.equal(state.role, "observer");
+
+    const reqRes = await fetch(`${base}/api/requests`, {
+      method: "POST",
+      headers: { "X-MAPR-Owner": "1", "Content-Type": "application/json" },
+      body: JSON.stringify({ to: "0x123", scope: "calendar.free_busy" }),
+    });
+    assert.equal(reqRes.status, 403);
+    const reqData = await reqRes.json();
+    assert.equal(reqData.ok, false);
+    assert.equal(reqData.reason, "observer_readonly");
+
+    const taskRes = await fetch(`${base}/api/tasks`, {
+      method: "POST",
+      headers: { "X-MAPR-Owner": "1", "Content-Type": "application/json" },
+      body: JSON.stringify({ to: "0x123", goal: "g", acceptance: ["a"] }),
+    });
+    assert.equal(taskRes.status, 403);
+    const taskData = await taskRes.json();
+    assert.equal(taskData.ok, false);
+    assert.equal(taskData.reason, "observer_readonly");
+  } finally {
+    server.close();
+  }
+});
+
+
