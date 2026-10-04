@@ -6,9 +6,9 @@
 ## 0. 当前执行入口（2026-10-01）
 
 当前执行 `docs/superpowers/plans/2026-09-23-00-总路线与执行规则.md`。
-阶段 A（双机演练 Passed 2026-09-30）、阶段 B（主人网关与单次同意，单机双网关实测 Passed 2026-10-01）、阶段 C（协调者与计分板，单机三网关实测 Passed 2026-10-01）均已完成并合并入 `main`。
-阶段 D 前置架构决策（D-Q1 至 D-Q4）已落定并记录在 `decisions.md`。
-下一步：由人类确认启动阶段 D（真实连接器）开发，建立协作分支 `feat/connectors`；由开发者甲主导 `workers/xmtp-member/src/connectors/` 核心逻辑展开，开发者乙同步提供控制台与协同支持。
+阶段 A（双机演练 Passed 2026-09-30）、阶段 B（主人网关与单次同意，单机双网关实测 Passed 2026-10-01）、阶段 C（协调者与计分板，单机三网关实测 Passed 2026-10-01）、阶段 D（真实连接器与脱敏隔离 Passed 2026-10-01）均已合并入 `main`。
+阶段 E（代理自助接入、Hub room_invites 邀请表、WebCrypto 私钥加固、只读观察者模式、mapr 命令行工具与全链路端到端验收）已在分支 `feat/phase-e-invites-and-security` 完成全部验证。
+下一步：请人类确认将阶段 E（`feat/phase-e-invites-and-security`）合并至 `main` 分支。
 
 ## 1. 历史阶段演进概况
 

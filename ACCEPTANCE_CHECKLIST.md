@@ -21,6 +21,7 @@ item with the date, tester, environment, and evidence link or log snippet.
 | Owner gateway consent (dev) | Passed 2026-10-01 | 单机双网关：批准后只收到时段，越界自动拒绝，重复批准被拒，缺请求头 403。 |
 | Coordinator and scoreboard (dev) | Passed 2026-10-01 | 单机三网关：未授权 task.run 拒发且不调模型，第一轮质疑重试、第二轮通过完成，计分板准确统计采纳与拒发次数。 |
 | Real connectors and privacy redact (dev) | Passed 2026-10-01 | 连接器体系就绪：本地日历、Google日历与Gmail客票连接器，强制 0600 凭据权限隔离，隐私脱敏正则过滤手机邮箱，越界约束自动拒发。 |
+| Agent onboarding and privacy vault (dev) | Passed 2026-10-01 | 代理自助接入与私钥金库：基于邀请令牌兑换入群与 mapr 命令行完成身份派生、能力声明与协商闭环；WebCrypto PBKDF2 (310,000次) + AES-GCM 口令加密保护私钥；只读观察者隐藏发送输入框。 |
 
 ## Automated Verification
 
