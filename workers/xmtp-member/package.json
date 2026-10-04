@@ -2,6 +2,9 @@
   "name": "xmtp-member",
   "version": "0.1.0",
   "type": "module",
+  "bin": {
+    "mapr": "./src/cli.ts"
+  },
   "engines": {
     "node": ">=22"
   },
