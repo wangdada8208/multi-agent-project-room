@@ -16,7 +16,7 @@ th { background-color: #f9f9f9; }
 </head>
 <body>
 <h1>主人控制台</h1>
-<p>本机地址：<code id="self"></code></p>
+<p>本机地址：<code id="self"></code><span id="role-badge" style="color:#666;font-size:14px;margin-left:8px;"></span></p>
 
 <section>
 <h2>成果计分板</h2>
@@ -28,7 +28,7 @@ th { background-color: #f9f9f9; }
 <div id="consents">加载中...</div>
 </section>
 
-<section>
+<section id="task-section">
 <h2>派发新任务</h2>
 <form id="task-form">
 <p>执行者地址 <input name="to" size="46" required></p>
@@ -38,7 +38,7 @@ th { background-color: #f9f9f9; }
 </form>
 </section>
 
-<section>
+<section id="request-section">
 <h2>向对方请求空闲时间</h2>
 <form id="request-form">
 <p>对方地址 <input name="to" size="46" required></p>
@@ -78,6 +78,14 @@ async function act(id, action) {
 async function refresh() {
   const state = await (await fetch("/api/state")).json();
   text(document.getElementById("self"), state.self);
+
+  if (state.role === "observer") {
+    text(document.getElementById("role-badge"), " (观察者 - 只读)");
+    const ts = document.getElementById("task-section");
+    if (ts) ts.style.display = "none";
+    const rs = document.getElementById("request-section");
+    if (rs) rs.style.display = "none";
+  }
 
   const sbEl = document.getElementById("scoreboard");
   sbEl.replaceChildren();

@@ -63,6 +63,24 @@ export function RoomPage() {
   const [myXmtpAddress, setMyXmtpAddress] = useState<string>("");
   const isEncrypted = roomQuery.data?.transport === "xmtp";
 
+  const permissionsQuery = useQuery({
+    queryKey: ["rooms", roomId, "permissions"],
+    queryFn: async () => {
+      const res = await apiFetch(`/api/v1/rooms/${roomId}/permissions`);
+      if (!res.ok) return null;
+      return res.json();
+    },
+    enabled: !!roomId,
+  });
+
+  const isObserver = useMemo(() => {
+    if (!permissionsQuery.data?.members || !user?.id) return false;
+    const myPerm = permissionsQuery.data.members.find(
+      (m: any) => m.user_id === user.id,
+    );
+    return myPerm?.role === "viewer" || myPerm?.role === "observer";
+  }, [permissionsQuery.data, user]);
+
   useEffect(() => {
     track("room_enter", roomId);
   }, [roomId, track]);
@@ -393,7 +411,23 @@ export function RoomPage() {
           ))}
         </div>
 
-        <ChatInput disabled={connectionStatus !== "open"} onlineAgents={onlineAgentNames} onSend={handleSend} />
+        {isObserver ? (
+          <div
+            className="chat-observer-notice"
+            style={{
+              padding: "12px 16px",
+              background: "rgba(255, 255, 255, 0.04)",
+              borderTop: "1px solid var(--border-color, #e5e7eb)",
+              textAlign: "center",
+              color: "var(--text-muted, #888)",
+              fontSize: 14,
+            }}
+          >
+            当前为只读观察者模式，仅可旁听协作过程。
+          </div>
+        ) : (
+          <ChatInput disabled={connectionStatus !== "open"} onlineAgents={onlineAgentNames} onSend={handleSend} />
+        )}
       </section>
 
       {/* ── 右侧面板 ── */}

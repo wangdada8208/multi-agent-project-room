@@ -9,15 +9,15 @@
 ```text
 Step 1: 阅读 docs/superpowers/plans/2026-09-23-00-总路线与执行规则.md
 Step 2: 阅读 AGENTS.md 与 RUNBOOK.md（密钥不进 git）
-Step 3: 阶段 A、B、C 已完成的任务不要重做
-Step 4: 下一步是后续任务书 docs/superpowers/plans/2026-09-23-C-E-后续阶段任务书.md 的阶段 D（真实连接器）前置决策
+Step 3: 阶段 A、B、C、D、E 已完成的任务不要重做
+Step 4: 下一步是人类审批将阶段 E（feat/phase-e-invites-and-security）合并至 main
 ```
 
 ## 2. 项目状态
 
 ```
-当前阶段: 阶段 C 已完成并合并入 main，阶段 D 架构决策已定（2026-10-01）
-总体进度: 阶段 A（双机演练 Passed 2026-09-30）、阶段 B（主人网关与单次同意 Passed 2026-10-01）、阶段 C（协调者与计分板，单机三网关实测 Passed 2026-10-01）已全部合并入 main。阶段 D 前置架构决策（D-Q1 至 D-Q4）已写入 decisions.md。下一步由人类审批启动阶段 D（真实连接器），由开发者甲主导连接器展开与实现，开发者乙配合控制台与文档协同。
+当前阶段: 阶段 E 已完成，待合并主分支（2026-10-01）
+总体进度: 阶段 A（双机演练 Passed 2026-09-30）、阶段 B（主人网关与单次同意 Passed 2026-10-01）、阶段 C（协调者与计分板 Passed 2026-10-01）、阶段 D（真实连接器与脱敏 Passed 2026-10-01）已全部合并入 main。阶段 E（代理自助接入、Hub room_invites 邀请表、WebCrypto 私钥加固、只读观察者模式、mapr 命令行工具与全链路端到端验收）已在分支 feat/phase-e-invites-and-security 验收通过。待人类批准合并 main。
 ```
 
 ## 3. 技术栈概要

@@ -53,6 +53,7 @@ export interface MemberConfig {
   sensitiveKeywords?: string[];
   ownerNotesPort?: string;
   calendarFile?: string;
+  role?: string;
 }
 
 function splitList(raw: string | undefined): string[] {
@@ -90,6 +91,7 @@ export function loadConfigFromEnv(): MemberConfig {
     sensitiveKeywords: sensitiveKeywords.length > 0 ? sensitiveKeywords : undefined,
     ownerNotesPort: process.env.OWNER_NOTES_PORT,
     calendarFile: process.env.MAPR_CALENDAR_FILE || undefined,
+    role: process.env.XMTP_ROLE || "member",
   };
 }
 
@@ -149,7 +151,9 @@ export async function startMember(): Promise<void> {
   const tasksPath = path.join(stateDir, "tasks.json");
   const calendarPath = config.calendarFile || path.join(stateDir, "calendar.json");
 
-  const policy = await loadPolicy(policyPath);
+  const policy = config.role === "observer"
+    ? { allow: {}, max_range_days: 0 }
+    : await loadPolicy(policyPath);
   const queue = new ConsentQueue(consentsPath);
   await queue.load();
   const taskStore = new TaskStore(tasksPath);
@@ -251,6 +255,7 @@ export async function startMember(): Promise<void> {
 
   const consoleServer = createOwnerConsoleServer({
     selfAddress,
+    role: config.role,
     queue,
     readLedger: () => readLedger(ledgerPath),
     readInbox: () => readInbox(inboxPath),
