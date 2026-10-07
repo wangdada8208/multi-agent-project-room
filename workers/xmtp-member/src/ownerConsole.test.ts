@@ -204,4 +204,87 @@ test("observer role returns role in state and rejects requests and tasks", async
   }
 });
 
+test("GET /connect/authorize serves consent page and handles approve/deny", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "console-connect-"));
+  const queue = new ConsentQueue(path.join(dir, "consents.json"));
+  const ledger: any[] = [];
+  const server = createOwnerConsoleServer({
+    selfAddress: "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266",
+    privateKey: "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80",
+    queue,
+    connectors: [
+      {
+        id: "mock-calendar",
+        scopes: ["calendar.free_busy"],
+        fetch: async () => ({
+          scope: "calendar.free_busy",
+          date_from: "2026-10-05",
+          date_to: "2026-10-09",
+          busy: [{ start: "2026-10-06T09:00:00.000Z", end: "2026-10-06T10:00:00.000Z" }],
+        }),
+      },
+    ],
+    readLedger: async () => ledger,
+    readInbox: async () => [],
+    readOwnerNotes: async () => [],
+    approve: async () => ({ ok: true }),
+    deny: async () => ({ ok: true }),
+    sendRequest: async () => ({ ok: true }),
+    sendTask: async () => ({ ok: true }),
+    appendLedger: async (e: any) => { ledger.push(e); },
+  } as any);
+
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const port = (server.address() as AddressInfo).port;
+  const base = `http://127.0.0.1:${port}`;
+
+  try {
+    const authPage = await fetch(
+      `${base}/connect/authorize?app_id=trip-app&scope=calendar.free_busy&purpose=预订机票`
+    );
+    assert.equal(authPage.status, 200);
+    const text = await authPage.text();
+    assert.equal(text.includes("Connect with MAPR"), true);
+    assert.equal(text.includes("trip-app"), true);
+
+    const approveRes = await fetch(`${base}/api/connect/approve`, {
+      method: "POST",
+      headers: { "X-MAPR-Owner": "1", "Content-Type": "application/json" },
+      body: JSON.stringify({
+        app_id: "trip-app",
+        scope: "calendar.free_busy",
+        purpose: "预订机票",
+        constraints: { date_from: "2026-10-05", date_to: "2026-10-09" },
+        redirect_uri: "https://trip.example.com/callback",
+      }),
+    });
+    assert.equal(approveRes.status, 200);
+    const approveData = await approveRes.json();
+    assert.equal(approveData.ok, true);
+    assert.ok(approveData.grant);
+    assert.ok(approveData.signature);
+    assert.deepEqual(approveData.payload.busy, [
+      { start: "2026-10-06T09:00:00.000Z", end: "2026-10-06T10:00:00.000Z" },
+    ]);
+    assert.ok(approveData.redirect_url.startsWith("https://trip.example.com/callback#"));
+
+    const denyRes = await fetch(`${base}/api/connect/deny`, {
+      method: "POST",
+      headers: { "X-MAPR-Owner": "1", "Content-Type": "application/json" },
+      body: JSON.stringify({
+        app_id: "trip-app",
+        scope: "calendar.free_busy",
+        redirect_uri: "https://trip.example.com/callback",
+      }),
+    });
+    assert.equal(denyRes.status, 200);
+    const denyData = await denyRes.json();
+    assert.equal(denyData.ok, false);
+    assert.equal(denyData.reason, "user_denied");
+  } finally {
+    server.close();
+  }
+});
+
+
 

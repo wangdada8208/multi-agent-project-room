@@ -255,6 +255,8 @@ export async function startMember(): Promise<void> {
 
   const consoleServer = createOwnerConsoleServer({
     selfAddress,
+    privateKey: config.xmtpWalletKey,
+    connectors,
     role: config.role,
     queue,
     readLedger: () => readLedger(ledgerPath),
@@ -262,6 +264,7 @@ export async function startMember(): Promise<void> {
     readOwnerNotes: () => readOwnerNotesFile(ownerNotesPath),
     readScoreboard: async () => scoreboard(await readLedger(ledgerPath)),
     readTasks: () => taskStore.list(),
+    appendLedger: writeLedger,
     approve: (id) => approveConsent(id, actionDeps),
     deny: (id) => denyConsent(id, "owner_denied", actionDeps),
     sendRequest: async (body) => {

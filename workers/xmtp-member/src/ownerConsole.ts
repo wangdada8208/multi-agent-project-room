@@ -1,9 +1,13 @@
 import http from "node:http";
+import { randomUUID } from "node:crypto";
+import type { Connector } from "./connectors/types.ts";
+import { findConnector } from "./connectors/registry.ts";
 import type { ConsentQueue } from "./consentQueue.ts";
+import { buildGrant, signGrant } from "./grant.ts";
 import type { InboxEntry } from "./inbox.ts";
-import type { LedgerEntry } from "./ledger.ts";
+import { buildLedgerEntry, type LedgerEntry } from "./ledger.ts";
 import { checkLocalRequest, OWNER_HEADER } from "./localGuard.ts";
-import { OWNER_CONSOLE_HTML } from "./ownerConsoleHtml.ts";
+import { CONNECT_AUTHORIZE_HTML, OWNER_CONSOLE_HTML } from "./ownerConsoleHtml.ts";
 import type { OwnerNote } from "./ownerNote.ts";
 import { allowOwnerNotesOrigin, handleOwnerNotes } from "./ownerNotesHttp.ts";
 import { scoreboard, type ScoreboardItem } from "./scoreboard.ts";
@@ -11,11 +15,14 @@ import type { TaskRecord } from "./taskStore.ts";
 
 export interface OwnerConsoleDeps {
   selfAddress: string;
+  privateKey?: string;
   role?: string;
   queue: ConsentQueue;
+  connectors?: Connector[];
   readLedger: () => Promise<LedgerEntry[]>;
   readInbox: () => Promise<InboxEntry[]>;
   readOwnerNotes: () => Promise<OwnerNote[]>;
+  appendLedger?: (entry: LedgerEntry) => Promise<void>;
   readScoreboard?: () => Promise<ScoreboardItem[]> | ScoreboardItem[];
   readTasks?: () => Promise<TaskRecord[]> | TaskRecord[];
   approve: (requestId: string) => Promise<{ ok: boolean; reason?: string }>;
@@ -101,6 +108,21 @@ export function createOwnerConsoleServer(deps: OwnerConsoleDeps): http.Server {
         res.end(OWNER_CONSOLE_HTML);
         return;
       }
+      if (method === "GET" && url.pathname === "/connect/authorize") {
+        res.writeHead(200, {
+          "Content-Type": "text/html; charset=utf-8",
+          "Content-Security-Policy": "default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'",
+        });
+        const appId = url.searchParams.get("app_id") || "未知应用";
+        const scope = url.searchParams.get("scope") || "";
+        const purpose = url.searchParams.get("purpose") || "未填写用途";
+        const rendered = CONNECT_AUTHORIZE_HTML
+          .replace('<strong id="app-id">...</strong>', `<strong id="app-id">${appId}</strong>`)
+          .replace('<code id="scope">...</code>', `<code id="scope">${scope}</code>`)
+          .replace('<span id="purpose">...</span>', `<span id="purpose">${purpose}</span>`);
+        res.end(rendered);
+        return;
+      }
       if (method === "GET" && url.pathname === "/api/state") {
         const ledger = await deps.readLedger();
         sendJson(res, 200, {
@@ -119,6 +141,68 @@ export function createOwnerConsoleServer(deps: OwnerConsoleDeps): http.Server {
         const id = decodeURIComponent(consentMatch[1]);
         const result = consentMatch[2] === "approve" ? await deps.approve(id) : await deps.deny(id);
         sendJson(res, result.ok ? 200 : 409, result);
+        return;
+      }
+      if (method === "POST" && url.pathname === "/api/connect/approve") {
+        if (deps.role === "observer") {
+          sendJson(res, 403, { ok: false, reason: "observer_readonly" });
+          return;
+        }
+        const body = await readJson(req);
+        const appId = String(body.app_id || "unknown-app");
+        const scope = String(body.scope || "");
+        const connector = findConnector(scope, deps.connectors || []);
+        if (!connector || !deps.privateKey) {
+          sendJson(res, 400, { ok: false, reason: "no_connector" });
+          return;
+        }
+        const payload = await connector.fetch(scope, body.constraints);
+        const grant = buildGrant({
+          owner: deps.selfAddress,
+          audience: appId,
+          requestId: randomUUID(),
+          scope,
+          constraints: body.constraints || { date_from: "", date_to: "" },
+          payload,
+          now: new Date(),
+        });
+        const signature = await signGrant(grant, deps.privateKey);
+        if (deps.appendLedger) {
+          await deps.appendLedger(
+            buildLedgerEntry({
+              now: new Date(),
+              kind: "consent_approved",
+              peer: appId,
+              scope,
+              payloadHash: grant.payload_hash,
+            })
+          );
+        }
+        const redirect_uri = body.redirect_uri;
+        const redirect_url = redirect_uri
+          ? `${redirect_uri}#grant=${encodeURIComponent(JSON.stringify(grant))}&signature=${encodeURIComponent(signature)}&data=${encodeURIComponent(JSON.stringify(payload))}`
+          : undefined;
+        sendJson(res, 200, { ok: true, grant, signature, payload, redirect_url });
+        return;
+      }
+      if (method === "POST" && url.pathname === "/api/connect/deny") {
+        const body = await readJson(req);
+        const appId = String(body.app_id || "unknown-app");
+        const scope = String(body.scope || "");
+        if (deps.appendLedger) {
+          await deps.appendLedger(
+            buildLedgerEntry({
+              now: new Date(),
+              kind: "consent_denied",
+              peer: appId,
+              scope,
+              reason: "user_denied",
+            })
+          );
+        }
+        const redirect_uri = body.redirect_uri;
+        const redirect_url = redirect_uri ? `${redirect_uri}#error=user_denied` : undefined;
+        sendJson(res, 200, { ok: false, reason: "user_denied", redirect_url });
         return;
       }
       if (method === "POST" && url.pathname === "/api/requests") {

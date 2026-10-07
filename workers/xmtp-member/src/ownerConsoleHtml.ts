@@ -196,3 +196,74 @@ setInterval(refresh, 3000);
 </body>
 </html>
 `;
+
+export const CONNECT_AUTHORIZE_HTML = `<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Connect with MAPR - 授权请求</title>
+<style>
+body { font-family: system-ui, sans-serif; max-width: 520px; margin: 40px auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
+.badge { display: inline-block; padding: 4px 8px; border-radius: 6px; background: #e0f2fe; color: #0369a1; font-weight: 600; font-size: 13px; margin-bottom: 12px; }
+h2 { margin-top: 0; font-size: 20px; color: #0f172a; }
+p { font-size: 14px; color: #334155; line-height: 1.5; }
+.card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; margin: 16px 0; }
+.actions { display: flex; gap: 12px; margin-top: 24px; }
+button { flex: 1; padding: 10px 16px; border-radius: 6px; font-size: 14px; font-weight: 500; cursor: pointer; border: none; }
+.btn-primary { background: #2563eb; color: #fff; }
+.btn-secondary { background: #f1f5f9; color: #475569; }
+</style>
+</head>
+<body>
+<div class="badge">Connect with MAPR</div>
+<h2>第三方应用申请数据访问</h2>
+<p>应用 <strong id="app-id">...</strong> 正在向您的智能体申请访问权限。</p>
+<div class="card">
+  <div><strong>申请范围：</strong><code id="scope">...</code></div>
+  <div style="margin-top:6px;"><strong>申请用途：</strong><span id="purpose">...</span></div>
+</div>
+<p style="font-size:12px;color:#64748b;">授权仅为单次有效凭证（10分钟过期）。对方只能获取脱敏后的结构化数据，无法直接读取您的私人账户。</p>
+<div class="actions">
+  <button id="btn-deny" class="btn-secondary">拒绝</button>
+  <button id="btn-approve" class="btn-primary">允许一次</button>
+</div>
+<script>
+const params = new URLSearchParams(window.location.search);
+const appId = params.get("app_id") || "未知应用";
+const scope = params.get("scope") || "";
+const purpose = params.get("purpose") || "未填写用途";
+const redirectUri = params.get("redirect_uri") || "";
+let constraints = {};
+try { constraints = JSON.parse(params.get("constraints") || "{}"); } catch {}
+
+document.getElementById("app-id").textContent = appId;
+document.getElementById("scope").textContent = scope;
+document.getElementById("purpose").textContent = purpose;
+
+async function submitAction(endpoint) {
+  const res = await fetch("/api/connect/" + endpoint, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-MAPR-Owner": "1" },
+    body: JSON.stringify({ app_id: appId, scope, purpose, constraints, redirect_uri: redirectUri })
+  });
+  const data = await res.json();
+  if (data.redirect_url) {
+    if (window.opener) {
+      window.opener.postMessage({ type: "MAPR_CONNECT_RESPONSE", ...data }, "*");
+      window.close();
+    } else {
+      window.location.href = data.redirect_url;
+    }
+  } else {
+    alert(data.ok ? "授权成功" : "已拒绝");
+    if (window.opener) window.close();
+  }
+}
+
+document.getElementById("btn-approve").onclick = () => submitAction("approve");
+document.getElementById("btn-deny").onclick = () => submitAction("deny");
+</script>
+</body>
+</html>
+`;
+
