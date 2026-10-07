@@ -3,12 +3,12 @@
 本文档是多智能体项目协作室的统一实施规划。
 文档整合了历史阶段成果，并以可信协作指导意见作为后续推进依据。
 
-## 0. 当前执行入口（2026-10-01）
+## 0. 当前执行入口（2026-10-05）
 
 当前执行 `docs/superpowers/plans/2026-09-23-00-总路线与执行规则.md`。
-阶段 A（双机演练 Passed 2026-09-30）、阶段 B（主人网关与单次同意，单机双网关实测 Passed 2026-10-01）、阶段 C（协调者与计分板，单机三网关实测 Passed 2026-10-01）、阶段 D（真实连接器与脱敏隔离 Passed 2026-10-01）均已合并入 `main`。
-阶段 E（代理自助接入、Hub room_invites 邀请表、WebCrypto 私钥加固、只读观察者模式、mapr 命令行工具与全链路端到端验收）已在分支 `feat/phase-e-invites-and-security` 完成全部验证。
-下一步：请人类确认将阶段 E（`feat/phase-e-invites-and-security`）合并至 `main` 分支。
+阶段 A（双机演练 Passed 2026-09-30）、阶段 B（主人网关与单次同意 Passed 2026-10-01）、阶段 C（协调者与计分板 Passed 2026-10-01）、阶段 D（真实连接器与脱敏隔离 Passed 2026-10-01）、阶段 E（代理自助接入与私钥金库 Passed 2026-10-01）均已合并入 `main`。
+阶段 F（第三方对外接入 Connect with MAPR、connectSdk、本地网关授权页面与前端 ConnectButton 组件 Passed 2026-10-05）已在分支 `feat/connect-with-mapr-phase-f` 完成全部验证。
+下一步：请人类确认将阶段 F（`feat/connect-with-mapr-phase-f`）合并至 `main` 分支。
 
 ## 1. 历史阶段演进概况
 
