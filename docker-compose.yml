@@ -54,7 +54,7 @@ services:
         VITE_XMTP_WORKER_ADDRESS: ${VITE_XMTP_WORKER_ADDRESS:?Set public XMTP worker address}
         VITE_XMTP_ENV: ${VITE_XMTP_ENV:-production}
     ports:
-      - "127.0.0.1:5173:80"
+      - "127.0.0.1:${MAPR_FRONTEND_PORT:-5173}:80"
     depends_on:
       - backend
 

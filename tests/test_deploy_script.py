@@ -25,13 +25,14 @@ if [[ "$*" == *"pg_dump"* ]]; then echo synthetic-backup; fi
 if [[ "$*" == *"printenv POSTGRES_PASSWORD"* ]]; then echo synthetic_password; fi
 if [[ "$*" == *"ps -q backend" ]]; then echo backend-container; fi
 if [[ "$*" == *"ps -q frontend" ]]; then echo frontend-container; fi
-if [[ "$1" == inspect ]]; then echo sha256:synthetic-previous-image; fi
+if [[ "$1" == inspect && "$*" == *HostConfig.PortBindings* ]]; then echo 18180
+elif [[ "$1" == inspect ]]; then echo sha256:synthetic-previous-image; fi
 if [[ "$*" == *"alembic"* && "$FAILURE" == migration ]]; then exit 7; fi
 '''
     for name, content in {
         "docker": fake_docker,
         "docker-compose": '#!/usr/bin/env bash\nif [[ "$1" == version ]]; then exit 0; fi\nexec docker compose "$@"\n',
-        "curl": '#!/usr/bin/env bash\n[[ "$FAILURE" != health ]]\n',
+        "curl": '#!/usr/bin/env bash\necho "curl $*" >> "$CALL_LOG"\n[[ "$FAILURE" != health ]]\n',
         "sleep": '#!/usr/bin/env bash\nexit 0\n',
     }.items():
         script = bin_dir / name
@@ -60,6 +61,8 @@ if [[ "$*" == *"alembic"* && "$FAILURE" == migration ]]; then exit 7; fi
         assert "Deployment healthy" in result.stdout
         assert "VITE_XMTP_ENV=dev" in (target / ".env").read_text().splitlines()
         assert "MAPR_DATABASE_PASSWORD=synthetic_password" in (target / ".env").read_text().splitlines()
+        assert "MAPR_FRONTEND_PORT=18180" in (target / ".env").read_text().splitlines()
+        assert "http://127.0.0.1:18180/health" in calls
     else:
         assert result.returncode != 0
         assert (target / "docker-compose.yml").read_text() == "# previous compose\n"
