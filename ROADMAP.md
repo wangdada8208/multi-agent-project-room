@@ -2,9 +2,9 @@
 
 本文档记录系统的近期推进计划、中长期演进方向以及历史完成里程碑。
 
-## 0. 当前推进重点：恢复 seoul-vps 登录
+## 0. 当前状态：已完成向北京服务器迁移并恢复线上健康
 
-清理脚本已写好。2026-09-23 公网健康检查是 522，SSH 在密钥交换阶段被远端关闭。当前计划是 `docs/superpowers/plans/2026-09-23-restore-vps-access.md`。登不上就停止，不要清库。
+生产环境已成功迁移至北京服务器。2026-10-08 公网健康检查 `https://hub.wangdada8208.xyz/health` 恢复 HTTP 200。自建 runner `multi-agent-runner-bj` 在线，系统各阶段（A 至 F）均已完成并合并入主分支。
 
 - [x] 按 `docs/superpowers/plans/2026-09-23-delete-legacy-rooms.md` 禁止再创建 hub 房间，去掉界面标记，并删除本地库中的用户 hub 房间。
 - [x] `_agent_` 内部通道保留。

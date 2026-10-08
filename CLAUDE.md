@@ -9,15 +9,15 @@
 ```text
 Step 1: 阅读 docs/superpowers/plans/2026-09-23-00-总路线与执行规则.md
 Step 2: 阅读 AGENTS.md 与 RUNBOOK.md（密钥不进 git）
-Step 3: 阶段 A、B、C、D、E 已完成的任务不要重做
-Step 4: 下一步是人类审批将阶段 F（feat/connect-with-mapr-phase-f）合并至 main
+Step 3: 阶段 A 至阶段 F 已全部完成并合并入 main
+Step 4: 生产环境已成功迁移至北京服务器，服务在线（https://hub.wangdada8208.xyz/health 为 200）
 ```
 
 ## 2. 项目状态
 
 ```
-当前阶段: 阶段 F 已完成，待合并主分支（2026-10-05）
-总体进度: 阶段 A（双机演练 Passed 2026-09-30）、阶段 B（主人网关与单次同意 Passed 2026-10-01）、阶段 C（协调者与计分板 Passed 2026-10-01）、阶段 D（真实连接器与脱敏 Passed 2026-10-01）、阶段 E（代理自助接入与私钥金库 Passed 2026-10-01）已全部合并入 main。阶段 F（第三方对外接入 Connect with MAPR、connectSdk、本地网关授权页面与前端 ConnectButton 组件）已在分支 feat/connect-with-mapr-phase-f 验收通过。待人类批准合并 main。
+当前阶段: 全部研发阶段已交付并合并主分支，北京生产环境恢复在线（2026-10-08）
+总体进度: 阶段 A 至阶段 F（包含主人网关、协调者、连接器、代理自助接入与 Connect with MAPR）已全部完成并合入 main。生产环境已迁移至北京服务器，Cloudflare 健康检查返回 HTTP 200，CI/CD runner（multi-agent-runner-bj）已在线就绪。
 ```
 
 ## 3. 技术栈概要

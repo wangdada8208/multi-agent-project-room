@@ -113,12 +113,18 @@ jobs:
     if: github.ref == 'refs/heads/main'
 
     steps:
+      - uses: actions/checkout@v6
+
       - name: 部署到服务器
         env:
           IMAGE_TAG: ${{ needs.build.outputs.tag }}
         run: |
+          mkdir -p /opt/multi-agent-project-room
+          cp -f docker-compose.yml /opt/multi-agent-project-room/ 2>/dev/null || true
           cd /opt/multi-agent-project-room
-          git pull origin main
+          if [ -d .git ]; then
+            git pull origin main || true
+          fi
           docker compose pull backend frontend
           docker compose up -d backend frontend
           docker compose exec -T backend python3 -m alembic -c /app/alembic.ini upgrade head
