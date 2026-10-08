@@ -169,6 +169,10 @@ jobs:
               sudo -n chmod 660 /var/run/docker.sock
             fi
           fi
+          target=/opt/multi-agent-project-room
+          if [ "$(id -u)" != 0 ] && { [ ! -w "$target" ] || [ ! -r "$target/.env" ]; }; then
+            sudo -n chown "$(id -un):$(id -gn)" "$target" "$target/.env" "$target/docker-compose.yml"
+          fi
           if docker info >/dev/null 2>&1; then
             bash scripts/deploy.sh
           else
