@@ -125,12 +125,20 @@ jobs:
           if [ -d .git ]; then
             git pull origin main || true
           fi
+          # Detect sudo requirement for docker
+          SUDO=""
+          if ! docker ps >/dev/null 2>&1; then
+            if sudo -n docker ps >/dev/null 2>&1; then
+              SUDO="sudo"
+            fi
+          fi
+
           if command -v docker-compose >/dev/null 2>&1; then
-            DC="docker-compose"
-          elif docker compose version >/dev/null 2>&1; then
-            DC="docker compose"
+            DC="$SUDO docker-compose"
+          elif $SUDO docker compose version >/dev/null 2>&1; then
+            DC="$SUDO docker compose"
           else
-            DC="docker-compose"
+            DC="$SUDO docker-compose"
           fi
           $DC pull backend frontend
           $DC up -d backend frontend
@@ -139,5 +147,5 @@ jobs:
             -c "ALTER TABLE messages DROP CONSTRAINT IF EXISTS messages_sender_id_fkey;" 2>/dev/null || true
           $DC exec -T postgres psql -U postgres -d agent_room \
             -c "UPDATE rooms SET is_active = FALSE WHERE id LIKE '_agent_%';" 2>/dev/null || true
-          docker image prune -af --filter "until=72h" >/dev/null 2>&1 || true
+          $SUDO docker image prune -af --filter "until=72h" >/dev/null 2>&1 || true
           echo "Deploy complete"
