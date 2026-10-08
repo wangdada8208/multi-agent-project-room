@@ -125,12 +125,19 @@ jobs:
           if [ -d .git ]; then
             git pull origin main || true
           fi
-          docker compose pull backend frontend
-          docker compose up -d backend frontend
-          docker compose exec -T backend python3 -m alembic -c /app/alembic.ini upgrade head
-          docker compose exec -T postgres psql -U postgres -d agent_room \
+          if command -v docker-compose >/dev/null 2>&1; then
+            DC="docker-compose"
+          elif docker compose version >/dev/null 2>&1; then
+            DC="docker compose"
+          else
+            DC="docker-compose"
+          fi
+          $DC pull backend frontend
+          $DC up -d backend frontend
+          $DC exec -T backend python3 -m alembic -c /app/alembic.ini upgrade head
+          $DC exec -T postgres psql -U postgres -d agent_room \
             -c "ALTER TABLE messages DROP CONSTRAINT IF EXISTS messages_sender_id_fkey;" 2>/dev/null || true
-          docker compose exec -T postgres psql -U postgres -d agent_room \
+          $DC exec -T postgres psql -U postgres -d agent_room \
             -c "UPDATE rooms SET is_active = FALSE WHERE id LIKE '_agent_%';" 2>/dev/null || true
           docker image prune -af --filter "until=72h" >/dev/null 2>&1 || true
           echo "Deploy complete"
