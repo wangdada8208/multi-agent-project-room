@@ -5,6 +5,7 @@ import { RoomsPage } from "./pages/RoomsPage";
 import { OnboardingPage } from "./pages/OnboardingPage";
 import { TeamPage } from "./pages/TeamPage";
 import { SharedRoomPage } from "./pages/SharedRoomPage";
+import { ConnectDemoPage } from "./pages/ConnectDemoPage";
 import { useAuthStore } from "./stores/authStore";
 import type { ReactNode } from "react";
 
@@ -23,6 +24,7 @@ export function App() {
       <Route path="/team" element={<RequireAuth><TeamPage /></RequireAuth>} />
       <Route path="/rooms/:roomId/team" element={<RequireAuth><TeamPage /></RequireAuth>} />
       <Route path="/shared/:token" element={<SharedRoomPage />} />
+      <Route path="/connect-demo" element={<ConnectDemoPage />} />
 
       {/* Room — full-screen (no sidebar) */}
       <Route path="/rooms/:roomId" element={<RequireAuth><RoomPage /></RequireAuth>} />

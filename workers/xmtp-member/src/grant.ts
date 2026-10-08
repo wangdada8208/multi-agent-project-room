@@ -60,13 +60,17 @@ export async function signGrant(grant: Grant, privateKey: string): Promise<strin
   return account.signMessage({ message: grantMessage(grant) });
 }
 
+export function isValidAudience(value: unknown): value is string {
+  return typeof value === "string" && (isAddress(value) || /^[a-zA-Z0-9_.-]{1,64}$/.test(value));
+}
+
 export function isGrant(value: any): value is Grant {
   return (
     !!value &&
     typeof value === "object" &&
     typeof value.grant_id === "string" &&
     isAddress(value.owner) &&
-    isAddress(value.audience) &&
+    isValidAudience(value.audience) &&
     typeof value.request_id === "string" &&
     typeof value.scope === "string" &&
     isDateRange(value.constraints) &&
