@@ -53,7 +53,7 @@ temp.write_text(raw)
 temp.chmod(0o600)
 temp.replace(p)
 PYCONFIG
-cp "$GITHUB_WORKSPACE/docker-compose.yml" "$target/docker-compose.yml"
+cp "${MAPR_RELEASE_DIR:-$GITHUB_WORKSPACE}/docker-compose.yml" "$target/docker-compose.yml"
 docker compose config --quiet
 docker compose pull backend frontend
 docker compose run --rm --no-deps backend python3 -m alembic -c /app/alembic.ini upgrade head

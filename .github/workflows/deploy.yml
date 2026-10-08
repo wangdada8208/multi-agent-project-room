@@ -139,16 +139,31 @@ jobs:
             ${{ env.FRONTEND_IMAGE }}:${{ steps.meta.outputs.tag }}
             ${{ env.FRONTEND_IMAGE }}:latest
 
+      - name: Upload exact release configuration
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-${{ github.sha }}
+          path: |
+            docker-compose.yml
+            scripts/deploy.sh
+          if-no-files-found: error
+          retention-days: 14
+
   deploy:
     needs: build
     runs-on: [self-hosted, multi-agent]
     if: github.ref == 'refs/heads/main' || (github.event_name == 'workflow_dispatch' && inputs.deploy)
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/download-artifact@v8
+        with:
+          name: release-${{ github.sha }}
+          path: ${{ github.workspace }}/release
 
       - name: 部署到服务器
+        working-directory: release
         env:
+          MAPR_RELEASE_DIR: ${{ github.workspace }}/release
           IMAGE_TAG: ${{ needs.build.outputs.tag }}
           VITE_XMTP_WORKER_ADDRESS: ${{ vars.VITE_XMTP_WORKER_ADDRESS }}
           VITE_XMTP_ENV: ${{ vars.VITE_XMTP_ENV }}
