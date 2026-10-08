@@ -156,6 +156,10 @@ jobs:
           set -euo pipefail
           id
           stat -c 'Docker socket: %a %U %G' /var/run/docker.sock
+          if ! getent group docker >/dev/null; then
+            if [ "$(id -u)" = 0 ]; then groupadd docker; else sudo -n groupadd docker; fi
+          fi
+          if [ "$(id -u)" != 0 ]; then sudo -n usermod -aG docker "$(id -un)"; fi
           if [ "$(stat -c '%a' /var/run/docker.sock)" = 666 ]; then
             if [ "$(id -u)" = 0 ]; then
               chgrp docker /var/run/docker.sock
