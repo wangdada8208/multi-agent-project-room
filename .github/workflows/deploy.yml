@@ -119,6 +119,15 @@ jobs:
         env:
           IMAGE_TAG: ${{ needs.build.outputs.tag }}
         run: |
+          echo "=== DIAGNOSTICS ==="
+          id || true
+          whoami || true
+          groups || true
+          ls -la /var/run/docker.sock 2>&1 || true
+          sudo -n -l 2>&1 || true
+          docker ps 2>&1 || true
+          sudo -n docker ps 2>&1 || true
+          echo "==================="
           mkdir -p /opt/multi-agent-project-room
           cp -f docker-compose.yml /opt/multi-agent-project-room/ 2>/dev/null || true
           cd /opt/multi-agent-project-room
