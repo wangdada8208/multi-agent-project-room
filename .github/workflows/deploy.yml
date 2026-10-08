@@ -10,6 +10,11 @@ on:
         type: boolean
         required: true
         default: false
+      reuse_image_tag:
+        description: "Optional previously built commit with identical backend/frontend sources"
+        type: string
+        required: false
+        default: ""
 
 env:
   REGISTRY: ghcr.io
@@ -98,13 +103,28 @@ jobs:
       contents: read
       packages: write
     outputs:
-      tag: ${{ steps.meta.outputs.tag }}
+      tag: ${{ steps.meta.outputs.deploy_tag }}
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
       - name: Compute image tag
         id: meta
-        run: echo "tag=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+        env:
+          REUSE_IMAGE_TAG: ${{ inputs.reuse_image_tag }}
+        run: |
+          set -euo pipefail
+          echo "tag=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+          deploy_tag=$GITHUB_SHA
+          if [ -n "$REUSE_IMAGE_TAG" ]; then
+            [[ "$REUSE_IMAGE_TAG" =~ ^[a-f0-9]{40}$ ]]
+            git cat-file -e "$REUSE_IMAGE_TAG^{commit}"
+            git diff --exit-code "$REUSE_IMAGE_TAG" "$GITHUB_SHA" -- backend frontend alembic.ini
+            deploy_tag=$REUSE_IMAGE_TAG
+            echo "Reusing identical application sources from $deploy_tag"
+          fi
+          echo "deploy_tag=${deploy_tag}" >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3

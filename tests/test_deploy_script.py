@@ -21,6 +21,7 @@ def test_deployment_backup_health_and_rollback(tmp_path, failure):
 echo "$*" >> "$CALL_LOG"
 if [[ "$*" == "compose version" && "$FAILURE" == compose_standalone ]]; then exit 1; fi
 if [[ "$*" == "info" && "$FAILURE" == docker_access ]]; then exit 1; fi
+if [[ "$1 $2" == "image inspect" && "$FAILURE" != compose_standalone ]]; then exit 1; fi
 if [[ "$*" == *"pg_dump"* ]]; then echo synthetic-backup; fi
 if [[ "$*" == *"printenv POSTGRES_PASSWORD"* ]]; then echo synthetic_password; fi
 if [[ "$*" == *"ps -q backend" ]]; then echo backend-container; fi
@@ -63,6 +64,11 @@ if [[ "$*" == *"alembic"* && "$FAILURE" == migration ]]; then exit 7; fi
         assert "MAPR_DATABASE_PASSWORD=synthetic_password" in (target / ".env").read_text().splitlines()
         assert "MAPR_FRONTEND_PORT=18180" in (target / ".env").read_text().splitlines()
         assert "http://127.0.0.1:18180/health" in calls
+        if failure == "compose_standalone":
+            assert "pull backend frontend" not in calls
+            assert "Using already downloaded immutable images" in result.stdout
+        else:
+            assert "pull backend frontend" in calls
     else:
         assert result.returncode != 0
         assert (target / "docker-compose.yml").read_text() == "# previous compose\n"

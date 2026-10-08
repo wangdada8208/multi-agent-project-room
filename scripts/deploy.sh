@@ -69,7 +69,11 @@ temp.replace(p)
 PYCONFIG
 cp "${MAPR_RELEASE_DIR:-$GITHUB_WORKSPACE}/docker-compose.yml" "$target/docker-compose.yml"
 "${dc[@]}" config --quiet
-"${dc[@]}" pull backend frontend
+if docker image inspect "ghcr.io/wangdada8208/multi-agent-project-room-backend:$IMAGE_TAG" "ghcr.io/wangdada8208/multi-agent-project-room-frontend:$IMAGE_TAG" >/dev/null 2>&1; then
+  echo "Using already downloaded immutable images: $IMAGE_TAG"
+else
+  "${dc[@]}" pull backend frontend
+fi
 "${dc[@]}" run --rm --no-deps backend python3 -m alembic -c /app/alembic.ini upgrade head
 "${dc[@]}" up -d --no-build backend frontend
 healthy=false
