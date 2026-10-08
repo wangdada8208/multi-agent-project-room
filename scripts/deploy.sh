@@ -4,7 +4,15 @@ umask 077
 : "${IMAGE_TAG:?An immutable image tag is required}"
 [[ "$IMAGE_TAG" =~ ^[a-f0-9]{40}$ ]] || { echo 'Invalid image tag' >&2; exit 1; }
 docker info >/dev/null || { echo 'Runner requires configured Docker access; socket permissions will not be changed.' >&2; exit 1; }
-docker compose version >/dev/null
+if docker compose version >/dev/null 2>&1; then
+  dc=(docker compose)
+elif command -v docker-compose >/dev/null && docker-compose version >/dev/null 2>&1; then
+  dc=(docker-compose)
+else
+  echo 'No working Docker Compose command is available' >&2
+  exit 1
+fi
+export MAPR_COMPOSE_COMMAND="${dc[*]}"
 target=${MAPR_DEPLOY_DIR:-/opt/multi-agent-project-room}
 [[ -f "$target/.env" && -f "$target/docker-compose.yml" ]] || { echo 'Initialize server configuration separately before deploying.' >&2; exit 1; }
 backup="$target/backups/$(date -u +%Y%m%dT%H%M%SZ)-$IMAGE_TAG"
@@ -13,11 +21,11 @@ cp "$target/docker-compose.yml" "$backup/docker-compose.yml"
 cp "$target/.env" "$backup/.env"
 chmod 600 "$backup/.env"
 cd "$target"
-docker compose exec -T postgres pg_dump -U postgres -d agent_room -Fc > "$backup/database.dump"
+"${dc[@]}" exec -T postgres pg_dump -U postgres -d agent_room -Fc > "$backup/database.dump"
 [[ -s "$backup/database.dump" ]] || { echo 'Database backup is empty' >&2; exit 1; }
 # Preserve the exact running images, independent of mutable latest tags.
-backend_id=$(docker compose ps -q backend)
-frontend_id=$(docker compose ps -q frontend)
+backend_id=$("${dc[@]}" ps -q backend)
+frontend_id=$("${dc[@]}" ps -q frontend)
 [[ -n "$backend_id" && -n "$frontend_id" ]] || { echo 'No running release to roll back to' >&2; exit 1; }
 backend_image=$(docker inspect --format '{{.Image}}' "$backend_id")
 frontend_image=$(docker inspect --format '{{.Image}}' "$frontend_id")
@@ -26,7 +34,7 @@ rollback() {
   echo "Deployment failed. Restoring previous images; database backup: $backup/database.dump" >&2
   cp "$backup/docker-compose.yml" "$target/docker-compose.yml"
   cp "$backup/.env" "$target/.env"
-  docker compose -f docker-compose.yml -f "$backup/images.yml" up -d --no-build backend frontend || echo 'Image rollback failed; operator intervention required.' >&2
+  "${dc[@]}" -f docker-compose.yml -f "$backup/images.yml" up -d --no-build backend frontend || echo 'Image rollback failed; operator intervention required.' >&2
   echo 'Database is not automatically downgraded. Review migration compatibility before restoring data.' >&2
 }
 trap rollback ERR
@@ -42,7 +50,7 @@ if not re.fullmatch(r'0x[0-9a-fA-F]{40}', address) or xmtp_env not in ('dev', 'p
     raise SystemExit('Valid public worker address and matching XMTP environment required')
 values = {'VITE_XMTP_WORKER_ADDRESS': address, 'VITE_XMTP_ENV': xmtp_env}
 if not re.search(r'^MAPR_DATABASE_PASSWORD=.+$', raw, re.M):
-    password = subprocess.check_output(['docker', 'compose', 'exec', '-T', 'postgres', 'printenv', 'POSTGRES_PASSWORD'], text=True).strip()
+    password = subprocess.check_output(os.environ['MAPR_COMPOSE_COMMAND'].split() + ['exec', '-T', 'postgres', 'printenv', 'POSTGRES_PASSWORD'], text=True).strip()
     if not re.fullmatch(r'[A-Za-z0-9_~.-]+', password):
         raise SystemExit('Existing database password requires explicit URI encoding; refusing to change it')
     values['MAPR_DATABASE_PASSWORD'] = password
@@ -54,10 +62,10 @@ temp.chmod(0o600)
 temp.replace(p)
 PYCONFIG
 cp "${MAPR_RELEASE_DIR:-$GITHUB_WORKSPACE}/docker-compose.yml" "$target/docker-compose.yml"
-docker compose config --quiet
-docker compose pull backend frontend
-docker compose run --rm --no-deps backend python3 -m alembic -c /app/alembic.ini upgrade head
-docker compose up -d --no-build backend frontend
+"${dc[@]}" config --quiet
+"${dc[@]}" pull backend frontend
+"${dc[@]}" run --rm --no-deps backend python3 -m alembic -c /app/alembic.ini upgrade head
+"${dc[@]}" up -d --no-build backend frontend
 healthy=false
 for attempt in {1..20}; do
   if curl --fail --silent --max-time 5 http://127.0.0.1:5173/health >/dev/null; then healthy=true; break; fi

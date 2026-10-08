@@ -8,7 +8,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 
 
-@pytest.mark.parametrize("failure", ["none", "migration", "health", "docker_access"])
+@pytest.mark.parametrize("failure", ["none", "migration", "health", "docker_access", "compose_standalone"])
 def test_deployment_backup_health_and_rollback(tmp_path, failure):
     target = tmp_path / "server"
     target.mkdir()
@@ -19,6 +19,7 @@ def test_deployment_backup_health_and_rollback(tmp_path, failure):
     log = tmp_path / "calls.log"
     fake_docker = '''#!/usr/bin/env bash
 echo "$*" >> "$CALL_LOG"
+if [[ "$*" == "compose version" && "$FAILURE" == compose_standalone ]]; then exit 1; fi
 if [[ "$*" == "info" && "$FAILURE" == docker_access ]]; then exit 1; fi
 if [[ "$*" == *"pg_dump"* ]]; then echo synthetic-backup; fi
 if [[ "$*" == *"printenv POSTGRES_PASSWORD"* ]]; then echo synthetic_password; fi
@@ -29,6 +30,7 @@ if [[ "$*" == *"alembic"* && "$FAILURE" == migration ]]; then exit 7; fi
 '''
     for name, content in {
         "docker": fake_docker,
+        "docker-compose": '#!/usr/bin/env bash\nif [[ "$1" == version ]]; then exit 0; fi\nexec docker compose "$@"\n',
         "curl": '#!/usr/bin/env bash\n[[ "$FAILURE" != health ]]\n',
         "sleep": '#!/usr/bin/env bash\nexit 0\n',
     }.items():
@@ -53,7 +55,7 @@ if [[ "$*" == *"alembic"* && "$FAILURE" == migration ]]; then exit 7; fi
     assert (backup / "database.dump").read_text().strip() == "synthetic-backup"
     assert (backup / "database.dump").stat().st_mode & 0o077 == 0
     assert calls.index("pg_dump") < calls.index("alembic")
-    if failure == "none":
+    if failure in ("none", "compose_standalone"):
         assert result.returncode == 0, result.stderr
         assert "Deployment healthy" in result.stdout
         assert "VITE_XMTP_ENV=dev" in (target / ".env").read_text().splitlines()
