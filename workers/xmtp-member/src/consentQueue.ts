@@ -63,6 +63,14 @@ export class ConsentQueue {
     return copy(found);
   }
 
+  // Only release before transport is attempted: an ambiguous send must not be replayed.
+  async releaseApproval(requestId: string): Promise<void> {
+    const found = this.items.find(i => i.request_id === requestId);
+    if (found?.status !== "approved") return;
+    found.status = "pending";
+    await this.save();
+  }
+
   dueForExpiry(now: Date, ttlMs: number): PendingConsent[] {
     return this.items
       .filter((i) => i.status === "pending" && Date.parse(i.created_at) + ttlMs <= now.getTime())

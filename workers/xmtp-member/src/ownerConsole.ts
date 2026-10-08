@@ -1,5 +1,6 @@
+import { validConnectRedirect } from "./connectSdk.ts";
 import http from "node:http";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type { Connector } from "./connectors/types.ts";
 import { findConnector } from "./connectors/registry.ts";
 import type { ConsentQueue } from "./consentQueue.ts";
@@ -101,26 +102,25 @@ export function createOwnerConsoleServer(deps: OwnerConsoleDeps): http.Server {
 
     try {
       if (method === "GET" && url.pathname === "/") {
+        const script = OWNER_CONSOLE_HTML.match(/<script>([\s\S]*?)<\/script>/)?.[1] ?? "";
+        const scriptHash = createHash("sha256").update(script).digest("base64");
         res.writeHead(200, {
           "Content-Type": "text/html; charset=utf-8",
-          "Content-Security-Policy": "default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'",
+          "Content-Security-Policy": `default-src 'self'; script-src 'sha256-${scriptHash}'; style-src 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'`,
         });
         res.end(OWNER_CONSOLE_HTML);
         return;
       }
       if (method === "GET" && url.pathname === "/connect/authorize") {
+        const script = CONNECT_AUTHORIZE_HTML.match(/<script>([\s\S]*?)<\/script>/)?.[1] ?? "";
+        const scriptHash = createHash("sha256").update(script).digest("base64");
+        res.setHeader("X-Frame-Options", "DENY");
+        res.setHeader("Referrer-Policy", "no-referrer");
         res.writeHead(200, {
           "Content-Type": "text/html; charset=utf-8",
-          "Content-Security-Policy": "default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'",
+          "Content-Security-Policy": `default-src 'self'; script-src 'sha256-${scriptHash}'; style-src 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'`,
         });
-        const appId = url.searchParams.get("app_id") || "未知应用";
-        const scope = url.searchParams.get("scope") || "";
-        const purpose = url.searchParams.get("purpose") || "未填写用途";
-        const rendered = CONNECT_AUTHORIZE_HTML
-          .replace('<strong id="app-id">...</strong>', `<strong id="app-id">${appId}</strong>`)
-          .replace('<code id="scope">...</code>', `<code id="scope">${scope}</code>`)
-          .replace('<span id="purpose">...</span>', `<span id="purpose">${purpose}</span>`);
-        res.end(rendered);
+        res.end(CONNECT_AUTHORIZE_HTML);
         return;
       }
       if (method === "GET" && url.pathname === "/api/state") {
@@ -149,6 +149,10 @@ export function createOwnerConsoleServer(deps: OwnerConsoleDeps): http.Server {
           return;
         }
         const body = await readJson(req);
+        if (!validConnectRedirect(body.redirect_uri)) {
+          sendJson(res, 400, { ok: false, reason: "invalid_redirect" });
+          return;
+        }
         const appId = String(body.app_id || "unknown-app");
         const scope = String(body.scope || "");
         const connector = findConnector(scope, deps.connectors || []);
@@ -187,6 +191,10 @@ export function createOwnerConsoleServer(deps: OwnerConsoleDeps): http.Server {
       }
       if (method === "POST" && url.pathname === "/api/connect/deny") {
         const body = await readJson(req);
+        if (!validConnectRedirect(body.redirect_uri)) {
+          sendJson(res, 400, { ok: false, reason: "invalid_redirect" });
+          return;
+        }
         const appId = String(body.app_id || "unknown-app");
         const scope = String(body.scope || "");
         if (deps.appendLedger) {

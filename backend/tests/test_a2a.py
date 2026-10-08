@@ -132,8 +132,9 @@ async def test_dialogue_end(client: AsyncClient, auth_headers: dict):
 
 
 @pytest.mark.asyncio
-async def test_submit_task_can_skip_remote_routing():
+async def test_submit_task_can_skip_remote_routing(db):
     """Chat @mentions should create a working task for WS relay, not call localhost A2A."""
+    await chat_service.get_or_create_room(db, "demo-room")
     result = await tm.submit_task(
         query="@Codex hello",
         target_agent="Codex",

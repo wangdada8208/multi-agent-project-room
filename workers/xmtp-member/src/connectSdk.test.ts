@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  validConnectRedirect,
   buildConnectAuthorizeUrl,
   parseConnectRequestFromUrl,
   type ConnectRequest,
@@ -37,4 +38,12 @@ test("parseConnectRequestFromUrl rejects unknown scope and invalid app_id", () =
 
   const missingPurpose = "http://127.0.0.1:8787/connect/authorize?app_id=app1&scope=calendar.free_busy";
   assert.deepEqual(parseConnectRequestFromUrl(missingPurpose), { ok: false, reason: "missing_purpose" });
+});
+
+test("callback URLs reject scripts, credentials, nonlocal HTTP, and existing fragments", () => {
+  for (const url of ["javascript:alert(1)", "data:text/html,bad", "https://user:pass@example.com", "http://example.com", "https://example.com/#old"]) {
+    assert.equal(validConnectRedirect(url), false);
+  }
+  assert.equal(validConnectRedirect("https://example.com/callback"), true);
+  assert.equal(validConnectRedirect("http://127.0.0.1:5173/callback"), true);
 });

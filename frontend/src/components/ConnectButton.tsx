@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { ShieldCheck } from "lucide-react";
 import {
   buildConnectUrl,
@@ -26,10 +26,14 @@ export function ConnectButton({
   onError,
 }: ConnectButtonProps) {
   const [connecting, setConnecting] = useState(false);
+  const popupRef = useRef<Window | null>(null);
 
   useEffect(() => {
     function handleMessage(event: MessageEvent) {
+      if (!popupRef.current || event.source !== popupRef.current ||
+          event.origin !== new URL(gatewayUrl).origin) return;
       if (event.data?.type === "MAPR_CONNECT_RESPONSE") {
+        popupRef.current = null;
         setConnecting(false);
         if (event.data.ok) {
           onSuccess({
@@ -44,7 +48,19 @@ export function ConnectButton({
     }
     window.addEventListener("message", handleMessage);
     return () => window.removeEventListener("message", handleMessage);
-  }, [onSuccess, onError]);
+  }, [gatewayUrl, onSuccess, onError]);
+
+  useEffect(() => {
+    if (!connecting) return;
+    const timer = window.setInterval(() => {
+      if (popupRef.current?.closed) {
+        popupRef.current = null;
+        setConnecting(false);
+        onError?.(new Error("授权窗口已关闭，可重新发起申请"));
+      }
+    }, 500);
+    return () => window.clearInterval(timer);
+  }, [connecting, onError]);
 
   function handleClick() {
     setConnecting(true);
@@ -52,7 +68,7 @@ export function ConnectButton({
       appId,
       scope,
       purpose,
-      redirectUri,
+      redirectUri: redirectUri ?? window.location.href.split("#")[0],
       constraints,
     });
     const width = 540;
@@ -66,9 +82,10 @@ export function ConnectButton({
       `width=${width},height=${height},left=${left},top=${top},status=no,resizable=yes`
     );
 
+    popupRef.current = popup;
     if (!popup) {
       setConnecting(false);
-      window.location.href = authUrl;
+      onError?.(new Error("浏览器阻止了授权弹窗，请允许弹窗后重试"));
     }
   }
 

@@ -155,7 +155,9 @@ export async function handleEnvelope(
   if (env.kind === "result") {
     if (deps.taskStore && deps.completeModel) {
       const record = deps.taskStore.get(env.request_id);
-      if (!record) return "ignored";
+      if (!record || record.task.to !== sender ||
+          !["pending", "retrying"].includes(record.status) ||
+          env.round !== record.task.round + record.results.length) return "ignored";
       await deps.taskStore.recordResult(env.request_id, env);
 
       const prompt = buildVerdictPrompt(record.task, env);
@@ -165,7 +167,7 @@ export async function handleEnvelope(
         outcome = { accepted: false, challenge: "解析模型验收结果失败" };
       }
 
-      const step = nextStep(record.task, outcome);
+      const step = parseVerdict(modelText) ? nextStep({ ...record.task, round: env.round }, outcome) : "escalate";
       const verdict: VerdictEnvelope = {
         kind: "verdict",
         request_id: env.request_id,

@@ -4,6 +4,12 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      deploy:
+        description: "Deploy this reviewed revision to production"
+        type: boolean
+        required: true
+        default: false
 
 env:
   REGISTRY: ghcr.io
@@ -55,12 +61,35 @@ jobs:
         run: |
           python3 -m alembic upgrade head
 
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+
+      - name: Member checks
+        working-directory: workers/xmtp-member
+        run: |
+          npm ci
+          npm run typecheck
+          npm test
+
+      - name: Frontend checks
+        working-directory: frontend
+        env:
+          VITE_XMTP_WORKER_ADDRESS: ${{ vars.VITE_XMTP_WORKER_ADDRESS }}
+          VITE_XMTP_ENV: ${{ vars.VITE_XMTP_ENV }}
+        run: |
+          npm ci
+          npm test
+          node scripts/validate-release-config.mjs
+          npm run build
+
       - name: Run tests
         env:
+          MAPR_TEST_DATABASE_URL: postgresql+asyncpg://postgres:test_password@localhost:5432/agent_room_test
           MAPR_DATABASE_URL: postgresql+asyncpg://postgres:test_password@localhost:5432/agent_room_test
           PYTHONPATH: backend
         run: |
-          python3 -m pytest backend/tests/ -v
+          python3 -m pytest backend/tests/ tests/test_local_agent_adapter.py tests/test_deploy_script.py -v
 
   build:
     needs: test
@@ -102,6 +131,9 @@ jobs:
         with:
           context: ./frontend
           file: ./frontend/Dockerfile
+          build-args: |
+            VITE_XMTP_WORKER_ADDRESS=${{ vars.VITE_XMTP_WORKER_ADDRESS }}
+            VITE_XMTP_ENV=${{ vars.VITE_XMTP_ENV }}
           push: true
           tags: |
             ${{ env.FRONTEND_IMAGE }}:${{ steps.meta.outputs.tag }}
@@ -110,7 +142,7 @@ jobs:
   deploy:
     needs: build
     runs-on: [self-hosted, multi-agent]
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' || (github.event_name == 'workflow_dispatch' && inputs.deploy)
 
     steps:
       - uses: actions/checkout@v6
@@ -118,32 +150,24 @@ jobs:
       - name: 部署到服务器
         env:
           IMAGE_TAG: ${{ needs.build.outputs.tag }}
+          VITE_XMTP_WORKER_ADDRESS: ${{ vars.VITE_XMTP_WORKER_ADDRESS }}
+          VITE_XMTP_ENV: ${{ vars.VITE_XMTP_ENV }}
         run: |
-          export PATH="$PATH:/usr/local/bin:/usr/local/sbin:/usr/bin:/bin:/usr/sbin:/sbin"
-          # Grant runner user access to docker socket if needed
-          if ! docker ps >/dev/null 2>&1; then
-            sudo -n chmod 666 /var/run/docker.sock 2>/dev/null || true
+          set -euo pipefail
+          id
+          stat -c 'Docker socket: %a %U %G' /var/run/docker.sock
+          if [ "$(stat -c '%a' /var/run/docker.sock)" = 666 ]; then
+            if [ "$(id -u)" = 0 ]; then
+              chgrp docker /var/run/docker.sock
+              chmod 660 /var/run/docker.sock
+            else
+              sudo -n chgrp docker /var/run/docker.sock
+              sudo -n chmod 660 /var/run/docker.sock
+            fi
           fi
-          mkdir -p /opt/multi-agent-project-room
-          cp -f docker-compose.yml /opt/multi-agent-project-room/ 2>/dev/null || true
-          cd /opt/multi-agent-project-room
-          if [ -d .git ]; then
-            git pull origin main || true
-          fi
-
-          if command -v docker-compose >/dev/null 2>&1; then
-            DC="docker-compose"
-          elif docker compose version >/dev/null 2>&1; then
-            DC="docker compose"
+          if docker info >/dev/null 2>&1; then
+            bash scripts/deploy.sh
           else
-            DC="docker-compose"
+            sudo -n usermod -aG docker "$(id -un)"
+            sg docker -c 'bash scripts/deploy.sh'
           fi
-          $DC pull backend frontend
-          $DC up -d backend frontend
-          $DC exec -T backend python3 -m alembic -c /app/alembic.ini upgrade head
-          $DC exec -T postgres psql -U postgres -d agent_room \
-            -c "ALTER TABLE messages DROP CONSTRAINT IF EXISTS messages_sender_id_fkey;" 2>/dev/null || true
-          $DC exec -T postgres psql -U postgres -d agent_room \
-            -c "UPDATE rooms SET is_active = FALSE WHERE id LIKE '_agent_%';" 2>/dev/null || true
-          docker image prune -af --filter "until=72h" >/dev/null 2>&1 || true
-          echo "Deploy complete"

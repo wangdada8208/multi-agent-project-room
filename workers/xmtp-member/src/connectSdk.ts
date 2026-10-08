@@ -12,6 +12,17 @@ export type ParseConnectResult =
   | { ok: true; request: ConnectRequest }
   | { ok: false; reason: "missing_app_id" | "unknown_scope" | "missing_purpose" | "invalid_url" };
 
+export function validConnectRedirect(raw: unknown): boolean {
+  if (raw === undefined || raw === "") return true;
+  if (typeof raw !== "string" || raw.length > 2048) return false;
+  try {
+    const url = new URL(raw);
+    return !url.username && !url.password && !url.hash &&
+      (url.protocol === "https:" || (url.protocol === "http:" &&
+       ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)));
+  } catch { return false; }
+}
+
 export function buildConnectAuthorizeUrl(baseUrl: string, req: ConnectRequest): string {
   const normBase = baseUrl.replace(/\/$/, "");
   const url = new URL(`${normBase}/connect/authorize`);
@@ -42,6 +53,7 @@ export function parseConnectRequestFromUrl(rawUrl: string): ParseConnectResult {
     if (!purpose) return { ok: false, reason: "missing_purpose" };
 
     const redirectUri = url.searchParams.get("redirect_uri")?.trim() || undefined;
+    if (!validConnectRedirect(redirectUri)) return { ok:false, reason:"invalid_url" };
     let constraints: any = undefined;
     const rawConstraints = url.searchParams.get("constraints");
     if (rawConstraints) {

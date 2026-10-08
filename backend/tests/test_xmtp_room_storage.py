@@ -46,6 +46,7 @@ async def test_xmtp_room_rejects_message_body(db):
         created_by=user.id,
     )
     db.add(user)
+    await db.flush()
     db.add(room)
     await db.commit()
 

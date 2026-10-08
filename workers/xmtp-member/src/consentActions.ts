@@ -21,25 +21,34 @@ export interface ConsentActionDeps {
 
 export type ActionResult =
   | { ok: true }
-  | { ok: false; reason: "not_pending" | "send_failed" | "no_connector" };
+  | { ok: false; reason: "not_pending" | "send_failed" | "no_connector" | "expired" };
 
 export async function approveConsent(requestId: string, deps: ConsentActionDeps): Promise<ActionResult> {
+  const pending = deps.queue.get(requestId);
+  const checkedAt = deps.now();
+  if (pending?.status === "pending" &&
+      (!Number.isFinite(Date.parse(pending.created_at)) ||
+       Date.parse(pending.created_at) + CONSENT_TTL_MS <= checkedAt.getTime())) {
+    await denyConsent(requestId, "expired", deps);
+    return { ok: false, reason: "expired" };
+  }
   const item = await deps.queue.claim(requestId, "approved");
   if (!item) return { ok: false, reason: "not_pending" };
   const now = deps.now();
 
   let payload: any;
-  if (deps.connectors && deps.connectors.length > 0) {
-    const connector = findConnector(item.scope, deps.connectors);
-    if (!connector) return { ok: false, reason: "no_connector" };
-    try {
+  try {
+    if (deps.connectors && deps.connectors.length > 0) {
+      const connector = findConnector(item.scope, deps.connectors);
+      if (!connector) throw new Error("no connector");
       payload = await connector.fetch(item.scope, item.constraints);
-    } catch {
-      return { ok: false, reason: "no_connector" };
+    } else if (item.scope === "calendar.free_busy" && deps.loadCalendar) {
+      payload = freeBusy(await deps.loadCalendar(), item.constraints);
+    } else {
+      throw new Error("no connector");
     }
-  } else if (item.scope === "calendar.free_busy" && deps.loadCalendar) {
-    payload = freeBusy(await deps.loadCalendar(), item.constraints);
-  } else {
+  } catch {
+    await deps.queue.releaseApproval(requestId);
     return { ok: false, reason: "no_connector" };
   }
 

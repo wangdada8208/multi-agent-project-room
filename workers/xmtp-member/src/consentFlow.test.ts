@@ -74,6 +74,18 @@ const request: RequestEnvelope = {
   constraints: { date_from: "2026-10-05", date_to: "2026-10-09" },
 };
 
+test("approval checks expiry synchronously without waiting for cleanup timer", async () => {
+  const s = await setup();
+  await handleEnvelope({ envelope: request, sender: A, conversationId: "c1" }, s.bDeps);
+  const sentBefore = s.sent.length;
+  const result = await approveConsent(request.request_id, {
+    ...s.bActions, now: () => new Date(NOW.getTime() + 10 * 60 * 1000),
+  });
+  assert.equal(result.ok, false);
+  assert.equal(s.queue.get(request.request_id)?.status, "expired");
+  assert.equal(s.sent.slice(sentBefore).some(m => decodeEnvelope(m.text)?.kind === "disclosure"), false);
+});
+
 test("request not addressed to me is ignored and nothing is sent", async () => {
   const s = await setup();
   const outcome = await handleEnvelope({ envelope: { ...request, to: A }, sender: A, conversationId: "c1" }, s.bDeps);
@@ -178,4 +190,17 @@ test("ledger never contains the purpose text or calendar titles", async () => {
   for (const secret of ["约下周的会", "律师", "房产证"]) {
     assert.equal(encoded.includes(secret), false, secret);
   }
+});
+
+
+test("failed private read remains pending and can be explicitly approved again", async () => {
+  const s = await setup();
+  await handleEnvelope({ envelope: request, sender: A, conversationId: "c1" }, s.bDeps);
+  const sentBefore = s.sent.length;
+  assert.deepEqual(await approveConsent(request.request_id, {
+    ...s.bActions, loadCalendar: async () => { throw new Error("upstream failed"); },
+  }), {ok:false, reason:"no_connector"});
+  assert.equal(s.queue.get(request.request_id)?.status, "pending");
+  assert.equal(s.sent.length, sentBefore);
+  assert.equal((await approveConsent(request.request_id, s.bActions)).ok, true);
 });

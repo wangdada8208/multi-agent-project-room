@@ -61,7 +61,7 @@ export async function runCli(args: string[], io: CliIO = { stdout: (m) => consol
       ].join("\n");
 
       await mkdir(dir, { recursive: true });
-      await writeFile(path.join(dir, ".env"), envContent, "utf8");
+      await writeFile(path.join(dir, ".env"), envContent, { encoding: "utf8", mode: 0o600, flag: "wx" });
 
       io.stdout(JSON.stringify({ address: account.address.toLowerCase() }));
       return 0;

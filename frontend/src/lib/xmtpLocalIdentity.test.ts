@@ -5,7 +5,8 @@ import {
   encryptPrivateKey,
   hubSafeIdentity,
   inboxAddress,
-  loadOrCreateInboxKey,
+  unlockOrCreateInboxKey,
+  LEGACY_STORAGE_KEY,
   storeEncryptedKey,
   unlockPrivateKey,
   VAULT_STORAGE_KEY,
@@ -25,18 +26,43 @@ describe("xmtpLocalIdentity", () => {
     expect(JSON.stringify(payload)).not.toContain(key);
   });
 
-  it("loads or creates a valid 32-byte hex private key", () => {
+  it("creates and reloads an identity without persisting plaintext", async () => {
     const mem = new Map<string, string>();
     const storage = {
       getItem: (k: string) => mem.get(k) ?? null,
       setItem: (k: string, v: string) => {
         mem.set(k, v);
       },
+      removeItem: (k: string) => { mem.delete(k); },
     };
-    const key = loadOrCreateInboxKey(storage);
+    const key = await unlockOrCreateInboxKey("long test password", storage, 1000);
     expect(key).toMatch(/^0x[0-9a-fA-F]{64}$/);
-    const loaded = loadOrCreateInboxKey(storage);
+    expect(mem.has(LEGACY_STORAGE_KEY)).toBe(false);
+    expect([...mem.values()].join("")).not.toContain(key);
+    const loaded = await unlockOrCreateInboxKey("long test password", storage, 1000);
     expect(loaded).toBe(key);
+  });
+
+  it("migrates the same legacy identity only after verifying persisted ciphertext", async () => {
+    const oldKey = "0x" + "11".repeat(32);
+    const mem = new Map([[LEGACY_STORAGE_KEY, oldKey]]);
+    const storage = { getItem: (k: string) => mem.get(k) ?? null,
+      setItem: (k: string, v: string) => { mem.set(k, v); },
+      removeItem: (k: string) => { mem.delete(k); } };
+    expect(await unlockOrCreateInboxKey("long test password", storage, 1000)).toBe(oldKey);
+    expect(mem.has(LEGACY_STORAGE_KEY)).toBe(false);
+    await expect(unlockOrCreateInboxKey("incorrect password", storage, 1000)).rejects.toThrow();
+    expect(await unlockOrCreateInboxKey("long test password", storage, 1000)).toBe(oldKey);
+  });
+
+  it("preserves legacy identity when encrypted storage fails", async () => {
+    const oldKey = "0x" + "11".repeat(32);
+    const mem = new Map([[LEGACY_STORAGE_KEY, oldKey]]);
+    const storage = { getItem: (k: string) => mem.get(k) ?? null,
+      setItem: () => { throw new Error("storage full"); },
+      removeItem: (k: string) => { mem.delete(k); } };
+    await expect(unlockOrCreateInboxKey("long test password", storage, 1000)).rejects.toThrow("storage full");
+    expect(mem.get(LEGACY_STORAGE_KEY)).toBe(oldKey);
   });
 
   it("creates an EOA browser signer with valid signature output", async () => {

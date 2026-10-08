@@ -39,6 +39,10 @@ export class GmailReceiptConnector implements Connector {
       throw new Error(`Unsupported scope: ${scope}`);
     }
     const { query, date_from, date_to } = (constraints || {}) as EmailReceiptConstraints;
+    if (typeof query !== "string" || !query.trim() || query.length > 200 ||
+        !/^\d{4}-\d{2}-\d{2}$/.test(date_from) || !/^\d{4}-\d{2}-\d{2}$/.test(date_to)) {
+      throw new Error("Invalid receipt query constraints");
+    }
     const token = await this.loadToken();
 
     const qParts = [query || ""];
@@ -82,25 +86,38 @@ export class GmailReceiptConnector implements Connector {
       ? new Date(Number(msgData.internalDate)).toISOString()
       : new Date().toISOString();
 
-    let rawBody = "";
-    if (msgData?.payload?.body?.data) {
-      rawBody = Buffer.from(msgData.payload.body.data, "base64url").toString("utf8");
-    } else if (Array.isArray(msgData?.payload?.parts)) {
-      for (const part of msgData.payload.parts) {
-        if (part?.body?.data) {
-          rawBody += Buffer.from(part.body.data, "base64url").toString("utf8") + "\n";
-        }
-      }
+    const parts: any[] = [];
+    function collect(part: any): void {
+      if (!part) return;
+      parts.push(part);
+      for (const nested of part.parts || []) collect(nested);
     }
+    collect(msgData?.payload);
+    const rawBody = parts.filter(p => !p.filename && p.body?.data)
+      .map(p => Buffer.from(p.body.data, "base64url").toString("utf8")).join("\n");
 
     let attachmentName: string | null = null;
     let attachmentSha256: string | null = null;
-    if (Array.isArray(msgData?.payload?.parts)) {
-      for (const part of msgData.payload.parts) {
+    {
+      for (const part of parts) {
         if (part?.filename && part.filename.length > 0) {
-          attachmentName = part.filename;
-          const attSeed = part.body?.attachmentId || part.filename;
-          attachmentSha256 = createHash("sha256").update(attSeed).digest("hex");
+          attachmentName = excerpt(part.filename, 200);
+          if (part.body?.size > 5 * 1024 * 1024) throw new Error("Receipt attachment is too large");
+          let encoded = part.body?.data;
+          if (!encoded && part.body?.attachmentId) {
+            const attachmentResponse = await this.fetchImpl(
+              `https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodeURIComponent(msgId)}/attachments/${encodeURIComponent(part.body.attachmentId)}`,
+              { headers: { Authorization: `Bearer ${token}` } },
+            );
+            if (!attachmentResponse.ok) throw new Error(`Gmail attachment request failed: ${attachmentResponse.status}`);
+            encoded = (await attachmentResponse.json() as any).data;
+          }
+          if (typeof encoded !== "string" || encoded.length > 7 * 1024 * 1024) {
+            throw new Error("Receipt attachment data is missing or too large");
+          }
+          const bytes = Buffer.from(encoded, "base64url");
+          if (bytes.length > 5 * 1024 * 1024) throw new Error("Receipt attachment is too large");
+          attachmentSha256 = createHash("sha256").update(bytes).digest("hex");
           break;
         }
       }
@@ -108,7 +125,7 @@ export class GmailReceiptConnector implements Connector {
 
     return {
       scope: "email.receipt",
-      subject: subject.slice(0, 200),
+      subject: excerpt(subject, 200),
       sent_at: internalDate,
       attachment_name: attachmentName,
       attachment_sha256: attachmentSha256,

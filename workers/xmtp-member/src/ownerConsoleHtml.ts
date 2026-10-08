@@ -249,7 +249,7 @@ async function submitAction(endpoint) {
   const data = await res.json();
   if (data.redirect_url) {
     if (window.opener) {
-      window.opener.postMessage({ type: "MAPR_CONNECT_RESPONSE", ...data }, "*");
+      window.opener.postMessage({ type: "MAPR_CONNECT_RESPONSE", ...data }, new URL(redirectUri).origin);
       window.close();
     } else {
       window.location.href = data.redirect_url;

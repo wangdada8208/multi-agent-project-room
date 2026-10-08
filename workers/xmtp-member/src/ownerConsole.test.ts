@@ -35,6 +35,20 @@ async function start() {
   return { server, calls, base: `http://127.0.0.1:${port}` };
 }
 
+test("authorize page never interpolates external HTML into the document", async () => {
+  const { server, base } = await start();
+  try {
+    const injection = "<script>window.auditInjected=true</script>";
+    for (const field of ["app_id", "scope", "purpose"]) {
+      const response = await fetch(`${base}/connect/authorize?${field}=${encodeURIComponent(injection)}`);
+      assert.equal((await response.text()).includes(injection), false);
+      assert.equal(response.headers.get("x-frame-options"), "DENY");
+    }
+  } finally {
+    server.close();
+  }
+});
+
 test("serves the console page and state on loopback", async () => {
   const { server, base } = await start();
   try {
@@ -245,7 +259,7 @@ test("GET /connect/authorize serves consent page and handles approve/deny", asyn
     assert.equal(authPage.status, 200);
     const text = await authPage.text();
     assert.equal(text.includes("Connect with MAPR"), true);
-    assert.equal(text.includes("trip-app"), true);
+    assert.equal(text.includes('document.getElementById("app-id").textContent = appId'), true);
 
     const approveRes = await fetch(`${base}/api/connect/approve`, {
       method: "POST",
@@ -285,6 +299,5 @@ test("GET /connect/authorize serves consent page and handles approve/deny", asyn
     server.close();
   }
 });
-
 
 

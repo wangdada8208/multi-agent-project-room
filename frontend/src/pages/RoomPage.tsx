@@ -11,10 +11,11 @@ import { FilesPanel } from "../components/panels/FilesPanel";
 import { TeamPanel } from "../components/panels/TeamPanel";
 import { MessageItem } from "../components/chat/MessageItem";
 import { ChatInput } from "../components/chat/ChatInput";
+import { XmtpIdentityUnlock } from "../components/XmtpIdentityUnlock";
 import { useNotification } from "../hooks/useNotification";
 import { useAnalytics } from "../hooks/useAnalytics";
 import { fetchMessages, fetchAgents, fetchTasks, searchMessages, apiFetch } from "../lib/api";
-import { loadOrCreateInboxKey, createLocalXmtpClient, inboxAddress } from "../lib/xmtpLocalIdentity";
+import { createLocalXmtpClient, inboxAddress } from "../lib/xmtpLocalIdentity";
 import { sendXmtpMessage, toLocalChatMessage } from "../lib/xmtpSend";
 import { describeEnvelope } from "../lib/envelopeView";
 import { memberIdentifier, assertWorkerAddress } from "../lib/xmtpGroup";
@@ -51,7 +52,8 @@ export function RoomPage() {
   const { enabled: notifEnabled, requestPermission: requestNotifPermission } = useNotification(roomId);
   const { track } = useAnalytics();
   const user = useAuthStore((state) => state.user);
-  const messages = useChatStore((state) => state.messages);
+  const storedMessages = useChatStore((state) => state.messages);
+  const messages = storedMessages.filter(message => message.room_id === roomId);
   const setMessages = useChatStore((state) => state.setMessages);
   const addMessage = useChatStore((state) => state.addMessage);
   const connectionStatus = useChatStore((state) => state.connectionStatus);
@@ -60,6 +62,10 @@ export function RoomPage() {
   const setTasks = useChatStore((state) => state.setTasks);
 
   const [xmtpClient, setXmtpClient] = useState<Client<any> | null>(null);
+  const [unlockedKey, setUnlockedKey] = useState<string | null>(null);
+  const [xmtpError, setXmtpError] = useState("");
+  const [xmtpConnected, setXmtpConnected] = useState(false);
+  const [retryConnection, setRetryConnection] = useState(0);
   const [myXmtpAddress, setMyXmtpAddress] = useState<string>("");
   const isEncrypted = roomQuery.data?.transport === "xmtp";
 
@@ -72,6 +78,8 @@ export function RoomPage() {
     },
     enabled: !!roomId,
   });
+
+  const myRoomRole = permissionsQuery.data?.members?.find((m: any) => m.user_id === user?.id)?.role;
 
   const isObserver = useMemo(() => {
     if (!permissionsQuery.data?.members || !user?.id) return false;
@@ -89,7 +97,7 @@ export function RoomPage() {
   const messagesQuery = useQuery({
     queryKey: ["rooms", roomId, "messages"],
     queryFn: () => fetchMessages(roomId),
-    enabled: !!roomId && !isEncrypted,
+    enabled: !!roomQuery.data && !isEncrypted,
   });
   useEffect(() => {
     if (messagesQuery.data) setMessages(messagesQuery.data);
@@ -110,23 +118,29 @@ export function RoomPage() {
     retry: false,
   });
 
-  // Initialize XMTP client for encrypted rooms and bind group if needed
+  // A locked identity never starts an XMTP client.
   useEffect(() => {
-    if (!isEncrypted) return;
+    if (!isEncrypted || !unlockedKey || permissionsQuery.isPending) return;
     let cancelled = false;
+    let activeClient: Client<any> | null = null;
+    setXmtpError("");
 
     async function initXmtp() {
       try {
-        const key = loadOrCreateInboxKey();
+        const key = unlockedKey!;
         setMyXmtpAddress(inboxAddress(key));
         const client = await createLocalXmtpClient(key);
         if (cancelled) {
           client.close();
           return;
         }
+        activeClient = client;
         setXmtpClient(client);
 
         if (!roomQuery.data?.xmtp_group_id) {
+          if (myRoomRole !== "owner") {
+            throw new Error("等待房主创建并绑定加密群");
+          }
           const workerAddress = assertWorkerAddress(
             import.meta.env.VITE_XMTP_WORKER_ADDRESS as string | undefined,
           );
@@ -145,60 +159,63 @@ export function RoomPage() {
           if (res.ok) {
             void roomQuery.refetch();
           } else if (res.status === 403) {
-            console.warn("只有房主可以绑定加密群");
+            throw new Error("只有房主可以绑定加密群");
           } else if (res.status === 409) {
             void roomQuery.refetch();
+          } else {
+            throw new Error("加密群绑定失败，请重试");
           }
         }
       } catch (err) {
-        console.error("Failed to initialize XMTP:", err instanceof Error ? err.message : "unknown");
+        if (!cancelled) setXmtpError(err instanceof Error ? err.message : "无法连接加密房间");
       }
     }
 
     void initXmtp();
     return () => {
       cancelled = true;
+      activeClient?.close();
+      setXmtpClient(null);
     };
-  }, [isEncrypted, roomQuery.data?.xmtp_group_id, roomId]);
+  }, [isEncrypted, unlockedKey, roomId, retryConnection, myRoomRole, permissionsQuery.isPending]);
 
-  // Stream messages from XMTP group
+  // Subscribe before loading history, then merge by XMTP message ID.
   useEffect(() => {
-    if (!xmtpClient || !isEncrypted) return;
     const targetGroupId = roomQuery.data?.xmtp_group_id;
+    if (!xmtpClient || !isEncrypted || !targetGroupId) return;
     let cancelled = false;
-
-    async function listenStream() {
+    let stop: (() => Promise<unknown>) | undefined;
+    const client = xmtpClient;
+    function ingest(message: any) {
+      if (cancelled || message.conversationId !== targetGroupId || typeof message.content !== "string") return;
+      addMessage(toLocalChatMessage({
+        id: message.id, roomId,
+        content: describeEnvelope(message.content) ?? message.content,
+        senderId: message.senderInboxId,
+        senderName: message.senderInboxId === client.inboxId ? user?.display_name ?? "我" : `Member (${message.senderInboxId.slice(0, 6)}...)`,
+        senderType: message.senderInboxId === client.inboxId ? "human" : "agent",
+        createdAt: message.sentAt?.toISOString(),
+      }));
+    }
+    async function listen() {
       try {
-        const stream = await xmtpClient!.conversations.streamAllMessages();
-        for await (const message of stream) {
-          if (cancelled) break;
-          if (targetGroupId && message.conversationId !== targetGroupId) continue;
-          if (xmtpClient?.inboxId && message.senderInboxId === xmtpClient.inboxId) {
-            continue;
-          }
-          if (typeof message.content === "string") {
-            addMessage(
-              toLocalChatMessage({
-                id: message.id,
-                roomId,
-                content: describeEnvelope(message.content) ?? message.content,
-                senderId: message.senderInboxId,
-                senderName: `Member (${message.senderInboxId.slice(0, 6)}...)`,
-                senderType: "agent",
-                createdAt: message.sentAt ? message.sentAt.toISOString() : undefined,
-              }),
-            );
-          }
-        }
-      } catch {
-        // Stream aborted or network closed
+        const stream = await client.conversations.streamAllMessages();
+        stop = async () => { await stream.return(); };
+        if (cancelled) { await stop(); return; }
+        await client.conversations.syncAll();
+        const group = await client.conversations.getConversationById(targetGroupId!);
+        if (!group) throw new Error("当前身份尚未加入加密群，请房主完成邀请入群");
+        await group.sync();
+        for (const message of await group.messages()) ingest(message);
+        if (!cancelled) { setXmtpConnected(true); setXmtpError(""); }
+        for await (const message of stream) ingest(message);
+        if (!cancelled) { setXmtpConnected(false); setXmtpError("加密连接已断开，请重新连接"); }
+      } catch (err) {
+        if (!cancelled) { setXmtpConnected(false); setXmtpError(err instanceof Error ? err.message : "加密连接失败"); }
       }
     }
-
-    void listenStream();
-    return () => {
-      cancelled = true;
-    };
+    void listen();
+    return () => { cancelled = true; setXmtpConnected(false); void stop?.(); };
   }, [xmtpClient, isEncrypted, roomQuery.data?.xmtp_group_id, roomId, addMessage]);
 
   // Fetch tasks
@@ -328,13 +345,13 @@ export function RoomPage() {
                 🔔
               </button>
             )}
-            <button type="button" className="chat-search-toggle" onClick={() => setShowSearch(!showSearch)} title="搜索消息">
+            <button type="button" className="chat-search-toggle" onClick={() => setShowSearch(!showSearch)} title="搜索消息" disabled={isEncrypted}>
               🔍
             </button>
-            <button type="button" className="chat-search-toggle" onClick={handleShare} title="分享房间链接">🔗</button>
+            <button type="button" className="chat-search-toggle" onClick={handleShare} title="分享房间链接" disabled={isEncrypted}>🔗</button>
             <span className={`chat-area__status chat-area__status--${connectionStatus}`}>
               <span className="dot" />
-              {CONNECTION_LABEL[connectionStatus]}
+              {isEncrypted ? xmtpConnected ? "加密消息已连接" : "加密消息未连接" : CONNECTION_LABEL[connectionStatus]}
             </span>
           </div>
         </header>
@@ -368,6 +385,10 @@ export function RoomPage() {
             ))}
           </div>
         )}
+        {isEncrypted && !unlockedKey && <XmtpIdentityUnlock onUnlock={setUnlockedKey} />}
+        {isEncrypted && xmtpError && <div className="chat-error" role="alert">{xmtpError}
+          <button type="button" onClick={() => setRetryConnection(n => n + 1)}>重新连接</button>
+        </div>}
         <div className="chat-area__messages" ref={listRef}>
           {isEncrypted && (
             <div className="owner-notes-list" style={{ display: "flex", flexDirection: "column", gap: 8, padding: 12 }}>
@@ -426,7 +447,7 @@ export function RoomPage() {
             当前为只读观察者模式，仅可旁听协作过程。
           </div>
         ) : (
-          <ChatInput disabled={connectionStatus !== "open"} onlineAgents={onlineAgentNames} onSend={handleSend} />
+          <ChatInput disabled={isEncrypted ? !xmtpConnected : connectionStatus !== "open"} onlineAgents={onlineAgentNames} onSend={handleSend} />
         )}
       </section>
 

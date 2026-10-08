@@ -43,3 +43,10 @@ describe("connectClient", () => {
     expect(parsed.error).toBe("user_denied");
   });
 });
+
+it("callback preserves percent characters after URLSearchParams decoding", () => {
+  const hash = "#" + new URLSearchParams({grant: JSON.stringify({purpose:"100% complete"}), signature:"0xsig", data:JSON.stringify({text:"%2F"})});
+  const result = parseConnectCallback(hash);
+  expect(result.ok).toBe(true);
+  if (result.ok) expect(result.payload).toEqual({text:"%2F"});
+});

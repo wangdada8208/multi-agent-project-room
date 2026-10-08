@@ -25,7 +25,7 @@ export function ChatInput({ disabled, onlineAgents, onSend }: ChatInputProps) {
     const pending = text.trim();
     void Promise.resolve(onSend(pending, "human")).then((ok) => {
       if (ok) setText("");
-    });
+    }).catch(() => { /* Keep unsent text available for retry. */ });
   };
 
   return (

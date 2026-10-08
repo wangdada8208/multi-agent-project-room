@@ -60,7 +60,11 @@ export class GoogleCalendarConnector implements Connector {
     }
 
     const data: any = await res.json();
-    const busyRaw = data?.calendars?.primary?.busy || [];
+    const calendar = data?.calendars?.primary;
+    if (!calendar || calendar.errors?.length || !Array.isArray(calendar.busy)) {
+      throw new Error("Google Calendar query failed; availability is unknown");
+    }
+    const busyRaw = calendar.busy;
 
     const busy = busyRaw
       .map((b: any) => ({

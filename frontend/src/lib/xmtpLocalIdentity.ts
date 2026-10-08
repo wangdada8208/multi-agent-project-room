@@ -1,9 +1,9 @@
 import { bytesToHex, hexToBytes } from "viem";
-import { privateKeyToAccount } from "viem/accounts";
+import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { Client, IdentifierKind, type Signer } from "@xmtp/browser-sdk";
 import { xmtpEnvFromVite } from "./xmtpEnv";
 
-const STORAGE_KEY = "mapr-xmtp-inbox-key";
+export const LEGACY_STORAGE_KEY = "mapr-xmtp-inbox-key";
 export const VAULT_STORAGE_KEY = "mapr-xmtp-vault";
 export const DEFAULT_PBKDF2_ITERATIONS = 310000;
 
@@ -21,21 +21,25 @@ export function hubSafeIdentity(input: { privateKey: string; address: string }):
   return { address: input.address };
 }
 
-export function loadOrCreateInboxKey(storage?: Pick<Storage, "getItem" | "setItem">): string {
-  const s =
-    storage ??
-    (typeof localStorage !== "undefined"
-      ? localStorage
-      : typeof window !== "undefined"
-        ? window.localStorage
-        : undefined);
-  const existing = s?.getItem(STORAGE_KEY);
-  if (existing && /^0x[0-9a-fA-F]{64}$/.test(existing)) return existing;
-  const bytes = new Uint8Array(32);
-  crypto.getRandomValues(bytes);
-  const created = "0x" + [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
-  s?.setItem(STORAGE_KEY, created);
-  return created;
+export async function unlockOrCreateInboxKey(
+  password: string,
+  storage: Pick<Storage, "getItem" | "setItem" | "removeItem"> = localStorage,
+  iterations = DEFAULT_PBKDF2_ITERATIONS,
+): Promise<string> {
+  if (loadEncryptedVault(storage)) return unlockPrivateKey(password, storage);
+  if (password.length < 10) throw new Error("新口令至少需要 10 个字符");
+  const legacy = storage.getItem(LEGACY_STORAGE_KEY);
+  if (legacy && !/^0x[0-9a-fA-F]{64}$/.test(legacy)) {
+    throw new Error("原加密身份已损坏，请先恢复备份，不能自动替换身份");
+  }
+  const key = legacy || generatePrivateKey();
+  // Validate the legacy identity before changing storage.
+  inboxAddress(key);
+  await storeEncryptedKey(key, password, storage, iterations);
+  const confirmed = await unlockPrivateKey(password, storage);
+  if (confirmed !== key) throw new Error("身份保存校验失败，原身份仍保留");
+  storage.removeItem(LEGACY_STORAGE_KEY);
+  return confirmed;
 }
 
 export async function deriveKey(

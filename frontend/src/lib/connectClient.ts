@@ -48,13 +48,13 @@ export function parseConnectCallback(hashString: string): ConnectCallbackResult 
   const signature = params.get("signature") || "";
   const rawData = params.get("data");
 
-  if (!rawGrant || !rawData) {
+  if (!rawGrant || !rawData || !signature) {
     return { ok: false, error: "missing_callback_data" };
   }
 
   try {
-    const grant = JSON.parse(decodeURIComponent(rawGrant));
-    const payload = JSON.parse(decodeURIComponent(rawData));
+    const grant = JSON.parse(rawGrant);
+    const payload = JSON.parse(rawData);
     return {
       ok: true,
       grant,

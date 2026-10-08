@@ -147,6 +147,7 @@ async def test_action_grant_generation_and_single_use(db: AsyncSession):
     user = User(id=user_id, username=f"u_{user_id[:6]}", password_hash="hash", display_name="User")
     room = Room(id=room_id, name="Test Room", created_by=user_id)
     db.add(user)
+    await db.flush()
     db.add(room)
     await db.commit()
 
@@ -202,6 +203,7 @@ async def test_action_grant_tampering_blocked(db: AsyncSession):
     user = User(id=user_id, username=f"u_{user_id[:6]}", password_hash="hash", display_name="User")
     room = Room(id=room_id, name="Test Room", created_by=user_id)
     db.add(user)
+    await db.flush()
     db.add(room)
     await db.commit()
 
@@ -242,6 +244,7 @@ async def test_action_grant_expiration(db: AsyncSession):
     user = User(id=user_id, username=f"u_{user_id[:6]}", password_hash="hash", display_name="User")
     room = Room(id=room_id, name="Test Room", created_by=user_id)
     db.add(user)
+    await db.flush()
     db.add(room)
     await db.commit()
 

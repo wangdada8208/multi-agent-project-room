@@ -5,9 +5,9 @@ services:
     environment:
       POSTGRES_DB: agent_room
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: ${MAPR_DATABASE_PASSWORD:-password}
+      POSTGRES_PASSWORD: ${MAPR_DATABASE_PASSWORD:?Set MAPR_DATABASE_PASSWORD}
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -34,7 +34,7 @@ services:
     env_file:
       - .env
     environment:
-      MAPR_DATABASE_URL: postgresql+asyncpg://postgres:${MAPR_DATABASE_PASSWORD:-password}@postgres:5432/agent_room
+      MAPR_DATABASE_URL: postgresql+asyncpg://postgres:${MAPR_DATABASE_PASSWORD:?Set MAPR_DATABASE_PASSWORD}@postgres:5432/agent_room
       MAPR_REDIS_URL: redis://redis:6379/0
     depends_on:
       postgres:
@@ -50,6 +50,9 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        VITE_XMTP_WORKER_ADDRESS: ${VITE_XMTP_WORKER_ADDRESS:?Set public XMTP worker address}
+        VITE_XMTP_ENV: ${VITE_XMTP_ENV:-production}
     ports:
       - "127.0.0.1:5173:80"
     depends_on:

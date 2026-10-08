@@ -51,8 +51,18 @@ async def test_knowledge_create_list_search(client: AsyncClient, auth_headers: d
 
 
 @pytest.mark.asyncio
-async def test_repository_status(client: AsyncClient, auth_headers: dict[str, str]):
-    resp = await client.get("/api/v1/rooms/demo/git/status", headers=auth_headers)
+async def test_repository_status(client: AsyncClient, auth_headers: dict[str, str], tmp_path, monkeypatch):
+    import subprocess
+    from app.config import get_settings
+    room = (await client.post("/api/v1/rooms", headers=auth_headers,
+                              json={"name": "Repo room"})).json()["room"]
+    monkeypatch.setattr(get_settings(), "repository_root", str(tmp_path))
+    repo = tmp_path / room["id"]
+    repo.mkdir()
+    subprocess.run(["git", "init", "-b", "fixture"], cwd=repo, check=True, capture_output=True)
+    subprocess.run(["git", "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+                    "commit", "--allow-empty", "-m", "Fixture baseline"], cwd=repo, check=True, capture_output=True)
+    resp = await client.get(f"/api/v1/rooms/{room['id']}/git/status", headers=auth_headers)
     assert resp.status_code == 200
     data = resp.json()
     assert "branch" in data

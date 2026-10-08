@@ -4,7 +4,7 @@ import type { ChatMessage, MessageType, RoomSocketEvent, SenderType } from "../t
 
 import { useAuthStore } from "../stores/authStore";
 import { websocketUrl, apiFetch } from "../lib/api";
-import { deliverOutgoing, toLocalChatMessage } from "../lib/xmtpSend";
+import { deliverOutgoing } from "../lib/xmtpSend";
 
 interface SendMessageInput {
   content: string;
@@ -145,7 +145,7 @@ export function useWebSocket(roomId: string, transport: string = "xmtp") {
           return;
         }
 
-        if (payload.type === "message" && payload.message) {
+        if (transport !== "xmtp" && payload.type === "message" && payload.message) {
           addMessage(payload.message);
         }
 
@@ -181,7 +181,7 @@ export function useWebSocket(roomId: string, transport: string = "xmtp") {
           upsertTask(payload.task);
         }
 
-        if (payload.type === "agent_dialogue_message" && payload.message) {
+        if (transport !== "xmtp" && payload.type === "agent_dialogue_message" && payload.message) {
           addMessage(payload.message);
         }
 
@@ -202,7 +202,7 @@ export function useWebSocket(roomId: string, transport: string = "xmtp") {
         socket.close();
       }
     };
-  }, [addMessage, markTyping, removeParticipant, roomId, setConnectionStatus, setParticipants, upsertParticipant, upsertTask]);
+  }, [transport, addMessage, markTyping, removeParticipant, roomId, setConnectionStatus, setParticipants, upsertParticipant, upsertTask]);
 
   const sendMessage = useCallback(async (input: SendMessageInput): Promise<boolean> => {
     const socket = socketRef.current;
@@ -218,17 +218,7 @@ export function useWebSocket(roomId: string, transport: string = "xmtp") {
 
     if (delivery.hubPayload === null) {
       // Encrypted room messages are delivered via XMTP, not Hub WebSocket
-      if (delivery.delivered) {
-        addMessage(
-          toLocalChatMessage({
-            roomId,
-            content: input.content,
-            senderId: user?.id ?? input.senderId,
-            senderName: user?.display_name ?? displayName,
-            senderType: input.senderType,
-          }),
-        );
-      }
+      // The XMTP stream supplies the canonical message ID, including our own sends.
       return delivery.delivered;
     }
 

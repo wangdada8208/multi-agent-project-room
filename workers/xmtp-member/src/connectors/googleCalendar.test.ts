@@ -5,6 +5,20 @@ import os from "node:os";
 import path from "node:path";
 import { GoogleCalendarConnector } from "./googleCalendar.ts";
 
+test("calendar-level errors must not be reported as all free", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "gcal-error-"));
+  const credentialPath = path.join(dir, "token.json");
+  await writeFile(credentialPath, JSON.stringify({ access_token: "synthetic" }), { mode: 0o600 });
+  const connector = new GoogleCalendarConnector({ credentialPath,
+    fetchImpl: async () => new Response(JSON.stringify({ calendars: { primary: {
+      errors: [{ reason: "notFound" }],
+    } } }), { status: 200 }),
+  });
+  await assert.rejects(connector.fetch("calendar.free_busy", {
+    date_from: "2026-10-05", date_to: "2026-10-09",
+  }), /calendar.*failed/i);
+});
+
 test("GoogleCalendarConnector rejects credentials if file permissions are not 0600", async () => {
   const dir = await mkdtemp(path.join(os.tmpdir(), "gcal-insecure-"));
   const credFile = path.join(dir, "token.json");

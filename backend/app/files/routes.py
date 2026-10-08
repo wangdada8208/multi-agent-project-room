@@ -13,6 +13,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.permissions import require_role
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models.user import User
@@ -31,6 +32,7 @@ async def list_files(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict:
+    await require_role(room_id, current_user, db)
     stmt = (
         select(RoomFile)
         .where(RoomFile.room_id == room_id)
@@ -48,6 +50,7 @@ async def upload_file(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict:
+    await require_role(room_id, current_user, db, min_role="member")
     if not file.filename:
         raise HTTPException(status_code=400, detail="No filename provided")
 
@@ -103,6 +106,7 @@ async def download_file(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    await require_role(room_id, current_user, db)
     record = await db.get(RoomFile, file_id)
     if not record or record.room_id != room_id:
         raise HTTPException(status_code=404, detail="File not found")

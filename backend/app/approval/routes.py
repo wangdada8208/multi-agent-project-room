@@ -5,6 +5,8 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
 
+from app.api.permissions import require_role
+from app.approval.models import Approval
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.approval import service as approval_service
@@ -46,6 +48,7 @@ async def create_approval(
     if room is None:
         raise HTTPException(status_code=404, detail="Room not found")
 
+    await require_role(room_id, current_user, db, min_role="member")
     approval = await approval_service.create_approval(
         db=db,
         room_id=room_id,
@@ -77,6 +80,7 @@ async def list_approvals(
     if room is None:
         raise HTTPException(status_code=404, detail="Room not found")
 
+    await require_role(room_id, current_user, db)
     approvals = await approval_service.list_approvals(
         db=db, room_id=room_id, status=status, page=page, limit=limit
     )
@@ -91,6 +95,10 @@ async def approve_approval(
     current_user: User = Depends(get_current_user),
 ) -> dict:
     """Approve or reject an approval request."""
+    approval = await db.get(Approval, approval_id)
+    if approval is None:
+        raise HTTPException(status_code=404, detail="Approval not found")
+    await require_role(approval.room_id, current_user, db, min_role="member")
     result = await approval_service.decide_approval(
         db=db, approval_id=approval_id, decider_id=current_user.id,
         decision=payload.decision,

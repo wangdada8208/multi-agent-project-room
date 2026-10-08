@@ -1,4 +1,4 @@
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes, useParams } from "react-router-dom";
 import { LoginPage } from "./pages/LoginPage";
 import { RoomPage } from "./pages/RoomPage";
 import { RoomsPage } from "./pages/RoomsPage";
@@ -15,6 +15,12 @@ function RequireAuth({ children }: { children: ReactNode }) {
   return children;
 }
 
+function RoomRoute() {
+  const { roomId } = useParams();
+  const userId = useAuthStore(state => state.user?.id);
+  return <RoomPage key={`${userId}:${roomId}`} />;
+}
+
 export function App() {
   return (
     <Routes>
@@ -27,7 +33,7 @@ export function App() {
       <Route path="/connect-demo" element={<ConnectDemoPage />} />
 
       {/* Room — full-screen (no sidebar) */}
-      <Route path="/rooms/:roomId" element={<RequireAuth><RoomPage /></RequireAuth>} />
+      <Route path="/rooms/:roomId" element={<RequireAuth><RoomRoute /></RequireAuth>} />
 
       {/* Rooms list — with sidebar */}
       <Route path="/" element={<RequireAuth><RoomsPage /></RequireAuth>} />

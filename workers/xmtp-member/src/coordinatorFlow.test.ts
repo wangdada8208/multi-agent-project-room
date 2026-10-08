@@ -32,6 +32,38 @@ async function setupFlow() {
   return { dir, taskStore, queue, sent, ledger, send, appendLedger };
 }
 
+test("three rejected rounds escalate without dispatching round four", async () => {
+  const s = await setupFlow();
+  const task: TaskEnvelope = { kind: "task", request_id: "three-rounds", to: EXECUTOR,
+    goal: "synthetic", acceptance: ["synthetic"], round: 1 };
+  await s.taskStore.add(task);
+  const deps: HandleEnvelopeDeps = { selfAddress: COORDINATOR, policy: normalizePolicy({}),
+    queue: s.queue, taskStore: s.taskStore, completeModel: async () => '{"accepted":false,"challenge":"retry"}',
+    send: s.send, appendLedger: s.appendLedger, storeDisclosure: async () => true, now: () => NOW };
+  for (const round of [1, 2, 3]) await handleEnvelope({ sender: EXECUTOR, conversationId: "c1",
+    envelope: { kind: "result", request_id: task.request_id, to: COORDINATOR, round,
+      summary: "synthetic", evidence: [] } }, deps);
+  assert.equal(s.taskStore.get(task.request_id)?.status, "escalated");
+  assert.deepEqual(s.sent.map(s => decodeEnvelope(s.text)).filter(e => e?.kind === "task").map(e => e?.round), [2, 3]);
+});
+
+test("wrong executor and stale results do not call the verdict model", async () => {
+  const s = await setupFlow();
+  const task: TaskEnvelope = { kind: "task", request_id: "bound-result", to: EXECUTOR,
+    goal: "synthetic", acceptance: ["synthetic"], round: 1 };
+  await s.taskStore.add(task);
+  let calls = 0;
+  const deps: HandleEnvelopeDeps = { selfAddress: COORDINATOR, policy: normalizePolicy({}),
+    queue: s.queue, taskStore: s.taskStore, completeModel: async () => { calls++; return '{"accepted":true}'; },
+    send: s.send, appendLedger: s.appendLedger, storeDisclosure: async () => true, now: () => NOW };
+  const envelope: ResultEnvelope = { kind: "result", request_id: task.request_id, to: COORDINATOR,
+    round: 1, summary: "synthetic", evidence: [] };
+  assert.equal(await handleEnvelope({ sender: COORDINATOR, conversationId: "c1", envelope }, deps), "ignored");
+  await handleEnvelope({ sender: EXECUTOR, conversationId: "c1", envelope }, deps);
+  await handleEnvelope({ sender: EXECUTOR, conversationId: "c1", envelope }, deps);
+  assert.equal(calls, 1);
+});
+
 test("executor denies task when sender has no task.run permission and does not call model", async () => {
   const s = await setupFlow();
   let modelCalls = 0;

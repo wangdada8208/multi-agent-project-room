@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { createHash } from "node:crypto";
 import { chmod, mkdtemp, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -38,6 +39,9 @@ test("GmailReceiptConnector searches message, extracts receipt, and sanitizes pe
 
   const mockFetch = async (url: any) => {
     const urlStr = String(url);
+    if (urlStr.includes("/attachments/")) {
+      return { ok: true, json: async () => ({ data: Buffer.from("synthetic PDF content").toString("base64url") }) } as any;
+    }
     if (urlStr.includes("/messages?")) {
       return {
         ok: true,
@@ -51,13 +55,13 @@ test("GmailReceiptConnector searches message, extracts receipt, and sanitizes pe
           id: "msg-123",
           internalDate: "1790851200000",
           payload: {
-            headers: [{ name: "Subject", value: "中国铁路客户服务中心客票信息" }],
+            headers: [{ name: "Subject", value: "客票 13812345678 buyer@private.com" }],
             body: {
               data: Buffer.from(mockRawBody).toString("base64url"),
             },
             parts: [
               {
-                filename: "electronic_ticket.pdf",
+                filename: "buyer@private.com.pdf",
                 body: {
                   attachmentId: "att-1",
                   size: 1024,
@@ -83,9 +87,9 @@ test("GmailReceiptConnector searches message, extracts receipt, and sanitizes pe
   });
 
   assert.equal(payload.scope, "email.receipt");
-  assert.equal(payload.subject, "中国铁路客户服务中心客票信息");
-  assert.equal(payload.attachment_name, "electronic_ticket.pdf");
-  assert.ok(payload.attachment_sha256);
+  assert.equal(payload.subject, "客票 [PHONE] [EMAIL]");
+  assert.equal(payload.attachment_name.includes("buyer@private.com"), false);
+  assert.equal(payload.attachment_sha256, createHash("sha256").update("synthetic PDF content").digest("hex"));
 
   // 必须剔除手机号与邮箱
   assert.equal(payload.body_excerpt.includes("13812345678"), false);

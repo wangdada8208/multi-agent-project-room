@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.permissions import require_role
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.knowledge import service as knowledge_service
@@ -34,12 +35,16 @@ async def create_doc(
     current_user: User = Depends(get_current_user),
 ) -> dict:
     await _ensure_room(db, room_id)
+    await require_role(room_id, current_user, db)
+    await require_role(room_id, current_user, db, min_role="member")
+    if payload.author_id is not None and payload.author_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Cannot impersonate document author")
     doc = await knowledge_service.create_doc(
         db=db,
         room_id=room_id,
         title=payload.title,
         content=payload.content,
-        author_id=payload.author_id or current_user.id,
+        author_id=current_user.id,
     )
     return {"doc": doc.to_dict()}
 
@@ -51,6 +56,7 @@ async def list_docs(
     current_user: User = Depends(get_current_user),
 ) -> dict:
     await _ensure_room(db, room_id)
+    await require_role(room_id, current_user, db)
     docs = await knowledge_service.list_docs(db, room_id)
     return {"docs": [doc.to_dict(include_content=False) for doc in docs]}
 
@@ -63,6 +69,7 @@ async def search_docs(
     current_user: User = Depends(get_current_user),
 ) -> dict:
     await _ensure_room(db, room_id)
+    await require_role(room_id, current_user, db)
     return {"results": await knowledge_service.search_docs(db, room_id, q)}
 
 
@@ -74,6 +81,7 @@ async def get_doc(
     current_user: User = Depends(get_current_user),
 ) -> dict:
     await _ensure_room(db, room_id)
+    await require_role(room_id, current_user, db)
     doc = await knowledge_service.get_doc(db, room_id, doc_id)
     if doc is None:
         raise HTTPException(status_code=404, detail="Document not found")

@@ -3,12 +3,15 @@
 Compatible with pytest-asyncio >= 0.23 and Python 3.13.
 """
 
+import os
 import sys
 from pathlib import Path
 from typing import AsyncGenerator
 
 import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
+from sqlalchemy.engine import make_url
+from sqlalchemy.pool import NullPool
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
@@ -26,9 +29,14 @@ from app.a2a import discovery as a2a_discovery
 from app.chat import ws_handler as chat_ws_handler
 
 # Use SQLite for tests (fast, no external deps)
-TEST_DATABASE_URL = "sqlite+aiosqlite:///./test.db"
+TEST_DATABASE_URL = os.environ.get("MAPR_TEST_DATABASE_URL", "sqlite+aiosqlite:///./test.db")
+# This fixture drops tables: never use the application/production database URL.
+if not make_url(TEST_DATABASE_URL).drivername.startswith("sqlite"):
+    database_name = make_url(TEST_DATABASE_URL).database or ""
+    if not database_name.endswith("_test"):
+        raise RuntimeError("MAPR_TEST_DATABASE_URL must point to a dedicated *_test database")
 
-engine = create_async_engine(TEST_DATABASE_URL, echo=False)
+engine = create_async_engine(TEST_DATABASE_URL, echo=False, poolclass=NullPool)
 test_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 a2a_task_manager.async_session = test_session

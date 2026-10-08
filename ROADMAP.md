@@ -4,7 +4,7 @@
 
 ## 0. 当前状态：已完成向北京服务器迁移并恢复线上健康
 
-生产环境已成功迁移至北京服务器。2026-10-08 公网健康检查 `https://hub.wangdada8208.xyz/health` 恢复 HTTP 200。自建 runner `multi-agent-runner-bj` 在线，系统各阶段（A 至 F）均已完成并合并入主分支。
+生产环境已成功迁移至北京服务器。2026-10-08 公网健康检查 `https://hub.wangdada8208.xyz/health` 恢复 HTTP 200。自建 runner `multi-agent-runner-bj` 在线，A 至 F 模块已合并入主分支，但邮件协议、自助接入、任务可靠状态和 Connect 单次授权尚未完成验收。当前修复分支的实施与验证状态见 `docs/修复记录-审查问题-2026-10-08.md`。
 
 - [x] 按 `docs/superpowers/plans/2026-09-23-delete-legacy-rooms.md` 禁止再创建 hub 房间，去掉界面标记，并删除本地库中的用户 hub 房间。
 - [x] `_agent_` 内部通道保留。
@@ -21,7 +21,7 @@
 当前的主要任务是消除认知分歧，建立稳固的基础基线。
 
 - [x] 重构全部核心开发文档，消除陈旧描述与矛盾信息。
-- [x] 固定远端 `origin/main`（`f1af097`）为当前阶段的参考基线。
+- [x] 历史 Phase 0 参考基线为 `f1af097`；2026-10-08 审查和修复基础为 `e30165d`。
 - [ ] 输出现有代码在全新环境下的运行耗时与测试覆盖报告。
 - [ ] 确定 `local_agent_adapter.py` 与 `agent_gateway.py` 的迁移或合并策略。
 - [ ] 补充双机断网重连与异常恢复的手工演练清单。

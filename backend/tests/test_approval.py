@@ -62,6 +62,9 @@ async def test_approval_flow(client: AsyncClient, auth_headers: dict[str, str]):
 @pytest.mark.asyncio
 async def test_approval_service(db: AsyncSession):
     """Test approval service functions."""
+    db.add_all([User(id="test-agent", username="test-agent", display_name="Agent", user_type="agent"),
+                User(id="admin", username="admin", display_name="Admin")])
+    await db.flush()
     room = Room(name="Svc Test")
     db.add(room)
     await db.commit()

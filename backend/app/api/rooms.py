@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.permissions import require_role
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models.room import Room
@@ -86,6 +87,7 @@ async def get_room(
     room = await resolve_room(db, room_id)
     if room is None:
         raise HTTPException(status_code=404, detail="Room not found")
+    await require_role(room.id, current_user, db)
     return {"room": room.to_dict()}
 
 

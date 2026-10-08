@@ -92,8 +92,8 @@ test("End-to-End: third-party flight app requests calendar via Connect with MAPR
     const pageRes = await fetch(authUrl);
     assert.equal(pageRes.status, 200);
     const html = await pageRes.text();
-    assert.equal(html.includes("flight-booking-app"), true);
-    assert.equal(html.includes("calendar.free_busy"), true);
+    assert.equal(html.includes('document.getElementById("app-id").textContent = appId'), true);
+    assert.equal(html.includes('document.getElementById("scope").textContent = scope'), true);
 
     // 3. 主人点击允许一次 (POST /api/connect/approve)
     const approveRes = await fetch(`${baseUrl}/api/connect/approve`, {
