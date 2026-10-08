@@ -7,8 +7,8 @@ item with the date, tester, environment, and evidence link or log snippet.
 
 | Area | Status | Notes |
 | --- | --- | --- |
-| GitHub Actions deploy | Passed 2026-10-08 | 北京 self-hosted runner multi-agent-runner-bj 在线并已配置 multi-agent 标签。 |
-| Production health | Passed 2026-10-08 | 生产环境已成功迁移至北京服务器（bt-beijing-rojr / multi-agent-runner-bj），Cloudflare 回源 HTTP 200，https://hub.wangdada8208.xyz/health 响应正常。 |
+| GitHub Actions deploy | Passed 2026-10-08 | 北京 self-hosted runner multi-agent-runner-bj 部署成功，自动完成 ghcr 镜像拉取与 alembic 数据库迁移（f9a1c2d3e4b5）。 |
+| Production health | Passed 2026-10-08 | 生产环境已成功迁移至北京服务器，Cloudflare 回源 HTTP 200，/health、/connect-demo 与 /agents/skill.md 均在线正常响应。 |
 | Dual-machine drill | Passed 2026-09-30 | 两机同群，非名单发送者被丢弃。Mac(甲机)与Windows(乙机)分别运行XMTP成员进程，双向互发消息正常解密，两端owner-notes记录均沉淀，白名单外发送者被ledger.jsonl记录丢弃。 |
 | Chat persistence | Needs manual pass | Refresh the room and confirm recent messages remain visible. |
 | Agent presence panel | Needs manual pass | Confirm Claude and Codex online state updates within a few seconds. |
