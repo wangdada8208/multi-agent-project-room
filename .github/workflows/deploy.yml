@@ -119,35 +119,24 @@ jobs:
         env:
           IMAGE_TAG: ${{ needs.build.outputs.tag }}
         run: |
-          echo "=== DIAGNOSTICS ==="
-          id || true
-          whoami || true
-          groups || true
-          ls -la /var/run/docker.sock 2>&1 || true
-          sudo -n -l 2>&1 || true
-          docker ps 2>&1 || true
-          sudo -n docker ps 2>&1 || true
-          echo "==================="
+          export PATH="$PATH:/usr/local/bin:/usr/local/sbin:/usr/bin:/bin:/usr/sbin:/sbin"
+          # Grant runner user access to docker socket if needed
+          if ! docker ps >/dev/null 2>&1; then
+            sudo -n chmod 666 /var/run/docker.sock 2>/dev/null || true
+          fi
           mkdir -p /opt/multi-agent-project-room
           cp -f docker-compose.yml /opt/multi-agent-project-room/ 2>/dev/null || true
           cd /opt/multi-agent-project-room
           if [ -d .git ]; then
             git pull origin main || true
           fi
-          # Detect sudo requirement for docker
-          SUDO=""
-          if ! docker ps >/dev/null 2>&1; then
-            if sudo -n docker ps >/dev/null 2>&1; then
-              SUDO="sudo"
-            fi
-          fi
 
           if command -v docker-compose >/dev/null 2>&1; then
-            DC="$SUDO docker-compose"
-          elif $SUDO docker compose version >/dev/null 2>&1; then
-            DC="$SUDO docker compose"
+            DC="docker-compose"
+          elif docker compose version >/dev/null 2>&1; then
+            DC="docker compose"
           else
-            DC="$SUDO docker-compose"
+            DC="docker-compose"
           fi
           $DC pull backend frontend
           $DC up -d backend frontend
@@ -156,5 +145,5 @@ jobs:
             -c "ALTER TABLE messages DROP CONSTRAINT IF EXISTS messages_sender_id_fkey;" 2>/dev/null || true
           $DC exec -T postgres psql -U postgres -d agent_room \
             -c "UPDATE rooms SET is_active = FALSE WHERE id LIKE '_agent_%';" 2>/dev/null || true
-          $SUDO docker image prune -af --filter "until=72h" >/dev/null 2>&1 || true
+          docker image prune -af --filter "until=72h" >/dev/null 2>&1 || true
           echo "Deploy complete"
