@@ -8,7 +8,7 @@ Operational notes for the deployed Multi-Agent Project Room.
 - Health: `https://hub.wangdada8208.xyz/health`
 - REST API: `https://hub.wangdada8208.xyz/api/v1`
 - WebSocket: `wss://hub.wangdada8208.xyz/ws/chat/{room_id}`
-- A2A JSON-RPC: `https://hub.wangdada8208.xyz/a2a`
+- A2A JSON-RPC (current local v1 code): `https://hub.wangdada8208.xyz/a2a/rpc`
 
 ## Verify Production Health
 
@@ -130,8 +130,43 @@ Latest workflow expectations:
 
 - Test job runs on GitHub-hosted Ubuntu with PostgreSQL service.
 - Deploy job runs on the self-hosted runner labeled `multi-agent`.
-- Deploy command pulls `/opt/multi-agent-project-room`, rebuilds backend and
-  frontend containers, runs Alembic, and applies compatibility SQL fixes.
+- `scripts/deploy.sh` uses immutable image tags, saves the current Compose/env
+  files and a protected PostgreSQL backup, then checks the release health.
+- Before running Alembic, the script stops its Compose backend. Every other Hub
+  writing to the same database must also be stopped in the maintenance window.
+  New and old Hubs must not share a database during the e50 schema cutover.
+- If a migration has been attempted and deployment fails, the backend stays
+  stopped. Previous images must not be restarted against an unverified schema.
+  Restore the reviewed backup to a separate shadow database and validate all
+  affected data before any separately approved recovery. f60 can be downgraded
+  to e50 with SSE stopped; e50 explicitly blocks destructive downgrade.
+
+### Current Local Startup And Configuration Checks
+
+These notes describe uncommitted local changes, not a production rollout.
+`scripts/start.sh` now imports `app.main:app` with `backend` on `PYTHONPATH`.
+The Docker entrypoint uses the same module and disables access logs because
+WebSocket query strings can contain credentials. The frontend Nginx proxy
+disables SSE buffering and URI-bearing logs. HTTP exception text and database
+health errors are suppressed; CORS accepts only `MAPR_CORS_ORIGINS`.
+
+Production needs a unique `MAPR_AUTH_SECRET_KEY`, a protected environment file,
+the actual database password, the correct public A2A URL and matching XMTP
+settings. Example/default passwords and `dev-change-me` are development values.
+`MAPR_AGENT_ENROLLMENT_SECRET` is empty by default and prevents agent enrollment
+until an administrator configures it. Never put real credentials in Git or
+command arguments. External ingress proxies must also redact credential URLs.
+
+PostgreSQL SSE quotas require migration f60 on the shared primary database,
+READ COMMITTED and the same quota policy on all Hubs. Do not rely on ORM startup
+to migrate an existing PostgreSQL schema. SQLite quota support is local only.
+The repository currently has no systemd unit; Docker Compose is the documented
+server startup path. A systemd installation would need a separately reviewed
+unit, protected EnvironmentFile and the same module/PYTHONPATH configuration.
+
+Linux–Mac acceptance must use a temporary Hub/database, temporary rooms and
+temporary credentials. Tailscale reachability alone does not prove Agent
+enrollment, HTTP A2A, WebSocket/presence/chat, reconnect or task cancellation.
 
 ## 主人网关
 

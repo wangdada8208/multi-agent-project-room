@@ -16,6 +16,8 @@ frontend/vite.config.d.ts
 test_verify.db
 
 *.db
+*.db-*
+*.db-journal
 *.db3
 *.db3-*
 *.sqlcipher_salt

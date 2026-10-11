@@ -5,12 +5,53 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timezone
 
+from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.agent_card import AgentCardRecord
+from app.models.user import User
+from app.a2a.url_policy import validate_agent_card_url
 
 logger = logging.getLogger(__name__)
+
+
+async def find_username_matches(db: AsyncSession, username: str) -> list[User]:
+    """Use Python casefold for legacy identities, independent of DB collation.
+
+    New accounts use canonical lowercase names and the existing unique constraint.
+    Never select an arbitrary winner among legacy casefold collisions.
+    """
+    result = await db.execute(select(User))
+    key = username.casefold()
+    return [user for user in result.scalars().all() if user.username.casefold() == key]
+
+
+async def authorize_agent_registration(db: AsyncSession, user: User, name: str) -> str:
+    """Require a real, unambiguous agent account; display names confer no rights."""
+    stored_user = await db.get(User, user.id, populate_existing=True) if user is not None else None
+    if stored_user is None:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    if stored_user.user_type != "agent":
+        raise HTTPException(status_code=403, detail="Agent account required")
+    canonical = stored_user.username.casefold()
+    if not isinstance(name, str) or name.casefold() != canonical:
+        raise HTTPException(status_code=403, detail="Agent name must match authenticated username")
+    matches = await find_username_matches(db, stored_user.username)
+    if len(matches) != 1 or matches[0].id != stored_user.id:
+        raise HTTPException(status_code=403, detail="Ambiguous agent identity")
+    return canonical
+
+
+def validate_registration_url(name: str, url: str) -> None:
+    """Allow only the caller's local marker or a policy-verified HTTP(S) URL."""
+    if url == f"local://{name}":
+        return
+    try:
+        validate_agent_card_url(url)
+    except ValueError:
+        # Never reflect URLs, credentials, queries, or policy exception text.
+        raise HTTPException(status_code=400, detail="Invalid or disallowed agent URL") from None
 
 
 def _agent_to_dict(record: AgentCardRecord) -> dict:
@@ -41,8 +82,12 @@ async def register_agent(
     url: str,
     capabilities: list[str] | None = None,
     skills: list[dict] | None = None,
+    agent_user_id: str | None = None,
 ) -> dict:
     """Create or update an agent registration by name."""
+    if agent_user_id is not None:
+        actor = await db.get(User, agent_user_id, populate_existing=True)
+        await authorize_agent_registration(db, actor, name)
     result = await db.execute(
         select(AgentCardRecord).where(AgentCardRecord.agent_name == name)
     )
@@ -51,6 +96,7 @@ async def register_agent(
 
     if record is None:
         record = AgentCardRecord(
+            agent_user_id=agent_user_id,
             agent_name=name,
             agent_card_url=url,
             capabilities=capabilities or [],
@@ -60,6 +106,15 @@ async def register_agent(
         )
         db.add(record)
     else:
+        if agent_user_id is not None:
+            from sqlalchemy import update
+            linked = await db.execute(update(AgentCardRecord).where(
+                AgentCardRecord.id == record.id,
+                (AgentCardRecord.agent_user_id.is_(None)) | (AgentCardRecord.agent_user_id == agent_user_id),
+            ).values(agent_user_id=agent_user_id).execution_options(synchronize_session=False))
+            if linked.rowcount != 1:
+                await db.rollback()
+                raise HTTPException(status_code=403, detail="Agent registry identity conflict")
         record.agent_card_url = url
         record.capabilities = capabilities or record.capabilities or []
         record.skills = skills or record.skills or []

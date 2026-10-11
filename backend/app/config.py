@@ -1,4 +1,5 @@
 from functools import lru_cache
+from pydantic import SecretStr
 from pydantic_settings import BaseSettings
 
 
@@ -15,6 +16,7 @@ class Settings(BaseSettings):
     a2a_task_timeout_seconds: int = 300
     message_retention_days: int = 15
     auth_secret_key: str = "dev-change-me"
+    agent_enrollment_secret: SecretStr = SecretStr("")
     auth_token_ttl_minutes: int = 60 * 24 * 7
     rate_limit_per_minute: int = 60
 

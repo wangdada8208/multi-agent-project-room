@@ -14,8 +14,11 @@ from app.config import get_settings
 from app.core.database import Base
 
 # Import all models so Alembic detects them
+import app.models.agent_task_delivery  # noqa: F401
+import app.models.agent_binding  # noqa: F401
 import app.models.user  # noqa: F401
 import app.models.room  # noqa: F401
+import app.models.room_presence  # noqa: F401
 import app.models.room_invite  # noqa: F401
 import app.models.agent_card  # noqa: F401
 import app.a2a.models  # noqa: F401
@@ -28,7 +31,9 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-target_metadata = Base.metadata
+from app.a2a.sse_global_quota import LEASE_METADATA
+
+target_metadata = [Base.metadata, LEASE_METADATA]
 
 
 def run_migrations_offline() -> None:

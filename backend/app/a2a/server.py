@@ -23,7 +23,9 @@ from a2a.server.agent_execution.agent_executor import AgentExecutor
 from a2a.server.agent_execution.context import RequestContext
 from a2a.server.events.event_queue import EventQueue
 from a2a.server.request_handlers import DefaultRequestHandler
-from a2a.server.tasks.inmemory_task_store import InMemoryTaskStore
+from a2a.server.tasks.task_store import TaskStore
+from a2a.server.context import ServerCallContext
+from a2a.types.a2a_pb2 import ListTasksRequest, ListTasksResponse
 from a2a.server.routes.agent_card_routes import create_agent_card_routes
 from a2a.server.routes.jsonrpc_routes import create_jsonrpc_routes
 from a2a.types import (
@@ -38,8 +40,11 @@ from a2a.types import (
 from app.config import get_settings
 from app.a2a.agent_card import build_hub_card, card_to_dict
 from app.a2a import task_manager as tm
+from app.a2a.task_service import TaskService
+from app.a2a.models import A2ATask
 from app.a2a.discovery import AgentDiscovery
 from app.chat import service as chat_service
+from app.chat.models import Message as ChatMessage
 from app.core.database import async_session
 from app.ws.connection_manager import connection_manager
 
@@ -51,6 +56,28 @@ settings = get_settings()
 router = APIRouter(prefix="/a2a", tags=["a2a-dialogue"])
 
 DIALOGUES: dict[str, dict] = {}
+
+
+async def _require_dialogue_room_role(db, room_id: str, user_id: str, *, allow_viewer: bool = False):
+    """Require an existing room and an explicit permission record for the user."""
+    from sqlalchemy import select
+    from app.models.room import Room
+    from app.models.room_permission import RoomPermission
+
+    room = await db.get(Room, room_id)
+    if room is None:
+        raise HTTPException(status_code=404, detail="Room not found")
+
+    result = await db.execute(select(RoomPermission).where(
+        RoomPermission.room_id == room_id,
+        RoomPermission.user_id == user_id,
+    ))
+    permission = result.scalar_one_or_none()
+    allowed_roles = {"owner", "member", "viewer"} if allow_viewer else {"owner", "member"}
+    if permission is None or permission.role not in allowed_roles:
+        message = "Insufficient permission to read dialogue" if allow_viewer else "Requires member or owner role"
+        raise HTTPException(status_code=403, detail=message)
+    return room, permission
 
 
 def _now() -> datetime:
@@ -84,7 +111,7 @@ def _dialogue_peer(dialogue: dict, sender_name: str, target_agent: str | None) -
     for participant in dialogue["participants"]:
         if participant.lower() != sender_name.lower():
             return participant
-    raise ValueError("target_agent is required for single-participant dialogues")
+    raise DialogueError("target_agent is required for single-participant dialogues")
 
 
 async def _save_room_message(
@@ -107,11 +134,14 @@ async def _save_room_message(
                 sender_name=sender_name,
                 content=content,
                 msg_type="text",
-                parent_id=dialogue_id,
+                # Dialogue IDs are not message foreign keys.
+                parent_id=dialogue_id if await db.get(ChatMessage, dialogue_id) else None,
             )
-            return message.to_dict()
-    except Exception as e:
-        logger.warning("dialogue message persistence failed: %s", e)
+            payload = message.to_dict()
+            payload["dialogue_id"] = dialogue_id
+            return payload
+    except Exception:
+        logger.warning("dialogue message persistence failed")
         return {
             "id": str(uuid.uuid4()),
             "room_id": room_id,
@@ -131,6 +161,10 @@ class DialogueRequest(pydantic.BaseModel):
     method: str
     params: dict = {}
     id: str | int | None = None
+
+
+class DialogueError(ValueError):
+    """Public dialogue validation messages; never wrap underlying exceptions."""
 
 
 DIALOGUE_METHODS: dict[str, callable] = {}
@@ -159,8 +193,10 @@ async def handle_dialogue_jsonrpc(request: DialogueRequest, current_user: User =
         return {"jsonrpc": "2.0", "result": result, "id": request.id}
     except HTTPException:
         raise
-    except Exception as e:
-        return {"jsonrpc": "2.0", "error": {"code": -32000, "message": str(e)}, "id": request.id}
+    except DialogueError as exc:
+        return {"jsonrpc": "2.0", "error": {"code": -32000, "message": str(exc)}, "id": request.id}
+    except Exception:
+        return {"jsonrpc": "2.0", "error": {"code": -32000, "message": "Dialogue unavailable"}, "id": request.id}
 
 
 @rpc_method("dialogues/create")
@@ -171,8 +207,6 @@ async def rpc_dialogues_create(params: dict, user: User) -> dict:
 
     from app.models.room import Room
     from app.models.room_permission import RoomPermission
-    from sqlalchemy import select
-
     async with async_session() as db:
         room = await db.get(Room, room_id)
         if not room:
@@ -183,22 +217,7 @@ async def rpc_dialogues_create(params: dict, user: User) -> dict:
             db.add(perm)
             await db.commit()
         else:
-            perm_stmt = select(RoomPermission).where(
-                RoomPermission.room_id == room_id,
-                RoomPermission.user_id == user.id,
-            )
-            perm = (await db.execute(perm_stmt)).scalars().first()
-            if not perm:
-                any_perm_stmt = select(RoomPermission).where(RoomPermission.room_id == room_id)
-                any_perms = (await db.execute(any_perm_stmt)).scalars().all()
-                if not any_perms:
-                    perm = RoomPermission(room_id=room_id, user_id=user.id, role="owner")
-                    db.add(perm)
-                    await db.commit()
-                else:
-                    raise HTTPException(status_code=403, detail="No access to this room")
-            elif perm.role not in ("owner", "member"):
-                raise HTTPException(status_code=403, detail="Requires member or owner role")
+            await _require_dialogue_room_role(db, room_id, user.id)
 
     initiator = str(params.get("initiator_agent", "")).strip() or "hub"
     participants = [str(p) for p in params.get("participants", [])]
@@ -245,28 +264,12 @@ async def rpc_dialogues_send(params: dict, user: User) -> dict:
 
     dialogue = DIALOGUES.get(dialogue_id)
     if not dialogue:
-        raise ValueError("Dialogue is not active")
+        raise HTTPException(status_code=404, detail="Dialogue not found")
 
-    from app.models.room_permission import RoomPermission
     from app.models.user import User as UserModel
-    from sqlalchemy import select
 
     async with async_session() as db:
-        perm_stmt = select(RoomPermission).where(
-            RoomPermission.room_id == dialogue["room_id"],
-            RoomPermission.user_id == user.id,
-        )
-        perm = (await db.execute(perm_stmt)).scalars().first()
-        if not perm:
-            any_perm_stmt = select(RoomPermission).where(RoomPermission.room_id == dialogue["room_id"])
-            any_perms = (await db.execute(any_perm_stmt)).scalars().all()
-            if any_perms:
-                raise HTTPException(status_code=403, detail="No access to this room")
-            perm = RoomPermission(room_id=dialogue["room_id"], user_id=user.id, role="owner")
-            db.add(perm)
-            await db.commit()
-        elif perm.role not in ("owner", "member"):
-            raise HTTPException(status_code=403, detail="Requires member or owner role")
+        await _require_dialogue_room_role(db, dialogue["room_id"], user.id)
 
         # Impersonation guard: cannot forge another real user ID as sender_id
         if sender_id != user.id:
@@ -274,23 +277,23 @@ async def rpc_dialogues_send(params: dict, user: User) -> dict:
             if other_user and other_user.id != user.id:
                 raise HTTPException(status_code=403, detail="Impersonation of another user is prohibited")
     if not dialogue or dialogue["status"] != "active":
-        raise ValueError("Dialogue is not active")
+        raise DialogueError("Dialogue is not active")
     if _now() >= dialogue["expires_at"]:
         dialogue["status"] = "ended"
         dialogue["ended_at"] = _now()
         dialogue["reason"] = "expired"
-        raise ValueError("Dialogue is not active")
+        raise DialogueError("Dialogue is not active")
     if dialogue["current_turn"] >= dialogue["max_turns"]:
         dialogue["status"] = "ended"
         dialogue["ended_at"] = _now()
         dialogue["reason"] = "max_turns_reached"
-        raise ValueError("Dialogue is not active")
+        raise DialogueError("Dialogue is not active")
     if sender_name.lower() not in {p.lower() for p in dialogue["participants"]}:
-        raise ValueError("Sender is not a dialogue participant")
+        raise DialogueError("Sender is not a dialogue participant")
 
     target_agent = _dialogue_peer(dialogue, sender_name, params.get("target_agent"))
     if target_agent.lower() not in {p.lower() for p in dialogue["participants"]}:
-        raise ValueError("target_agent is not a dialogue participant")
+        raise DialogueError("target_agent is not a dialogue participant")
 
     dialogue["current_turn"] += 1
     if dialogue["current_turn"] >= dialogue["max_turns"]:
@@ -335,19 +338,10 @@ async def rpc_dialogues_end(params: dict, user: User) -> dict:
         raise HTTPException(status_code=400, detail="dialogue_id is required")
     dialogue = DIALOGUES.get(dialogue_id)
     if not dialogue:
-        raise ValueError("Dialogue not found")
-
-    from app.models.room_permission import RoomPermission
-    from sqlalchemy import select
+        raise DialogueError("Dialogue not found")
 
     async with async_session() as db:
-        perm_stmt = select(RoomPermission).where(
-            RoomPermission.room_id == dialogue["room_id"],
-            RoomPermission.user_id == user.id,
-        )
-        perm = (await db.execute(perm_stmt)).scalars().first()
-        if perm and perm.role not in ("owner", "member"):
-            raise HTTPException(status_code=403, detail="Insufficient permission to end dialogue")
+        await _require_dialogue_room_role(db, dialogue["room_id"], user.id)
     dialogue["status"] = "ended"
     dialogue["ended_at"] = _now()
     dialogue["reason"] = params.get("reason") or "ended"
@@ -374,41 +368,42 @@ RUNNING_LOOPS: set[str] = set()
 async def _send_to_agent(agent_name: str, prompt: str) -> str:
     """Send a prompt to a registered agent via its A2A task endpoint.
 
-    Falls back to simulated response if the agent is unreachable.
+    Uses the standard client and its pinned-IP egress policy.
     """
     agents = await AgentDiscovery.list_available()
     target = next(
         (a for a in agents if a["name"].lower() == agent_name.lower()), None
     )
     if not target or not target.get("url") or target["url"].startswith("local://"):
-        # Simulated fallback
-        return f"[{agent_name}] 收到。我同意当前方案，建议继续推进。"
+        return f"[{agent_name}] 未配置可调用的标准远端，尚未取得真实回复。"
 
     try:
-        import httpx
-        async with httpx.AsyncClient(timeout=60) as client:
-            resp = await client.post(
-                f"{target['url'].rstrip('/')}/a2a/rpc",
-                json={
-                    "jsonrpc": "2.0",
-                    "method": "tasks/send",
-                    "params": {"query": prompt},
-                    "id": str(uuid.uuid4()),
-                },
-            )
-            data = resp.json()
-            result = data.get("result", {})
-            artifacts = result.get("artifacts", [])
-            if artifacts and isinstance(artifacts, list):
-                first = artifacts[0]
-                if isinstance(first, dict):
-                    parts = first.get("parts", [])
-                    if parts:
-                        return str(parts[0])
-            return f"[{agent_name}] 已处理任务（无文本返回）"
-    except Exception as e:
-        logger.warning("Failed to reach agent %s: %s", agent_name, e)
-        return f"[{agent_name}] 无法连接，使用默认回复：同意继续。"
+        from app.a2a.client import A2AClient
+        client = A2AClient(target["url"])
+        try:
+            result = await client.send_task(prompt, return_immediately=False)
+        finally:
+            await client.close()
+        if not result or result.get("status") == "failed":
+            return f"[{agent_name}] 无法连接或任务失败，尚未取得回复。"
+        if result.get("status") == "canceled":
+            return f"[{agent_name}] 任务已取消，尚未取得最终回复。"
+        if result.get("status") in {"submitted", "queued", "working"}:
+            return f"[{agent_name}] 任务仍在处理中，尚未取得最终回复。"
+        artifacts = result.get("artifacts", [])
+        if artifacts and isinstance(artifacts, list):
+            first = artifacts[0]
+            if isinstance(first, dict):
+                parts = first.get("parts", [])
+                texts = [part.get("text") for part in parts if isinstance(part, dict) and isinstance(part.get("text"), str)]
+                if texts:
+                    return "\n".join(texts)
+                if parts and isinstance(parts[0], str):
+                    return parts[0]  # Keep legacy caller-facing artifact compatibility.
+        return f"[{agent_name}] 已处理任务（无文本返回）"
+    except Exception:
+        logger.warning("Failed to reach agent %s; unsafe or unavailable endpoint", agent_name)
+        return f"[{agent_name}] 无法连接，尚未取得回复。"
 
 
 async def _run_dialogue_loop(dialogue_id: str):
@@ -434,6 +429,21 @@ async def _run_dialogue_loop(dialogue_id: str):
                 if dialogue["status"] != "active":
                     break
 
+                from sqlalchemy import select
+                from app.chat.delivery_service import slug
+                async with async_session() as db:
+                    identities = (await db.execute(select(User))).scalars().all()
+                    matches = [actor for actor in identities if slug(actor.username) == slug(agent_name)]
+                    if not matches and slug(agent_name) == "hub":
+                        continue  # Hub is a control initiator, not a remote executor.
+                    if len(matches) != 1 or matches[0].user_type != "agent":
+                        dialogue.update(status="ended", reason="agent_identity_missing", ended_at=_now())
+                        break
+                    execution_agent = matches[0]
+                    await _require_dialogue_room_role(db, room_id, execution_agent.id)
+                    if dialogue.get("created_by_user_id"):
+                        await _require_dialogue_room_role(db, room_id, dialogue["created_by_user_id"])
+
                 # Build context (reset each turn to prevent pollution)
                 recent = [
                     t["content"][:200]
@@ -452,6 +462,15 @@ async def _run_dialogue_loop(dialogue_id: str):
                 # Send to agent and get response
                 response_text = await _send_to_agent(agent_name, context)
 
+                # Owner may stop while the remote call is in flight.
+                if dialogue["status"] != "active":
+                    break
+
+                async with async_session() as db:
+                    await _require_dialogue_room_role(db, room_id, execution_agent.id)
+                    if dialogue.get("created_by_user_id"):
+                        await _require_dialogue_room_role(db, room_id, dialogue["created_by_user_id"])
+
                 # Record turn
                 if "turns" not in dialogue:
                     dialogue["turns"] = []
@@ -462,31 +481,23 @@ async def _run_dialogue_loop(dialogue_id: str):
                     "consensus": "[CONSENSUS]" in response_text.upper(),
                     "conflicts": [],
                 }
-                dialogue["turns"].append(turn_data)
-
                 # Save to room as chat message
-                await _save_room_message(
+                message_payload = await _save_room_message(
                     room_id=room_id,
-                    sender_id=f"{agent_name.lower()}-loop",
+                    sender_id=execution_agent.id,
                     sender_name=agent_name,
                     content=response_text,
                     dialogue_id=dialogue_id,
                 )
+                if message_payload.get("persistence") == "failed":
+                    dialogue.update(status="ended", reason="persistence_failed", ended_at=_now())
+                    break
+                dialogue["turns"].append(turn_data)
 
                 # Broadcast to WebSocket
                 await connection_manager.broadcast(room_id, {
                     "type": "message",
-                    "message": {
-                        "id": str(uuid.uuid4()),
-                        "room_id": room_id,
-                        "sender_id": f"{agent_name.lower()}-loop",
-                        "sender_type": "agent",
-                        "sender_name": agent_name,
-                        "content": response_text,
-                        "msg_type": "text",
-                        "parent_id": dialogue_id,
-                        "created_at": _now().isoformat(),
-                    },
+                    "message": message_payload,
                 })
 
                 # Check consensus
@@ -505,6 +516,8 @@ async def _run_dialogue_loop(dialogue_id: str):
             dialogue["reason"] = "max_turns_reached"
             dialogue["ended_at"] = _now()
 
+    except HTTPException:
+        dialogue.update(status="ended", reason="access_revoked", ended_at=_now())
     finally:
         RUNNING_LOOPS.discard(dialogue_id)
         await connection_manager.broadcast(room_id, {
@@ -514,7 +527,7 @@ async def _run_dialogue_loop(dialogue_id: str):
 
 
 @rpc_method("dialogues/run")
-async def rpc_dialogues_run(params: dict) -> dict:
+async def rpc_dialogues_run(params: dict, user: User) -> dict:
     """Start an auto-running dialogue loop between two or more agents."""
     room_id = str(params.get("room_id", "")).strip()
     initiator = str(params.get("initiator_agent", "")).strip() or "hub"
@@ -528,10 +541,12 @@ async def rpc_dialogues_run(params: dict) -> dict:
         raise HTTPException(status_code=400, detail="at least 1 participant required")
     if len(RUNNING_LOOPS) >= 5:
         raise HTTPException(status_code=429, detail="Too many concurrent dialogue loops (max 5)")
+    async with async_session() as db:
+        await _require_dialogue_room_role(db, room_id, user.id)
 
     now = _now()
     dialogue_id = str(uuid.uuid4())
-    all_participants = list({initiator, *participants})
+    all_participants = _normalize_participants(participants, initiator)
 
     dialogue = {
         "dialogue_id": dialogue_id,
@@ -548,6 +563,7 @@ async def rpc_dialogues_run(params: dict) -> dict:
         "ended_at": None,
         "reason": None,
         "auto_run": True,
+        "created_by_user_id": user.id,
     }
     DIALOGUES[dialogue_id] = dialogue
 
@@ -559,14 +575,18 @@ async def rpc_dialogues_run(params: dict) -> dict:
 
 
 @rpc_method("dialogues/status")
-async def rpc_dialogues_status(params: dict) -> dict:
+async def rpc_dialogues_status(params: dict, user: User) -> dict:
     """Get the current status of a dialogue loop."""
     dialogue_id = str(params.get("dialogue_id", "")).strip()
     if not dialogue_id:
         raise HTTPException(status_code=400, detail="dialogue_id is required")
     dialogue = DIALOGUES.get(dialogue_id)
     if not dialogue:
-        raise ValueError("Dialogue not found")
+        raise HTTPException(status_code=404, detail="Dialogue not found")
+    async with async_session() as db:
+        await _require_dialogue_room_role(
+            db, dialogue["room_id"], user.id, allow_viewer=True,
+        )
     return _serialize_dialogue(dialogue)
 
 
@@ -577,12 +597,16 @@ async def rpc_agent_list(params: dict) -> dict:
 
 
 @rpc_method("agent/register")
-async def rpc_agent_register(params: dict) -> dict:
+async def rpc_agent_register(params: dict, user: User) -> dict:
+    from app.agent.service import authorize_agent_registration
+
     name = params.get("name", "")
     url = params.get("url", "")
     if not name or not url:
         raise HTTPException(status_code=400, detail="name and url are required")
-    return await AgentDiscovery.register(name, url)
+    async with async_session() as db:
+        name = await authorize_agent_registration(db, user, name)
+    return await AgentDiscovery.register(name, url, agent_user_id=user.id)
 
 
 # ── A2A v1.0 Agent Executor ────────────────────────────
@@ -614,9 +638,9 @@ class RoomAgentExecutor(AgentExecutor):
                 source_agent=source_agent,
                 room_id=room_id or None,
             )
-        except Exception as e:
-            logger.exception("task submission failed")
-            task_data = {"id": str(uuid.uuid4()), "status": "failed", "result": [{"text": str(e)}]}
+        except Exception:
+            logger.warning("task submission failed; details suppressed")
+            task_data = {"id": str(uuid.uuid4()), "status": "failed", "result": [{"text": "Task submission failed"}]}
 
         # Build response Task
         task = Task()
@@ -658,20 +682,186 @@ class RoomAgentExecutor(AgentExecutor):
 # ── Mount function — called from main.py ───────────────
 
 
+_STATUS_TO_TASK_STATE = {
+    "submitted": TaskState.TASK_STATE_SUBMITTED,
+    "queued": TaskState.TASK_STATE_SUBMITTED,
+    "working": TaskState.TASK_STATE_WORKING,
+    "completed": TaskState.TASK_STATE_COMPLETED,
+    "failed": TaskState.TASK_STATE_FAILED,
+    "canceled": TaskState.TASK_STATE_CANCELED,
+    "input_required": TaskState.TASK_STATE_INPUT_REQUIRED,
+}
+
+_TASK_STATE_TO_STATUS = {
+    TaskState.TASK_STATE_SUBMITTED: "submitted",
+    TaskState.TASK_STATE_WORKING: "working",
+    TaskState.TASK_STATE_COMPLETED: "completed",
+    TaskState.TASK_STATE_FAILED: "failed",
+    TaskState.TASK_STATE_CANCELED: "canceled",
+    TaskState.TASK_STATE_INPUT_REQUIRED: "input_required",
+}
+
+
+class TaskServiceTaskStore(TaskStore):
+    """Adapter bridging A2A SDK TaskStore to unified SQL TaskService & A2ATask."""
+
+    async def get(
+        self, task_id: str, context: Optional[ServerCallContext] = None
+    ) -> Optional[Task]:
+        async with async_session() as session:
+            db_task = await TaskService.get_task(session, task_id)
+            if not db_task:
+                return None
+            return self._to_sdk_task(db_task)
+
+    async def save(
+        self, task: Task, context: Optional[ServerCallContext] = None
+    ) -> None:
+        target_status = _TASK_STATE_TO_STATUS.get(
+            task.status.state, "submitted"
+        )
+        result_data = None
+        if task.artifacts:
+            arts = []
+            for art in task.artifacts:
+                art_dict = {"parts": []}
+                for part in art.parts:
+                    if part.HasField("text") or part.text:
+                        art_dict["parts"].append({"text": part.text})
+                arts.append(art_dict)
+            result_data = arts
+
+        async with async_session() as session:
+            db_task = await TaskService.get_task(session, task.id)
+            if not db_task:
+                query = ""
+                if task.history:
+                    for msg in task.history:
+                        for part in msg.parts:
+                            if part.HasField("text") or part.text:
+                                query = part.text
+                                break
+                        if query:
+                            break
+                if not query:
+                    query = f"Task {task.id}"
+
+                await TaskService.create_task(
+                    session,
+                    task_id=task.id,
+                    query=query,
+                    context_id=task.context_id or None,
+                    initial_status="submitted",
+                )
+                if target_status == "working":
+                    await TaskService.start_task(session, task.id)
+                elif target_status == "completed":
+                    completed, _, code = await TaskService.complete_task(session, task.id, result_data)
+                    if code == 'completed' and result_data:
+                        from app.a2a.task_service import _append_event
+                        for index in range(len(result_data)):
+                            await _append_event(session, task.id, 'artifact_update', {'artifact_index': index})
+                elif target_status == "failed":
+                    await TaskService.fail_task(
+                        session, task.id, str(result_data or "Task failed")
+                    )
+                elif target_status == "canceled":
+                    await TaskService.cancel_task(session, task.id)
+            else:
+                if target_status == "working":
+                    await TaskService.start_task(session, task.id)
+                elif target_status == "completed":
+                    completed, _, code = await TaskService.complete_task(session, task.id, result_data)
+                    if code == 'completed' and result_data:
+                        from app.a2a.task_service import _append_event
+                        for index in range(len(result_data)):
+                            await _append_event(session, task.id, 'artifact_update', {'artifact_index': index})
+                elif target_status == "failed":
+                    await TaskService.fail_task(
+                        session, task.id, str(result_data or "Task failed")
+                    )
+                elif target_status == "canceled":
+                    await TaskService.cancel_task(session, task.id)
+            await session.commit()
+
+    async def list(
+        self,
+        params: ListTasksRequest,
+        context: Optional[ServerCallContext] = None,
+    ) -> ListTasksResponse:
+        async with async_session() as session:
+            db_tasks = await TaskService.list_tasks(session, page=1, limit=100)
+            sdk_tasks = [self._to_sdk_task(t) for t in db_tasks]
+            resp = ListTasksResponse()
+            resp.tasks.extend(sdk_tasks)
+            return resp
+
+    async def delete(
+        self, task_id: str, context: Optional[ServerCallContext] = None
+    ) -> None:
+        async with async_session() as session:
+            await TaskService.cancel_task(
+                session, task_id, reason="deleted_via_task_store"
+            )
+            await session.commit()
+
+    @staticmethod
+    def _to_sdk_task(db_task: A2ATask) -> Task:
+        sdk_task = Task()
+        sdk_task.id = db_task.id
+        if db_task.context_id:
+            sdk_task.context_id = db_task.context_id
+        sdk_task.status.state = _STATUS_TO_TASK_STATE.get(
+            db_task.status, TaskState.TASK_STATE_SUBMITTED
+        )
+        if db_task.completed_at or db_task.created_at:
+            sdk_task.status.timestamp.FromDatetime(db_task.completed_at or db_task.created_at)
+        if db_task.result:
+            if isinstance(db_task.result, list):
+                for index, item in enumerate(db_task.result):
+                    art = sdk_task.artifacts.add()
+                    art.artifact_id = f"{db_task.id}:{index}"
+                    if isinstance(item, dict) and "parts" in item:
+                        for p in item["parts"]:
+                            part = art.parts.add()
+                            if isinstance(p, dict):
+                                part.text = str(p.get("text", ""))
+                            else:
+                                part.text = str(p)
+                    elif isinstance(item, dict) and "text" in item:
+                        part = art.parts.add()
+                        part.text = str(item["text"])
+                    elif isinstance(item, dict) and "content" in item:
+                        part = art.parts.add()
+                        part.text = str(item["content"])
+                    else:
+                        part = art.parts.add()
+                        part.text = str(item)
+            elif isinstance(db_task.result, dict):
+                art = sdk_task.artifacts.add()
+                art.artifact_id = f"{db_task.id}:0"
+                part = art.parts.add()
+                part.text = str(
+                    db_task.result.get("text", db_task.result.get("error", ""))
+                )
+        return sdk_task
+
+
 def mount_a2a(app) -> None:
     """Mount A2A v1.0 protocol routes on the FastAPI app."""
     hub_card = build_hub_card(settings.a2a_public_url)
 
-    task_store = InMemoryTaskStore()
+    task_store = TaskServiceTaskStore()
     executor = RoomAgentExecutor()
-    handler = DefaultRequestHandler(
+    from app.a2a.http_protocol import SQLRequestHandler, protocol_routes
+    handler = SQLRequestHandler(
         agent_executor=executor,
         task_store=task_store,
         agent_card=hub_card,
     )
 
     card_routes = create_agent_card_routes(hub_card)
-    jsonrpc_routes = create_jsonrpc_routes(handler, rpc_url="/a2a/rpc")
+    jsonrpc_routes = protocol_routes(handler)
 
     from a2a.server.routes.fastapi_routes import add_a2a_routes_to_fastapi
     add_a2a_routes_to_fastapi(

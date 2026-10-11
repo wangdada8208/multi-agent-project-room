@@ -32,7 +32,8 @@ async def list_rooms(
     """List rooms the current user has permission to access."""
     # Get rooms where user has any permission
     perm_stmt = select(RoomPermission.room_id).where(
-        RoomPermission.user_id == current_user.id
+        RoomPermission.user_id == current_user.id,
+        RoomPermission.role.in_(("viewer", "member", "owner")),
     )
     perm_result = await db.execute(perm_stmt)
     accessible_room_ids = [row[0] for row in perm_result.all()]
@@ -85,10 +86,26 @@ async def get_room(
 ) -> dict:
     from app.chat.service import resolve_room
     room = await resolve_room(db, room_id)
-    if room is None:
+    if room is None or not room.is_active:
         raise HTTPException(status_code=404, detail="Room not found")
     await require_role(room.id, current_user, db)
     return {"room": room.to_dict()}
+
+
+@router.delete("/{room_id}")
+async def deactivate_room(room_id: str, db: AsyncSession = Depends(get_db),
+                          current_user: User = Depends(get_current_user)) -> dict:
+    """Owner-only soft deletion; retain FK history, revoke all live subscriptions."""
+    room = await db.get(Room, room_id)
+    if room is None:
+        raise HTTPException(status_code=404, detail="Room not found")
+    permission = (await db.execute(select(RoomPermission).where(
+        RoomPermission.room_id == room_id, RoomPermission.user_id == current_user.id))).scalar_one_or_none()
+    if not permission or permission.role != "owner":
+        raise HTTPException(status_code=403, detail="Requires owner role")
+    room.is_active = False
+    await db.commit()  # ORM hook queues room-only hint in this transaction.
+    return {"ok": True}
 
 
 class ShareLinkRequest(BaseModel):
@@ -158,12 +175,13 @@ async def get_shared_room_messages(
     result = await db.execute(stmt)
     share = result.scalars().first()
     if share is None:
-        from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Share link expired or not found")
 
     from app.chat.service import list_messages
-    messages = await list_messages(db, share.room_id, page=1, limit=100)
     room = await db.get(Room, share.room_id)
+    if room is None or not room.is_active:
+        raise HTTPException(status_code=404, detail="Room not found")
+    messages = [] if room.transport == "xmtp" else await list_messages(db, share.room_id, page=1, limit=100)
     return {
         "room_name": room.name if room else "Room",
         "messages": [m.to_dict() for m in messages],

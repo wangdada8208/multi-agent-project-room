@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
-import { useChatStore } from "../stores/chatStore";
+import { useChatStore, sanitizeTaskPatch, isTaskProgressEvent } from "../stores/chatStore";
 import type { ChatMessage, MessageType, RoomSocketEvent, SenderType } from "../types/chat";
 
 import { useAuthStore } from "../stores/authStore";
@@ -28,34 +28,40 @@ function getReconnectDelay(attempt: number): number {
   return Math.min(RECONNECT_BASE_DELAY_MS * 2 ** Math.max(attempt - 1, 0), RECONNECT_MAX_DELAY_MS);
 }
 
-async function fetchMissedMessages(roomId: string, afterTimestamp: string | null): Promise<ChatMessage[]> {
+async function fetchMissedMessages(roomId: string, afterTimestamp: string | null, cursor: number, page: number) {
   try {
-    const params = new URLSearchParams({ limit: "100" });
+    const params = new URLSearchParams({ limit: "100", after_seq: String(cursor), page: String(page) });
     if (afterTimestamp) params.set("after", afterTimestamp);
-    const res = await apiFetch(`/api/v1/rooms/${roomId}/messages?${params}`);
-    if (!res.ok) return [];
+    const res = await apiFetch(`/api/v1/rooms/${encodeURIComponent(roomId)}/messages?${params}`);
+    if (!res.ok) return null;
     const data = await res.json();
-    return data.messages ?? [];
-  } catch {
-    return [];
-  }
+    const messages = data.messages ?? data.data;
+    if (!Array.isArray(messages)) return null;
+    return { messages: messages as ChatMessage[], nextCursor: data.next_cursor as unknown, hasMore: data.has_more as unknown };
+  } catch { return null; }
 }
 
 export function useWebSocket(roomId: string, transport: string = "xmtp") {
   const socketRef = useRef<WebSocket | null>(null);
   const reconnectTimerRef = useRef<number | null>(null);
   const reconnectAttemptRef = useRef(0);
-  const lastDisconnectRef = useRef<string | null>(null);
+
   const addMessage = useChatStore((state) => state.addMessage);
   const markTyping = useChatStore((state) => state.markTyping);
   const setParticipants = useChatStore((state) => state.setParticipants);
   const upsertParticipant = useChatStore((state) => state.upsertParticipant);
   const removeParticipant = useChatStore((state) => state.removeParticipant);
   const upsertTask = useChatStore((state) => state.upsertTask);
+  const updateTaskProgress = useChatStore((state) => state.updateTaskProgress);
   const setConnectionStatus = useChatStore((state) => state.setConnectionStatus);
 
   useEffect(() => {
     let disposed = false;
+    let needsCatchUp = false;
+    let gapTimestamp: string | null = null;
+    let snapshotPresence = false;
+    setParticipants([]);
+    const taskFetches = new Map<string, Promise<void>>();
 
     const clearReconnectTimer = () => {
       if (reconnectTimerRef.current !== null) {
@@ -68,8 +74,13 @@ export function useWebSocket(roomId: string, transport: string = "xmtp") {
       if (disposed || reconnectTimerRef.current !== null) return;
       if (socketRef.current === socket) socketRef.current = null;
 
-      // Record when we lost connection so we can catch up later
-      lastDisconnectRef.current = new Date().toISOString();
+      if (!needsCatchUp) {
+        // Use server timestamps, not the client clock; overlap equal timestamps.
+        const timestamps = useChatStore.getState().messages.filter((message) => message.room_id === roomId && !message.id.startsWith("sys-"))
+          .map((message) => Date.parse(message.created_at)).filter(Number.isFinite);
+        gapTimestamp = timestamps.length ? new Date(Math.max(...timestamps) - 1).toISOString() : null;
+      }
+      needsCatchUp = true;
 
       reconnectAttemptRef.current += 1;
       const delay = getReconnectDelay(reconnectAttemptRef.current);
@@ -79,15 +90,30 @@ export function useWebSocket(roomId: string, transport: string = "xmtp") {
       }, delay);
     };
 
-    const catchUpMissedMessages = async () => {
-      if (transport === "xmtp") return;
-      const since = lastDisconnectRef.current;
-      if (!since) return; // First connect, no gap to fill
-      const missed = await fetchMissedMessages(roomId, since);
-      for (const msg of missed) {
-        addMessage(msg); // addMessage already deduplicates by ID
+    const catchUpMissedMessages = async (socket: WebSocket) => {
+      if (transport === "xmtp" || !needsCatchUp) return;
+      // Start at zero: a largest-seen sequence could hide a gap in WS delivery.
+      // Server retention bounds this replay; IDs deduplicate HTTP and WS overlap.
+      let cursor = 0;
+      const seen = new Set<string>();
+      for (let page = 1; page <= 100; page++) {
+        const batch = await fetchMissedMessages(roomId, gapTimestamp, cursor, page);
+        if (disposed || socketRef.current !== socket || !batch) return;
+        let fresh = 0;
+        for (const message of batch.messages) {
+          if (!message || message.room_id !== roomId) continue;
+          if (!seen.has(message.id)) { seen.add(message.id); fresh++; }
+          addMessage(message);
+        }
+        if (batch.hasMore === false || (batch.hasMore !== true && batch.messages.length < 100)) {
+          needsCatchUp = false;
+          gapTimestamp = null;
+          return;
+        }
+        if (!fresh) return; // Legacy servers may ignore paging; never loop forever.
+        if (typeof batch.nextCursor === "number" && Number.isSafeInteger(batch.nextCursor) && batch.nextCursor > cursor)
+          cursor = batch.nextCursor;
       }
-      lastDisconnectRef.current = null; // Reset after successful catch-up
     };
 
     const connect = () => {
@@ -116,7 +142,7 @@ export function useWebSocket(roomId: string, transport: string = "xmtp") {
           }));
         }
         // Fetch messages sent while disconnected
-        catchUpMissedMessages();
+        void catchUpMissedMessages(socket);
       });
 
       socket.addEventListener("close", (event) => {
@@ -136,16 +162,34 @@ export function useWebSocket(roomId: string, transport: string = "xmtp") {
         socket.close();
       });
 
+      const hydrateTask = (taskId: string): Promise<void> => {
+        const pending = taskFetches.get(taskId);
+        if (pending) return pending;
+        const fetch = apiFetch(`/api/v1/tasks/${encodeURIComponent(taskId)}`)
+          .then(async (response) => {
+            if (!response.ok) return;
+            const data = await response.json();
+            if (disposed || socketRef.current !== socket || data.task?.id !== taskId || data.task?.room_id !== roomId) return;
+            upsertTask(data.task);
+          }).catch(() => { /* The next reconciliation or room refresh retries. */ })
+          .finally(() => { taskFetches.delete(taskId); });
+        taskFetches.set(taskId, fetch);
+        return fetch;
+      };
+
       socket.addEventListener("message", (event) => {
+        if (disposed || socketRef.current !== socket) return;
         let payload: RoomSocketEvent;
         try {
           payload = JSON.parse(event.data);
         } catch (error) {
-          console.warn("Failed to parse room socket event", error);
+          console.warn("Failed to parse room socket event");
           return;
         }
 
-        if (transport !== "xmtp" && payload.type === "message" && payload.message) {
+        if (!payload || typeof payload !== "object" || Array.isArray(payload)) return;
+
+        if (transport !== "xmtp" && payload.type === "message" && payload.message?.room_id === roomId) {
           addMessage(payload.message);
         }
 
@@ -166,22 +210,49 @@ export function useWebSocket(roomId: string, transport: string = "xmtp") {
         }
 
         if (payload.type === "presence_snapshot") {
-          setParticipants(payload.participants ?? []);
+          if (payload.room_id !== undefined && payload.room_id !== roomId) return;
+          if (!Array.isArray(payload.participants)) return;
+          snapshotPresence = true;
+          setParticipants(payload.participants);
         }
 
-        if (payload.type === "user_online" && payload.participant) {
+        if (payload.type === "user_online" && payload.participant && !snapshotPresence && (payload.room_id === undefined || payload.room_id === roomId)) {
           upsertParticipant(payload.participant);
         }
 
-        if (payload.type === "user_offline" && payload.participant) {
+        if (payload.type === "user_offline" && payload.participant && !snapshotPresence && (payload.room_id === undefined || payload.room_id === roomId)) {
           removeParticipant(payload.participant.sender_id);
         }
 
         if (payload.type === "task_update" && payload.task) {
-          upsertTask(payload.task);
+          const task = sanitizeTaskPatch(payload.task);
+          if (!task) return;
+          const existing = useChatStore.getState().tasks.find((item) => item.id === task.id);
+          if (existing?.room_id && existing.room_id !== roomId) return;
+          if (task.room_id !== roomId && !(task.room_id === undefined && existing?.room_id === roomId)) return;
+          // State-only patches update immediately; HTTP fills missing task metadata.
+          upsertTask(task);
+          if (!useChatStore.getState().tasks.some((item) => item.id === task.id && item.room_id === roomId)) {
+            void hydrateTask(task.id).then(() => {
+              if (!disposed && socketRef.current === socket) upsertTask(task);
+            });
+          }
         }
 
-        if (transport !== "xmtp" && payload.type === "agent_dialogue_message" && payload.message) {
+        if (payload.type === "task_progress") {
+          if (!isTaskProgressEvent(payload) || (payload.room_id !== undefined && payload.room_id !== roomId)) return;
+          const existing = useChatStore.getState().tasks.find((task) => task.id === payload.task_id);
+          if (existing?.room_id && existing.room_id !== roomId) return;
+          if (useChatStore.getState().tasks.some((task) => task.id === payload.task_id && task.room_id === roomId)) {
+            updateTaskProgress(payload, roomId);
+          } else {
+            void hydrateTask(payload.task_id).then(() => {
+              if (!disposed && socketRef.current === socket) updateTaskProgress(payload, roomId);
+            });
+          }
+        }
+
+        if (transport !== "xmtp" && payload.type === "agent_dialogue_message" && payload.message?.room_id === roomId) {
           addMessage(payload.message);
         }
 
@@ -202,7 +273,7 @@ export function useWebSocket(roomId: string, transport: string = "xmtp") {
         socket.close();
       }
     };
-  }, [transport, addMessage, markTyping, removeParticipant, roomId, setConnectionStatus, setParticipants, upsertParticipant, upsertTask]);
+  }, [transport, addMessage, markTyping, removeParticipant, roomId, setConnectionStatus, setParticipants, upsertParticipant, upsertTask, updateTaskProgress]);
 
   const sendMessage = useCallback(async (input: SendMessageInput): Promise<boolean> => {
     const socket = socketRef.current;

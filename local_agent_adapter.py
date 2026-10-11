@@ -23,6 +23,7 @@ import asyncio
 import fcntl
 import hashlib
 import json
+import os
 import re
 import subprocess
 import sys
@@ -30,9 +31,11 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, TextIO
+from urllib.parse import urlencode
 
 import httpx
 import websockets
+from local_agent_reliable import ReliableAgentMixin, _run_supervised_sync
 
 
 def _compact_stderr(stderr: str) -> str:
@@ -249,7 +252,7 @@ def _quick_reply(agent_name: str, content: str) -> Optional[str]:
     return None
 
 
-class LocalAgentAdapter:
+class LocalAgentAdapter(ReliableAgentMixin):
     """Connects a local AI to the project room via WebSocket + A2A."""
 
     def __init__(
@@ -273,7 +276,8 @@ class LocalAgentAdapter:
         self.agent_name = agent_name
         self.agent_id = agent_id
         # Default to agent channel if no room specified
-        self.room = room if room else f"_agent_{agent_name.lower()}"
+        agent_slug = re.sub(r"\s+", "_", agent_name.strip().casefold())
+        self.room = room if room else f"_agent_{agent_slug}"
         self.is_agent_channel = self.room.startswith("_agent_")
         self.command = command
         self.a2a_port = a2a_port
@@ -290,6 +294,7 @@ class LocalAgentAdapter:
         self.ws_url = (
             f"{server.replace('http', 'ws')}/ws/chat/{self.room}"
         )
+        self._init_reliable()
         self._running = True
         self._processed_ids: set[str] = set()  # Track processed message IDs
         self._dialogues: dict[str, dict] = {}
@@ -305,7 +310,11 @@ class LocalAgentAdapter:
         print(f"🤖 [{self.agent_name}] Starting adapter...")
         await self._authenticate()
         await self._register_via_a2a()
-        await self._ws_loop()
+        try:
+            await self._ws_loop()
+        finally:
+            await self._disconnect_reliable()
+            await self.http.aclose()
 
     # ── Auth ──────────────────────────────────────────
 
@@ -337,6 +346,11 @@ class LocalAgentAdapter:
                 )
                 return
 
+            enrollment_key = os.environ.get("MAPR_AGENT_ENROLLMENT_KEY", "")
+            if not enrollment_key:
+                print("  ⚠️  Agent enrollment requires administrator authorization via MAPR_AGENT_ENROLLMENT_KEY")
+                return
+
             register_payload = {
                 "username": self.auth_username,
                 "password": self.auth_password,
@@ -344,7 +358,8 @@ class LocalAgentAdapter:
                 "user_type": "agent",
             }
             register_resp = await self.http.post(
-                "/api/v1/auth/register", json=register_payload
+                "/api/v1/auth/register", json=register_payload,
+                headers={"X-Agent-Enrollment-Key": enrollment_key},
             )
             if register_resp.status_code == 200:
                 self._set_auth_from_response(register_resp.json())
@@ -352,16 +367,17 @@ class LocalAgentAdapter:
                 return
 
             print(
-                "  ⚠️  Auth registration failed; approval creation disabled "
+                "  ⚠️  Auth registration failed; administrator authorization required; approval creation disabled "
                 f"(status={register_resp.status_code})"
             )
-        except Exception as e:
-            print(f"  ⚠️  Auth failed; approval creation disabled: {e}")
+        except Exception:
+            print("  ⚠️  Auth failed; check administrator authorization and connection; approval creation disabled")
 
     def _set_auth_from_response(self, data: dict):
         token = data.get("access_token")
         if not token:
             return
+        self.auth_token = token
         self.http.headers["Authorization"] = f"Bearer {token}"
         self.authenticated = True
 
@@ -385,7 +401,7 @@ class LocalAgentAdapter:
             else:
                 print(f"  ⚠️  A2A registration returned {resp.status_code}")
         except Exception as e:
-            print(f"  ⚠️  A2A registration failed (server may be down): {e}")
+            print("  ⚠️  A2A registration failed; details suppressed")
 
     # ── WebSocket ─────────────────────────────────────
 
@@ -407,14 +423,11 @@ class LocalAgentAdapter:
         # Quick reply or full AI
         quick_response = _quick_reply(self.agent_name, content)
         if quick_response is not None:
-            print(f"  ⚡ Quick reply from {sender_name}: {content[:60]}...")
+            print(f"  ⚡ Quick reply from {sender_name} ({len(content)} chars)")
             response = quick_response
         else:
-            print(f"  💬 Processing task from room {origin_room} ({sender_name}): {content[:60]}...")
-            response = await asyncio.to_thread(
-                self._call_local_ai,
-                self._build_prompt(content),
-            )
+            print(f"  💬 Processing task from room {origin_room} ({sender_name}) ({len(content)} chars)")
+            response = await self._run_local_ai(self._build_prompt(content))
 
         # Send response with target_room for cross-room routing
         await self._maybe_create_approval(origin_room, task_id, content, response)
@@ -433,6 +446,9 @@ class LocalAgentAdapter:
 
     async def _catch_up_missed_messages(self, ws):
         """Fetch recent messages on reconnect and process any missed @mentions."""
+        if self.is_agent_channel:
+            await ws.send(json.dumps({"v": 1, "type": "task_resume", "cursor": ""}))
+            return
         try:
             resp = await self.http.get(
                 f"/api/v1/rooms/{self.room}/messages?limit=20"
@@ -442,44 +458,6 @@ class LocalAgentAdapter:
             data = resp.json()
             messages = data.get("messages", [])
             if not messages:
-                return
-
-            if self.is_agent_channel:
-                # Agent channel: process task-type messages (forwarded @mentions)
-                pending = 0
-                for msg in messages:
-                    msg_id = msg.get("id", "")
-                    if msg_id in self._processed_ids:
-                        continue
-                    if msg.get("msg_type") != "task":
-                        self._processed_ids.add(msg_id)
-                        continue
-                    sender_id = msg.get("sender_id", "")
-                    if sender_id == self.agent_id:
-                        self._processed_ids.add(msg_id)
-                        continue
-
-                    try:
-                        task_data = json.loads(msg.get("content", "{}"))
-                    except (json.JSONDecodeError, TypeError):
-                        self._processed_ids.add(msg_id)
-                        continue
-
-                    pending += 1
-                    print(f"  📋 Catching up missed @{self.agent_name} from {task_data.get('original_sender', '?')}")
-                    ws_data = {
-                        "type": "agent_task",
-                        "message_id": task_data.get("original_id", msg_id),
-                        "task_id": task_data.get("task_id"),
-                        "content": task_data.get("original_content", ""),
-                        "sender_id": msg.get("sender_id", ""),
-                        "sender_name": task_data.get("original_sender", ""),
-                        "origin_room": task_data.get("origin_room", ""),
-                    }
-                    await self._handle_agent_task(ws_data, ws)
-                    self._processed_ids.add(msg_id)  # Also mark the task DB msg to avoid re-scan
-                if pending:
-                    print(f"  ✅ Caught up on {pending} missed task(s)")
                 return
 
             mention = f"@{self.agent_name}"
@@ -516,7 +494,7 @@ class LocalAgentAdapter:
             if pending:
                 print(f"  ✅ Caught up on {pending} missed message(s)")
         except Exception as e:
-            print(f"  ⚠️  Catch-up error: {e}")
+            print("  ⚠️  Catch-up failed; details suppressed")
 
     async def _ws_loop(self):
         """Connect to chat room WebSocket with auto-reconnect."""
@@ -524,7 +502,7 @@ class LocalAgentAdapter:
         while self._running:
             try:
                 async with websockets.connect(
-                    self.ws_url,
+                    self.ws_url + ("?" + urlencode({"token": self.auth_token}) if self.auth_token else ""),
                     ping_interval=30,
                     ping_timeout=10,
                 ) as ws:
@@ -557,15 +535,19 @@ class LocalAgentAdapter:
                             break
                         try:
                             data = json.loads(raw)
-                            await self._handle_message(data, ws)
+                            await self._receive_message(data, ws)
                         except json.JSONDecodeError:
                             continue
 
             except websockets.ConnectionClosed:
                 print(f"  ⚠️  Disconnected. Reconnecting in {retry}s...")
-            except Exception as e:
-                print(f"  ⚠️  Connection error: {e}")
+            except Exception:
+                # A WebSocket URL may contain the bearer token in its query string.
+                # Never echo exception text, which can include the full URL.
+                print("  ⚠️  Connection error; details suppressed")
 
+            finally:
+                await self._disconnect_reliable()
             if self._running:
                 await asyncio.sleep(min(retry, 30))
                 retry = min(retry * 2, 60)
@@ -573,6 +555,8 @@ class LocalAgentAdapter:
     async def _handle_message(self, data: dict, ws):
         """Process an incoming WebSocket message."""
         msg_type = data.get("type")
+        if await self._reliable_message(data, ws):
+            return
 
         # Handle agent_task (cross-room @mentions forwarded by backend)
         if msg_type == "agent_task":
@@ -647,15 +631,12 @@ class LocalAgentAdapter:
 
         quick_response = _quick_reply(self.agent_name, content)
         if quick_response is not None:
-            print(f"  ⚡ Quick reply: {content[:80]}...")
+            print(f"  ⚡ Quick reply ({len(content)} chars)")
             response = quick_response
         else:
             # Call local AI
-            print(f"  💬 Processing: {content[:80]}...")
-            response = await asyncio.to_thread(
-                self._call_local_ai,
-                self._build_prompt(content),
-            )
+            print(f"  💬 Processing ({len(content)} chars)")
+            response = await self._run_local_ai(self._build_prompt(content))
 
         # Send response
         task_id = msg.get("task_id") or data.get("task_id")
@@ -700,9 +681,9 @@ class LocalAgentAdapter:
             elif resp.status_code == 401:
                 print("  ⚠️  Approval skipped: provide --auth-token to create approvals")
             else:
-                print(f"  ⚠️  Approval create failed: {resp.status_code} {resp.text[:120]}")
+                print(f"  ⚠️  Approval create failed: status={resp.status_code}")
         except Exception as e:
-            print(f"  ⚠️  Approval create error: {e}")
+            print("  ⚠️  Approval create failed; details suppressed")
 
     async def _start_dialogue_from_request(self, content: str) -> Optional[str]:
         """Create a Hub dialogue and send the first peer-directed message."""
@@ -741,7 +722,7 @@ class LocalAgentAdapter:
                 f"最多 {dialogue.get('max_turns', self.max_dialogue_turns)} 轮。"
             )
         except Exception as e:
-            return f"启动与 {target} 的连续对话失败：{e}"
+            return f"启动与 {target} 的连续对话失败，请检查连接和权限。"
 
     async def _handle_dialogue_message(self, data: dict, ws):
         """Handle a Hub-relayed dialogue message without requiring @mentions."""
@@ -776,11 +757,8 @@ class LocalAgentAdapter:
             return
 
         await ws.send(json.dumps({"type": "typing", "sender_id": self.agent_id}))
-        print(f"  🔁 Dialogue {dialogue_id[:8]} from {sender_name}: {content[:80]}...")
-        response = await asyncio.to_thread(
-            self._call_local_ai,
-            self._build_dialogue_prompt(sender_name or "peer", content, dialogue),
-        )
+        print(f"  🔁 Dialogue {dialogue_id[:8]} from {sender_name} ({len(content)} chars)")
+        response = await self._run_local_ai(self._build_dialogue_prompt(sender_name or "peer", content, dialogue))
         response = self._trim_dialogue_response(response)
         if _is_dialogue_stop(response):
             await self._send_dialogue_message(dialogue_id, sender_name, response)
@@ -811,7 +789,7 @@ class LocalAgentAdapter:
         resp = await self.http.post("/a2a", json=payload)
         data = resp.json()
         if data.get("error"):
-            print(f"  ⚠️  Dialogue send failed: {data['error'].get('message')}")
+            print("  ⚠️  Dialogue send failed; details suppressed")
             self._dialogues.pop(dialogue_id, None)
 
     async def _end_dialogue(self, dialogue_id: str, reason: str):
@@ -826,7 +804,7 @@ class LocalAgentAdapter:
         try:
             await self.http.post("/a2a", json=payload)
         except Exception as e:
-            print(f"  ⚠️  Dialogue end failed: {e}")
+            print("  ⚠️  Dialogue end failed; details suppressed")
 
     async def _end_all_dialogues(self, reason: str):
         """End every active dialogue known to this adapter."""
@@ -867,36 +845,38 @@ class LocalAgentAdapter:
             return f"[{self.agent_name}] No AI command configured."
 
         try:
-            result = subprocess.run(
-                self.command + [prompt],
-                capture_output=True,
-                text=True,
-                timeout=self.ai_timeout,
-            )
+            result = _run_supervised_sync(self.command, prompt, self.ai_timeout)
+            if result.returncode == 124:
+                return f"[{self.agent_name}] AI timed out."
             output = result.stdout.strip()
-            if result.stderr:
-                print(f"  ⚠️  AI stderr: {result.stderr[:200]}")
             if output:
                 return output[:2000]
             if result.stderr:
                 friendly = _friendly_ai_failure(self.agent_name, result.stderr)
                 if friendly:
                     return friendly
-                error = _compact_stderr(result.stderr)
-                return f"[{self.agent_name}] AI command produced no stdout.\n{error}"
+                return f"[{self.agent_name}] AI command failed."
             return "(No response)"
         except subprocess.TimeoutExpired:
             return f"[{self.agent_name}] ⏰ AI timed out after {self.ai_timeout}s."
         except FileNotFoundError:
-            return f"[{self.agent_name}] ❌ Command not found: {self.command[0]}"
-        except Exception as e:
-            return f"[{self.agent_name}] ❌ Error: {e}"
+            return f"[{self.agent_name}] AI command failed."
+        except Exception:
+            return f"[{self.agent_name}] AI command failed."
 
     # ── Shutdown ──────────────────────────────────────
 
     def stop(self):
         """Graceful shutdown."""
         self._running = False
+        self._reliable_closing = True
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return None  # run() finally has already awaited cleanup outside the loop.
+        if self._shutdown_task is None:
+            self._shutdown_task = asyncio.create_task(self.astop())
+        return self._shutdown_task
 
 # ── CLI ────────────────────────────────────────────────
 
@@ -974,7 +954,7 @@ Examples:
     )
     parser.add_argument(
         "--auth-register", action="store_true",
-        help="Register an agent user if auth login fails with 401/404",
+        help="Register an agent user if login fails with 401/404; requires administrator-provided MAPR_AGENT_ENROLLMENT_KEY environment variable",
     )
 
     args = parser.parse_args()

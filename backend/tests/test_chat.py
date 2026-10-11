@@ -98,7 +98,7 @@ async def test_message_types(db: AsyncSession):
 async def test_message_retention_removes_expired_messages(db: AsyncSession):
     """Messages older than the retention window are deleted and not returned."""
     user = User(id=str(uuid.uuid4()), username="retention", display_name="Retention")
-    room = Room(name="Retention")
+    room = Room(name="Retention", transport="hub")
     db.add(user)
     db.add(room)
     await db.commit()
@@ -133,7 +133,7 @@ async def test_message_retention_removes_expired_messages(db: AsyncSession):
 async def test_message_history_returns_latest_page_oldest_first(db: AsyncSession):
     """Refresh history should show the newest retained messages, oldest to newest."""
     user = User(id=str(uuid.uuid4()), username="latest", display_name="Latest")
-    room = Room(name="Latest")
+    room = Room(name="Latest", transport="hub")
     db.add(user)
     db.add(room)
     await db.commit()
@@ -169,7 +169,7 @@ async def test_message_retention_with_task_and_reply_references(db: AsyncSession
     from app.chat.service import cleanup_expired_messages
 
     user = User(id=str(uuid.uuid4()), username="safe_clean", display_name="SafeClean")
-    room = Room(name="SafeCleanRoom")
+    room = Room(name="SafeCleanRoom", transport="hub")
     db.add_all([user, room])
     await db.commit()
 

@@ -57,6 +57,7 @@ if [[ "$*" == *"alembic"* && "$FAILURE" == migration ]]; then exit 7; fi
     assert (backup / "database.dump").read_text().strip() == "synthetic-backup"
     assert (backup / "database.dump").stat().st_mode & 0o077 == 0
     assert calls.index("pg_dump") < calls.index("alembic")
+    assert calls.index("stop backend") < calls.index("alembic")
     if failure in ("none", "compose_standalone"):
         assert result.returncode == 0, result.stderr
         assert "Deployment healthy" in result.stdout
@@ -71,7 +72,11 @@ if [[ "$*" == *"alembic"* && "$FAILURE" == migration ]]; then exit 7; fi
             assert "pull backend frontend" in calls
     else:
         assert result.returncode != 0
-        assert (target / "docker-compose.yml").read_text() == "# previous compose\n"
-        assert (target / ".env").read_text() == "SYNTHETIC=1\n"
-        assert "images.yml up -d --no-build backend frontend" in calls
+        # Once a migration has been attempted, even its failure can leave a
+        # changed schema. Never restart the old Hub against unverified data.
+        assert "images.yml up -d --no-build backend frontend" not in calls
+        assert calls.strip().endswith("compose stop backend")
+        assert "Backend remains stopped" in result.stderr
+        assert (backup / "docker-compose.yml").read_text() == "# previous compose\n"
+        assert (backup / ".env").read_text() == "SYNTHETIC=1\n"
         assert "Database is not automatically downgraded" in result.stderr

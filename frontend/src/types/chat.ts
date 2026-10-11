@@ -22,6 +22,7 @@ export interface Room {
 }
 
 export interface ChatMessage {
+  room_seq?: number;
   id: string;
   room_id: string;
   sender_id: string;
@@ -39,9 +40,25 @@ export interface PresenceParticipant {
   sender_type: SenderType;
   joined_at: string;
   last_seen_at: string;
+  connection_count?: number;
+}
+
+export interface TaskProgress {
+  phase: "queued" | "running" | "waiting" | "finishing";
+  percent: number;
+  event_seq?: number;
+}
+
+export interface TaskProgressEvent extends TaskProgress {
+  type: "task_progress";
+  task_id: string;
+  room_id?: string;
+  v?: number;
 }
 
 export interface RoomTask {
+  event_seq?: number;
+  progress?: TaskProgress;
   id: string;
   source_agent: string;
   target_agent?: string | null;
@@ -54,6 +71,9 @@ export interface RoomTask {
   created_at: string;
   completed_at?: string | null;
 }
+
+// Reconciliation may send state alone; missing fields are not deletions.
+export type RoomTaskPatch = Pick<RoomTask, "id"> & Partial<Omit<RoomTask, "id" | "progress">>;
 
 /** 消息循环协作的轮次记录 */
 export interface LoopTurn {
@@ -109,9 +129,10 @@ export type RoomSocketEvent =
   | WebSocketTypingEvent
   | WebSocketLoopEvent
   | WebSocketLoopEndEvent
-  | { type: "presence_snapshot"; participants: PresenceParticipant[] }
-  | { type: "user_online" | "user_offline"; participant: PresenceParticipant }
-  | { type: "task_update"; task: RoomTask }
+  | { type: "presence_snapshot"; room_id?: string; participants: PresenceParticipant[] }
+  | { type: "user_online" | "user_offline"; room_id?: string; participant: PresenceParticipant }
+  | { type: "task_update"; task: RoomTaskPatch }
+  | TaskProgressEvent
   | { type: "pong" };
 
 // ── 团队配置 ────────────────────────────────────────────

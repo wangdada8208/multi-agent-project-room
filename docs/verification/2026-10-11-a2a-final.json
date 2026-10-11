@@ -1,0 +1,166 @@
+{
+  "verified_at_utc": "2026-10-11T18:50:00.000000+00:00",
+  "overall_status": "verified",
+  "baseline": "local uncommitted workspace; not a claim about origin/main or production",
+  "head": "da28ab167ba60190537300ea73625b0067f2ae6a",
+  "operation_rules": {
+    "workspace_git_commit": true,
+    "git_push": true,
+    "production_migration": false,
+    "deployment": false
+  },
+  "sse_quota": {
+    "integration_verified": true,
+    "route": "backend/app/a2a/http_protocol.py",
+    "lifespan_sweeper": "backend/app/main.py",
+    "service": "backend/app/a2a/sse_global_quota.py",
+    "sweeper": "backend/app/a2a/sse_sweeper.py",
+    "migration": "backend/alembic/versions/f60c20261011_sse_global_quota.py",
+    "global_limit": 64,
+    "per_user_limit": 4,
+    "lease_seconds": 30,
+    "renew_seconds": 10,
+    "acquire_429_renew_release_crash_sweep_pg_shared_verified": true
+  },
+  "changed_this_turn": [
+    "backend/app/main.py",
+    "backend/app/core/database.py",
+    "backend/app/a2a/http_protocol.py",
+    "backend/app/a2a/server.py",
+    "backend/app/a2a/task_manager.py",
+    "backend/app/chat/service.py",
+    "backend/app/collab/message_loop.py",
+    "backend/app/repository/routes.py",
+    "backend/Dockerfile",
+    "frontend/nginx.conf",
+    "scripts/start.sh",
+    "scripts/deploy.sh",
+    "backend/tests/test_preproduction_security_linux.py",
+    "backend/tests/test_a2a_acceptance_linux.py",
+    "backend/tests/test_agent_mention.py",
+    "backend/tests/test_task_lifecycle_linux.py",
+    "backend/tests/test_ws_reliable_delivery_linux.py",
+    "backend/tests/test_a2a_protocol_v1_linux.py",
+    "tests/test_deploy_script.py",
+    "RUNBOOK.md",
+    "docs/adr/2026-10-11-sse-global-quota.md"
+  ],
+  "tests": {
+    "backend_and_local_adapters": {
+      "total": 617,
+      "passed": 562,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 55,
+      "evidence": "/tmp/claude-1000/-data-projects-multi-agent-project-room/7544b7db-4240-48c3-81bb-979d44599a52/tasks/boosst2c4.output"
+    },
+    "root_tests": {
+      "total": 41,
+      "passed": 41,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "preproduction_security_and_deploy_scripts": {
+      "total": 10,
+      "passed": 10,
+      "failed": 0
+    },
+    "frontend": {
+      "files_passed": 8,
+      "passed": 55,
+      "failed": 0,
+      "evidence": "/tmp/mapr-final-verification/frontend-test.log"
+    },
+    "frontend_build": {
+      "passed": true,
+      "evidence": "/tmp/mapr-final-verification/frontend-build.log"
+    },
+    "git_diff_check": true,
+    "pip_check": true,
+    "shell_syntax_check": true
+  },
+  "preproduction": {
+    "alembic_head": "f60c20261011",
+    "full_upgrade_and_f60_e50_f60_roundtrip": true,
+    "synthetic_shadow_restore": {
+      "passed": true,
+      "table_count": 20,
+      "row_counts_equal": true,
+      "synthetic_content_verified": true,
+      "version": "f60c20261011"
+    },
+    "nginx_loopback_runtime": {
+      "nginx_config": true,
+      "health_proxy": true,
+      "sse_first_frame_seconds": 0.011511352990055457,
+      "websocket_upgrade": true,
+      "query_token_not_logged": true
+    },
+    "docker": "entrypoint/layout/config reviewed; exact app module exercised via real uvicorn tests; Docker is not installed, image build/run not executed",
+    "systemd": "no repository systemd unit or available systemd runtime; Docker Compose remains the documented path",
+    "production_configuration": "production environment/keys were not read; required safe values documented in RUNBOOK.md",
+    "logs_and_permissions": "exception, health, dialogue and repository details suppressed; pure ASGI exception boundary prevents server tracebacks; CORS allowlist; URI logs disabled; existing auth/RBAC/encryption/SSRF/cancel regressions passed",
+    "migration_failure": "writers in local Compose stopped before migration; after migration attempt a failed release keeps backend stopped; other shared-db Hubs require coordinated maintenance"
+  },
+  "linux_mac_e2e": {
+    "passed": true,
+    "target_platform": "Darwin (macOS arm64 on MacBook-Air-2.local)",
+    "target_executor": "Memoh remote execution target f90efb28-6422-4e04-91d9-9d5990fb855e",
+    "python_version": "3.12.13",
+    "checks_summary": "8/8 passed",
+    "checks": [
+      {
+        "name": "Tailscale Mac -> Linux HTTP and Agent Card",
+        "passed": true
+      },
+      {
+        "name": "Presence synchronization across two Linux Hubs",
+        "passed": true
+      },
+      {
+        "name": "bidirectional Mac / Linux WebSocket chat synchronization",
+        "passed": true,
+        "message_id": "8fd86b8b-6102-4e8a-8c6d-6ab79361b3ee"
+      },
+      {
+        "name": "Mac actual LocalAgentAdapter joins, REST A2A task creates and completes",
+        "passed": true,
+        "task_id": "13e0770f-0b53-4dd9-af63-4e8e9f512850"
+      },
+      {
+        "name": "JSON-RPC A2A SendMessage / GetTask",
+        "passed": true,
+        "task_id": "54465120-b930-4d12-8f7e-633298a7fd15"
+      },
+      {
+        "name": "Mac chat disconnect / cursor replay recovers offline Linux message",
+        "passed": true
+      },
+      {
+        "name": "actual Mac Agent disconnect / resume receives and executes task",
+        "passed": true,
+        "task_id": "4a520140-ce2b-491f-bd60-ca16c3053166"
+      },
+      {
+        "name": "owner cancellation stops actual Mac POSIX CLI; late success/artifacts absent",
+        "passed": true,
+        "task_id": "86a130fa-85dd-488f-9f34-3f049e3e5337",
+        "cli_pid": 94118
+      }
+    ],
+    "database_proof": {
+      "tasks_completed_or_canceled": 4,
+      "deliveries_recorded": 4,
+      "cancellation_ack_events": 1,
+      "stored_room_messages": 11,
+      "quota_rows_leak": 0
+    },
+    "evidence_directory": "/tmp/mapr-final-sprint/mac-e2e"
+  },
+  "source_hashes_unchanged_during_final_verification": true,
+  "test_resources": "all temporary Hubs, temporary PostgreSQL 17 instances (port 55482), and background worker processes cleanly stopped; ports free",
+  "remaining_issues": [
+    "Production rollout requires separate human approval, safe environment configuration and a coordinated writer-stop/backup recovery window"
+  ]
+}

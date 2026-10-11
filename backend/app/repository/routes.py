@@ -35,7 +35,7 @@ async def git_status(
     try:
         return _service(room_id).status()
     except RuntimeError as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        raise HTTPException(status_code=500, detail="Repository operation unavailable") from None
 
 
 @router.get("/branch")
@@ -48,7 +48,7 @@ async def git_branch(
     try:
         return _service(room_id).branch()
     except RuntimeError as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        raise HTTPException(status_code=500, detail="Repository operation unavailable") from None
 
 
 @router.get("/log")
@@ -62,7 +62,7 @@ async def git_log(
     try:
         return {"commits": _service(room_id).log(limit=limit)}
     except RuntimeError as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        raise HTTPException(status_code=500, detail="Repository operation unavailable") from None
 
 
 @router.get("/diff")
@@ -75,4 +75,4 @@ async def git_diff(
     try:
         return _service(room_id).diff()
     except RuntimeError as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        raise HTTPException(status_code=500, detail="Repository operation unavailable") from None

@@ -281,8 +281,8 @@ class MessageLoop:
             try:
                 response_text = await send_fn(prompt, role)
             except Exception as e:
-                logger.exception("Agent %s failed", role.agent_name)
-                response_text = f"[error] {e}"
+                logger.warning("Agent %s failed; details suppressed", role.agent_name)
+                response_text = "[error] Agent call failed"
         else:
             response_text = f"[simulated] {role.name} 回复"
 

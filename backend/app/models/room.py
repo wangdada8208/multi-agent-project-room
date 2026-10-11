@@ -2,7 +2,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
-from sqlalchemy import String, Boolean, DateTime, ForeignKey
+from sqlalchemy import String, Boolean, DateTime, ForeignKey, BigInteger
 from sqlalchemy.orm import Mapped, mapped_column
 from app.core.database import Base
 
@@ -16,6 +16,7 @@ class Room(Base):
     id: Mapped[str] = mapped_column(
         String(36), primary_key=True, default=lambda: str(uuid.uuid4())
     )
+    message_seq: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0, server_default="0")
     name: Mapped[str] = mapped_column(String(128), nullable=False)
     description: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
     created_by: Mapped[Optional[str]] = mapped_column(

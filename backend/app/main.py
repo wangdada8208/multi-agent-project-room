@@ -6,13 +6,18 @@ A2A Protocol v1.0 via official a2a-sdk.
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+import logging
 
 from fastapi import FastAPI, Request, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.config import get_settings
-from app.core.database import init_db
+from app.core.database import init_db, async_session
+from app.chat.delivery_sweeper import DeliverySweeper
+from app.chat.task_reconciler import TaskReconciler
+from app.chat.room_synchronizer import RoomSynchronizer
+from app.ws.connection_manager import connection_manager
 from app.gateway.routes import router as gateway_router
 from app.auth.routes import router as auth_router
 from app.api.rooms import router as rooms_router
@@ -28,17 +33,70 @@ from app.api.search import router as search_router
 from app.api.analytics import router as analytics_router
 from app.api.permissions import router as permissions_router
 from app.api.templates import router as templates_router
+from app.api.agent_bindings import router as agent_bindings_router
 from app.api.invites import router as invites_router
 from app.chat.ws_handler import handle_chat
 
+from app.a2a.sse_sweeper import SSEQuotaSweeper
+
 settings = get_settings()
+logger = logging.getLogger(__name__)
+
+
+class SafeHTTPErrorBoundary:
+    """Keep SQL parameters and private exception text out of server tracebacks."""
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope['type'] != 'http':
+            await self.app(scope, receive, send)
+            return
+        started = finished = False
+        async def tracked_send(frame):
+            nonlocal started, finished
+            if frame['type'] == 'http.response.start':
+                started = True
+            elif frame['type'] == 'http.response.body' and not frame.get('more_body', False):
+                finished = True
+            await send(frame)
+        try:
+            await self.app(scope, receive, tracked_send)
+        except Exception:
+            logger.warning('HTTP request failed; exception details suppressed')
+            if not started:
+                await JSONResponse({'error': 'Internal server error'}, status_code=500)(scope, receive, send)
+            elif not finished:
+                await send({'type': 'http.response.body', 'body': b'', 'more_body': False})
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifecycle: create tables on startup."""
     await init_db()
-    yield
+    # Lifespan runs in each worker, including servers that preload before fork.
+    from app.a2a import http_protocol
+    import uuid
+    http_protocol.HUB_ID = str(uuid.uuid4())
+    quota_sweeper = SSEQuotaSweeper(async_session)
+    app.state.sse_quota_sweeper = quota_sweeper
+    quota_sweeper.start()
+    sweeper = DeliverySweeper(async_session)
+    app.state.delivery_sweeper = sweeper
+    sweeper.start()
+    room_sync = RoomSynchronizer(async_session, connection_manager)
+    app.state.room_synchronizer = room_sync
+    room_sync.start()
+    reconciler = TaskReconciler(async_session, connection_manager, settings.database_url, room_sync=room_sync)
+    app.state.task_reconciler = reconciler
+    reconciler.start()
+    try:
+        yield
+    finally:
+        await reconciler.stop()
+        await room_sync.stop()
+        await sweeper.stop()
+        await quota_sweeper.stop()
 
 
 app = FastAPI(
@@ -48,10 +106,10 @@ app = FastAPI(
 )
 
 # ── Middleware ─────────────────────────────────────────
+app.add_middleware(SafeHTTPErrorBoundary)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
-    allow_origin_regex=r"^https?://.*",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -63,7 +121,7 @@ app.add_middleware(
 async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     return JSONResponse(
         status_code=500,
-        content={"error": "Internal server error", "detail": str(exc)},
+        content={"error": "Internal server error"},
     )
 
 
@@ -75,6 +133,7 @@ app.include_router(invites_router)    # /api/v1/rooms/{id}/invites & /api/v1/inv
 app.include_router(chat_router)       # /api/v1/rooms/{id}/messages
 app.include_router(task_router)       # /api/v1/tasks
 app.include_router(approval_router)   # /api/v1/approvals
+app.include_router(agent_bindings_router)
 app.include_router(agent_router)      # /api/v1/agents
 app.include_router(knowledge_router)  # /api/v1/rooms/{id}/docs
 app.include_router(repository_router) # /api/v1/rooms/{id}/git

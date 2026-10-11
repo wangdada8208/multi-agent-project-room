@@ -36,7 +36,16 @@ frontend_port=$(docker inspect --format '{{range (index .HostConfig.PortBindings
 export MAPR_FRONTEND_PORT="$frontend_port"
 echo "Preserving frontend HTTP port: $frontend_port"
 printf 'services:\n  backend:\n    image: %s\n  frontend:\n    image: %s\n' "$backend_image" "$frontend_image" > "$backup/images.yml"
+migration_started=false
 rollback() {
+  if [[ "$migration_started" == true ]]; then
+    # e50 explicitly rejects in-place downgrade/new-old writer coexistence.
+    # A failed migration can also have partially committed on some backends.
+    "${dc[@]}" stop backend || echo 'Could not stop backend; operator intervention required.' >&2
+    echo "Migration attempted. Backend remains stopped; review schema and restore the database backup into a separate shadow before recovery: $backup/database.dump" >&2
+    echo 'Database is not automatically downgraded. Previous images are not restarted against an unverified schema.' >&2
+    return
+  fi
   echo "Deployment failed. Restoring previous images; database backup: $backup/database.dump" >&2
   cp "$backup/docker-compose.yml" "$target/docker-compose.yml"
   cp "$backup/.env" "$target/.env"
@@ -74,6 +83,11 @@ if docker image inspect "ghcr.io/wangdada8208/multi-agent-project-room-backend:$
 else
   "${dc[@]}" pull backend frontend
 fi
+# All writers sharing this database must be stopped during the maintenance
+# window. This command stops this Compose project's Hub; external Hubs require
+# the operator's coordinated stop before invoking this script.
+"${dc[@]}" stop backend
+migration_started=true
 "${dc[@]}" run --rm --no-deps backend python3 -m alembic -c /app/alembic.ini upgrade head
 "${dc[@]}" up -d --no-build backend frontend
 healthy=false

@@ -100,8 +100,8 @@ export function RoomPage() {
     enabled: !!roomQuery.data && !isEncrypted,
   });
   useEffect(() => {
-    if (messagesQuery.data) setMessages(messagesQuery.data);
-  }, [messagesQuery.data, setMessages]);
+    if (messagesQuery.data) setMessages(messagesQuery.data, roomId);
+  }, [messagesQuery.data, setMessages, roomId]);
 
   const ownerNotesQuery = useQuery({
     queryKey: ["ownerNotes"],

@@ -20,16 +20,25 @@ def build_hub_card(public_url: str) -> AgentCard:
     )
     card.version = "2.0.0"
     card.capabilities.streaming = True
-    card.capabilities.push_notifications = True
+    card.capabilities.push_notifications = False
+    auth = card.security_schemes['bearer'].http_auth_security_scheme
+    auth.scheme = 'bearer'
+    auth.bearer_format = 'MAPR signed access token'
+    card.security_requirements.add().schemes['bearer'].SetInParent()
     card.default_input_modes.append("text/plain")
     card.default_input_modes.append("application/json")
     card.default_output_modes.append("text/plain")
     card.default_output_modes.append("application/json")
 
     iface = AgentInterface()
-    iface.url = public_url.rstrip("/")
+    iface.url = public_url.rstrip("/") + "/a2a/rpc"
+    iface.protocol_version = "1.0"
     iface.protocol_binding = "JSONRPC"
     card.supported_interfaces.append(iface)
+    rest = card.supported_interfaces.add()
+    rest.url = public_url.rstrip("/") + "/a2a"
+    rest.protocol_binding = "HTTP+JSON"
+    rest.protocol_version = "1.0"
 
     _skills = [
         ("chat", "聊天", "WebSocket 聊天通信", ["chat", "messaging"]),
@@ -71,6 +80,7 @@ def build_agent_card(
     iface = AgentInterface()
     iface.url = url.rstrip("/")
     iface.protocol_binding = "JSONRPC"
+    iface.protocol_version = "1.0"
     card.supported_interfaces.append(iface)
 
     for s in (skills or []):

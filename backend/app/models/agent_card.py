@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
-from sqlalchemy import String, Boolean, DateTime, JSON
+from sqlalchemy import String, Boolean, DateTime, JSON, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column
 from app.core.database import Base
 
@@ -17,6 +17,9 @@ class AgentCardRecord(Base):
 
     id: Mapped[str] = mapped_column(
         String(36), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    agent_user_id: Mapped[Optional[str]] = mapped_column(
+        String(36), ForeignKey("users.id"), nullable=True, index=True
     )
     agent_name: Mapped[str] = mapped_column(String(128), nullable=False)
     agent_card_url: Mapped[str] = mapped_column(String(512), nullable=False)

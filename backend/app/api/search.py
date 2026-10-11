@@ -1,12 +1,15 @@
 """Search API: full-text message search within a room."""
 from __future__ import annotations
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.permissions import require_role
+from app.chat import service as chat_service
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.chat.models import Message
+from app.models.room import Room
 from app.models.user import User
 
 router = APIRouter(prefix="/api/v1/rooms", tags=["search"])
@@ -21,10 +24,13 @@ async def search_messages(
     current_user: User = Depends(get_current_user),
 ) -> dict:
     """Full-text search messages in a room."""
-    from app.models.room import Room
+    room = await chat_service.resolve_room(db, room_id)
+    if room is None:
+        raise HTTPException(status_code=404, detail="Room not found")
 
-    room = await db.get(Room, room_id)
-    if room is not None and room.transport == "xmtp":
+    await require_role(room.id, current_user, db, min_role="viewer")
+
+    if room.transport == "xmtp":
         return {
             "results": [],
             "reason": "body_not_on_hub",
@@ -36,7 +42,7 @@ async def search_messages(
     stmt = (
         select(Message)
         .where(
-            Message.room_id == room_id,
+            Message.room_id == room.id,
             or_(
                 Message.content.ilike(pattern),
                 Message.sender_name.ilike(pattern),

@@ -8,6 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agent import service as agent_service
 from app.core.database import get_db
+from app.core.security import get_current_user
+from app.models.user import User
 
 router = APIRouter(prefix="/api/v1/agents", tags=["agents"])
 
@@ -23,11 +25,16 @@ class RegisterAgentRequest(BaseModel):
 async def register_agent(
     payload: RegisterAgentRequest,
     db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
 ) -> dict:
+    name = await agent_service.authorize_agent_registration(db, user, payload.name)
+    url = payload.url or f"local://{name}"
+    agent_service.validate_registration_url(name, url)
     agent = await agent_service.register_agent(
         db=db,
-        name=payload.name,
-        url=payload.url or f"local://{payload.name.lower()}",
+        agent_user_id=user.id,
+        name=name,
+        url=url,
         capabilities=payload.capabilities,
         skills=payload.skills,
     )

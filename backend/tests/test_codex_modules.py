@@ -2,12 +2,18 @@
 
 import pytest
 from httpx import AsyncClient
+from app.core.security import create_access_token
+from app.models.user import User
 
 
 @pytest.mark.asyncio
-async def test_agent_register_and_list(client: AsyncClient):
+async def test_agent_register_and_list(client: AsyncClient, db):
+    user = User(username="codex", display_name="Codex", user_type="agent")
+    db.add(user)
+    await db.commit()
     resp = await client.post(
         "/api/v1/agents/register",
+        headers={"Authorization": f"Bearer {create_access_token(user.id, 'agent')}"},
         json={
             "name": "Codex",
             "url": "local://codex",
@@ -16,7 +22,7 @@ async def test_agent_register_and_list(client: AsyncClient):
     )
     assert resp.status_code == 200
     agent = resp.json()["agent"]
-    assert agent["name"] == "Codex"
+    assert agent["name"] == "codex"
     assert agent["status"] == "online"
 
     resp = await client.get("/api/v1/agents")

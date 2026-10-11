@@ -2,12 +2,19 @@ from __future__ import annotations
 """Agent Discovery — register, discover, and health-check agents."""
 
 from datetime import datetime, timezone
+import logging
 
-import httpx
 from sqlalchemy import select, delete
 
 from app.core.database import async_session
 from app.models.agent_card import AgentCardRecord
+from app.a2a.url_policy import (
+    validate_agent_card_url,
+    safe_probe_agent_url,
+    SSRFValidationError,
+)
+
+logger = logging.getLogger(__name__)
 
 
 class AgentDiscovery:
@@ -15,24 +22,32 @@ class AgentDiscovery:
 
     @staticmethod
     async def register(
-        agent_name: str, card_url: str, capabilities: list[str] | None = None
+        agent_name: str, card_url: str, capabilities: list[str] | None = None,
+        *, agent_user_id: str | None = None
     ) -> dict:
         """Register or update an agent. Upserts by agent_name + card_url."""
-        # Verify the agent is reachable
+        # Verify and pin the agent card URL against SSRF policy before outbound request
+        validated = validate_agent_card_url(card_url)
+
+        # Verify the agent is reachable using safe pinned outbound client
         card_data = None
         for probe_path in ("/.well-known/agent-card.json", "/a2a/.well-known/agent-card"):
             try:
-                async with httpx.AsyncClient(timeout=5) as client:
-                    resp = await client.get(f"{card_url.rstrip('/')}{probe_path}")
-                    if resp.status_code == 200:
-                        card_data = resp.json()
-                        break
+                resp = await safe_probe_agent_url(validated, probe_path, timeout=5.0)
+                if resp.status_code == 200:
+                    card_data = resp.json()
+                    break
             except Exception:
                 pass
 
         skills = card_data.get("skills", []) if card_data else []
 
         async with async_session() as db:
+            if agent_user_id is not None:
+                from app.models.user import User
+                from app.agent.service import authorize_agent_registration
+                actor = await db.get(User, agent_user_id, populate_existing=True)
+                await authorize_agent_registration(db, actor, agent_name)
             # Check for existing record with same name + url
             stmt = select(AgentCardRecord).where(
                 AgentCardRecord.agent_name == agent_name,
@@ -42,6 +57,16 @@ class AgentDiscovery:
             record = result.scalars().first()
 
             if record:
+                if agent_user_id is not None:
+                    from sqlalchemy import update
+                    from fastapi import HTTPException
+                    linked = await db.execute(update(AgentCardRecord).where(
+                        AgentCardRecord.id == record.id,
+                        (AgentCardRecord.agent_user_id.is_(None)) | (AgentCardRecord.agent_user_id == agent_user_id),
+                    ).values(agent_user_id=agent_user_id).execution_options(synchronize_session=False))
+                    if linked.rowcount != 1:
+                        await db.rollback()
+                        raise HTTPException(403, "Agent registry identity conflict")
                 # Update existing
                 record.capabilities = capabilities or []
                 record.skills = skills
@@ -61,6 +86,7 @@ class AgentDiscovery:
 
                 # Create new
                 record = AgentCardRecord(
+                    agent_user_id=agent_user_id,
                     agent_name=agent_name,
                     agent_card_url=card_url,
                     capabilities=capabilities or [],
@@ -165,16 +191,22 @@ class AgentDiscovery:
             offline = 0
 
             for record in records:
+                # Re-validate every URL prior to outbound request
+                try:
+                    validated = validate_agent_card_url(record.agent_card_url)
+                except Exception:
+                    # Disallowed or invalid legacy URL: safely mark offline without probing
+                    record.is_active = False
+                    offline += 1
+                    continue
+
                 alive = False
                 for probe_path in ("/health", "/.well-known/agent-card.json"):
                     try:
-                        async with httpx.AsyncClient(timeout=3) as client:
-                            resp = await client.get(
-                                f"{record.agent_card_url.rstrip('/')}{probe_path}"
-                            )
-                            if resp.status_code == 200:
-                                alive = True
-                                break
+                        resp = await safe_probe_agent_url(validated, probe_path, timeout=3.0)
+                        if resp.status_code == 200:
+                            alive = True
+                            break
                     except Exception:
                         continue
 

@@ -107,7 +107,11 @@ Hub 不参与这条链路，也不保存任何相关内容。
 登录认证仅能证明发起请求的客户端拥有有效账号。
 登录认证不能证明该账号对特定智能体拥有归属权。
 也不能证明该账号具备特定会话的访问授权。
-系统后续演进必须将 `current_user` 强绑定到具体智能体实例与房间权限。
+2026-10-10 阶段一源码新增永久主人绑定：`User.owner_user_id`、一次性邀请事务兑换，
+以及注册时 `AgentCardRecord.agent_user_id` 的认证主体关联。旧账号/Card 不自动认领。
+绑定仅记录归属，不自动授予房间、私有数据或执行权限；房间角色检查仍独立生效。
+具体契约及迁移边界见 `docs/adr/2026-10-10-agent-owner-binding.md`。
+阶段一增量迁移只在合成临时库验证，真实数据库未应用；后续各阶段本地状态见本文末尾。
 
 ### 数据流向边界
 
@@ -145,3 +149,121 @@ Hub 不参与这条链路，也不保存任何相关内容。
 本地工作区包含前端 P0 到 P3 阶段的界面增强。
 本地另有独立的受控调度器原型代码。
 这些能力尚未合并至远端，不得视为已就绪的生产特性。
+
+## 2026-10-10 阶段三本地 WS 投递
+
+本地 @mention 任务与 AgentTaskDelivery 同事务创建；投递只关联真实 A2ATask 和
+经验证的 Agent 账号，消息 ID 单独追溯。v=1 ACK 确认后才执行，续租与结果
+绑定连接、attempt、目标房间及当前任务权限。取消先写 TaskService 终态，再优先
+发送专用 Agent 通道控制；结果与消息同事务提交，迟到正文不落库、不广播。
+适配器单 worker、最多32待办，异步子进程 TERM/KILL/wait，接收循环持续处理控制帧。
+重连按持久投递分页；已 ACK 租约失效标记 uncertain，禁止自动重复执行。
+2026-10-11 增量：lifespan 启停后台扫描器，默认每 10 秒最多检查 50 条，
+单轮 5 秒超时，每条独立事务。过期租约 CAS 改为 uncertain，任务暂停至
+input_required 等待人工核实，取消/完成/续租赢家不会被覆盖；多扫描器共享 SQL fencing。
+本节初版的多副本通知缺口由下文 2026-10-11 PostgreSQL 对账实现补充。
+公共聊天和 presence 广播仍只在同进程；没有 Redis Pub/Sub。
+协议、增量迁移与未证明限制见 docs/adr/2026-10-10-ws-reliable-delivery.md。
+真实数据库未迁移，生产未部署；不承诺 exactly-once。
+
+本次增量将派发/过期检查与取消按父任务锁串行化，锁后重读当前状态。
+进度仅在事务提交后广播，携带持久 event_seq；房间 WebSocket 的 task_events
+支持 after_seq/limit 重放同一事件流，逐次验证房间权限。闲置连接在每次广播前
+复核 JWT、当前账号和房间权限，撤销后停止投递。无新增数据库结构或迁移；
+这些能力沿用 TaskService，HTTP A2A/SSE 继续使用同一序号。
+
+
+### 阶段四 HTTP 与 SSE（2026-10-10，本地未提交）
+
+使用已安装 a2a-sdk 1.2.2 的官方 REST/JSONRPC dispatcher 与 protobuf schema。
+标准任务路由进入 SDK 前校验真实账号、房间权限、目标 Agent 及永久归属；
+SDK context 注入认证主体。公开入口仅 AgentCard，要求任务调用 A2A-Version: 1.0。
+发送走 SQL TaskService 与阶段三持久投递；取消 CAS 后发送执行者取消帧。
+持久 SSE 的 id 为 task_events.event_seq，支持 Last-Event-ID/after_seq、轮询、
+心跳、连接配额和有界寿命；权限撤销/过期令牌终止订阅。
+XMTP 房间拒绝 HTTP 明文发送，查询/订阅隐藏结果正文。无需新增数据库迁移。
+具体已验证范围和限制见 docs/adr/2026-10-10-a2a-standard-http-sse.md。
+
+2026-10-11 正式增量：自动对话出站统一为 A2AClient.SendMessage，保留固定 IP、
+Host/SNI、TLS 校验、DNS 重验证、禁代理/重定向。标准 SendMessage 默认阻塞到
+终态/中断态，configuration.returnImmediately=true 显式非阻塞；阻塞等待上限 60 秒，
+超时返回标准错误并保留任务。流首帧为无事件 ID 的 Task 快照，随后按持久 seq 回放。
+无 cursor 的终态订阅拒绝；带 Last-Event-ID/after_seq 的终态回放为项目扩展。
+协议、错误码、任务取消、流限额和真实本机标准远端互操作验收见
+docs/adr/2026-10-11-ws-sweeper-http-a2a-acceptance.md。无本次新增数据库结构/迁移。
+
+
+### 2026-10-11 PostgreSQL 事务唤醒与循环任务对账（本地未提交）
+
+唯一总线为 `pg_wakeup.PgWakeup`，频道 `mapr_wakeup_v1`，消息仅含
+`{v:1,kind:room,id:房间ID}`。TaskService 的持久事件，以及派发、租约和取消
+写入，在原业务事务提交前调用 `signal_in_transaction`；回滚不唤醒。
+每 worker 仅一条独立 LISTEN 连接，断线退避并继续周期轮询，恢复后立即查 DB。
+
+`TaskReconciler` 只扫描本 worker 已认证并登记的在线连接，最多16个连接/轮、
+50行/连接；一条扫描 DB session 串行使用，网络发送前关闭。DB 故障有界退避，
+轮询抖动，通知合并，缓存最多4096条。每轮 UUID keyset 有固定上界，结束后
+从空游标重扫，UUID/时间戳/数据库 sequence 均不作为提交顺序。`task_resume`
+使用 `snap1:` 显式分页游标，仍接受旧 UUID 游标；客户端不得当增量高水位。
+
+未 ACK 的有效 offer 保持 attempt 重播。仅未派发或60秒窗口已过期时，通过
+单独事务、父任务锁和原 attempt/deadline 校验修复派发；多个 Hub 只能一个胜出。
+已 ACK 过期仍为 uncertain，禁止自动重新执行。取消从持久任务/投递状态恢复；
+房间收到状态快照与最新持久进度，HTTP/SSE/task_events 负责逐条历史事件重放。
+每次发送复核身份和房间权限，绑定主人的房间角色撤销也禁止继续投递。
+
+阶段5-A之前跨 Hub 不同步聊天室 Message 或 presence；任务状态帧只含元数据。
+浏览器收到元数据后通过原有鉴权 HTTP 路由获取完整任务，防止不完整快照覆盖 UI。
+本次无新 schema 或迁移，d40 和 SSE 生命周期修复保持。正确性依赖数据库可用、
+有界负载和客户端 ACK/执行幂等；不承诺 exactly-once、固定最大交付时延或无限吞吐。
+设计及验收见 `docs/adr/2026-10-11-pg-task-reconciliation.md`。
+
+
+### 阶段5-A：普通房间消息与全局Presence（本地未提交）
+
+沿用唯一 `mapr_wakeup_v1` 与 `pg_wakeup.PgWakeup`，RoomSynchronizer没有第二个
+LISTEN连接。通知只携带room标识，正文只从数据库经当前房间授权读取后发送。
+无通知/监听恢复/创建者崩溃由周期对账补偿；SQLite不使用PG通知。
+
+每房间 `rooms.message_seq` 在业务事务内UPDATE并持行锁到事务结束；
+`messages.room_seq` 在统一ORM flush钩子中分配、唯一(room_id,room_seq)。同房间
+后一写入无法先提交，回滚归还计数器；UUID、created_at、自增sequence均不是
+提交游标。钩子还再次校验DB当前transport，XMTP正文写入被拒绝。
+REST `after_seq` 稳定分页；旧 `after=ISO` 返回重叠历史，不按创建时间跳过晚提交。
+旧WS默认分批重放全部留存消息、以ID消费去重；新版可用 `message_cursor` /
+`messages_resume` 续传。可选 `client_message_id` 在(room,sender,key)下幂等；
+同key异正文拒绝，同正文重试不新建消息或mention任务。
+
+每Hub在线socket仍由本地ConnectionManager持有，所有普通消息广播走同一有序
+DB对账；每帧以及空闲连接复核签名访问令牌、账号类型、当前房间权限/活性。
+元数据/角色变化通过 `room_updated`，撤权、失活、删除强制关闭订阅。
+owner专用DELETE是软删除，保留历史FK；分享链接亦拒绝失活房间。
+
+`room_presences` 独立connection UUID主键，room/user/connection与hub-owner固定；
+DB时钟下30秒租约、10秒续期，仅续尚未过期且owner相同的原连接，不能复活僵尸。
+跨tab/Hub按当前获准user聚合，`presence_snapshot` 带online_count和connection_count。
+SIGKILL无需本地离线广播，租约过期后排除并有界删除；正常关闭删除自己的租约。
+全局Presence也用于当前房间WS Agent发现，不能越房间扩展权限。
+
+对账每轮最多16连接、每连接50消息，单任务串行池连接且WS发送前归还；默认
+约1秒抖动轮询，错误指数退避上限10秒，回收过期租约每轮100条，Presence列表
+上限200成员（online_count不截断）。依赖有界负载，不保证固定延时/无限吞吐。
+此层不提供typing/system临时帧跨Hub补偿、全局房间目录推送或exactly-once；
+有保留期限的消息不会恢复已清理正文。ORM之外的直接SQL消息写入不在序号契约。
+
+需要未来另行授权的e50迁移；停写升级，不支持新旧Hub混跑。不可就地downgrade，
+合成数据shadow/备份恢复验证不等于生产回滚演练。维护步骤及边界见
+`docs/adr/2026-10-11-multi-hub-chat-presence.md`。
+
+### SSE 全局租约配额（本地未提交，2026-10-11）
+
+HTTP SSE 完成认证/任务授权后，通过独立短事务申请 `sse_stream_leases`。
+共享 PostgreSQL 主库使用固定 advisory transaction lock 序列化配额：全局64、
+每账号4，TTL30秒、独立10秒续租。流式创建先随机reservation占位，再绑定真实
+任务；限流返回HTTP429/Retry-After和协议错误。进程内计数只用于观测。
+响应每次ASGI写前检查单调时钟期限，续租失效停止生产并结束响应；生成器与
+响应退出幂等释放，异常提交/崩溃留下的租约通过期限和lifespan sweep回收。
+SQLite只支持本机开发，独立Core表不进入Base.metadata；PG启动不自动建表。
+新增f60迁移接e50，必须未来单独审批生产执行，所有Hub使用同一策略/主库。
+该配额约束有效租约，无法撤回已缓冲字节或保证暂停进程的TCP立即断开。
+见 `docs/adr/2026-10-11-sse-global-quota.md`。

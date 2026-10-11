@@ -43,7 +43,8 @@ async def require_role(room_id: str, user: User, db: AsyncSession, min_role: str
     """Require at least the specified role in a room. Raises 403 if insufficient."""
     perm = await get_room_permission(room_id, user, db)
     hierarchy = {"viewer": 0, "member": 1, "owner": 2}
-    if perm is None:
+    room = await db.get(Room, room_id)
+    if perm is None or perm.role not in hierarchy or not room or not room.is_active:
         raise HTTPException(status_code=403, detail="No access to this room")
     if hierarchy.get(perm.role, 0) < hierarchy.get(min_role, 0):
         raise HTTPException(status_code=403, detail=f"Requires {min_role} role")

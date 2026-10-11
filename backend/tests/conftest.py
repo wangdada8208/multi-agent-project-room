@@ -21,6 +21,7 @@ if str(BACKEND_DIR) not in sys.path:
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+from app.a2a.sse_global_quota import LEASE_METADATA
 from app.main import app
 from app.core.database import Base, get_db
 from app.a2a import task_manager as a2a_task_manager
@@ -50,8 +51,10 @@ async def setup_db():
     """Create tables before each test, drop after."""
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        await conn.run_sync(LEASE_METADATA.create_all)
     yield
     async with engine.begin() as conn:
+        await conn.run_sync(LEASE_METADATA.drop_all)
         await conn.run_sync(Base.metadata.drop_all)
 
 

@@ -35,6 +35,8 @@ class Base(DeclarativeBase):
 async def init_db():
     """Create all tables. Called from FastAPI lifespan startup."""
     # Import all models so Base.metadata is populated
+    import app.models.agent_task_delivery  # noqa: F401
+    import app.models.agent_binding  # noqa: F401
     import app.models.user  # noqa: F401
     import app.models.room  # noqa: F401
     import app.models.agent_card  # noqa: F401
@@ -45,12 +47,16 @@ async def init_db():
     import app.knowledge.models  # noqa: F401
     import app.files.models  # noqa: F401
     import app.models.room_template  # noqa: F401
+    import app.models.room_presence  # noqa: F401
     import app.models.room_permission  # noqa: F401
     import app.models.analytics  # noqa: F401
     import app.models.room_share  # noqa: F401
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        if conn.dialect.name == "sqlite":
+            from app.a2a.sse_global_quota import LEASE_METADATA
+            await conn.run_sync(LEASE_METADATA.create_all)
 
 
 async def get_db() -> AsyncSession:  # type: ignore[misc]
@@ -70,5 +76,5 @@ async def check_database_connection() -> dict:
                 __import__("sqlalchemy").text("SELECT 1")
             )
             return {"status": "connected", "reason": None}
-    except Exception as e:
-        return {"status": "error", "reason": str(e)}
+    except Exception:
+        return {"status": "error", "reason": "Database unavailable"}

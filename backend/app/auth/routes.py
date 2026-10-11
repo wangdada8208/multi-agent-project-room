@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import hmac
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
+from app.config import get_settings
+from app.agent.service import find_username_matches
 from app.core.security import create_access_token, get_current_user, hash_password, verify_password
 from app.models.user import User
 from .rate_limit import check_rate_limit, record_attempt, clear_attempts
@@ -39,19 +42,31 @@ def _auth_response(user: User) -> dict:
 async def register(request: Request, payload: RegisterRequest, db: AsyncSession = Depends(get_db)) -> dict:
     check_rate_limit(request, "register")
 
-    existing = await db.execute(select(User).where(User.username == payload.username))
-    if existing.scalar_one_or_none() is not None:
+    if payload.user_type == "agent":
+        secret = get_settings().agent_enrollment_secret.get_secret_value()
+        key = request.headers.get("X-Agent-Enrollment-Key", "")
+        if not secret or not hmac.compare_digest(key.encode("utf-8"), secret.encode("utf-8")):
+            raise HTTPException(status_code=403, detail="Agent enrollment requires administrator authorization")
+
+    # Canonicalize all new accounts so human and agent names share the existing
+    # DB unique constraint even across processes; no process-local lock is used.
+    username = payload.username.casefold()
+    if await find_username_matches(db, username):
         raise HTTPException(status_code=409, detail="Username already exists")
 
     user = User(
-        username=payload.username,
+        username=username,
         display_name=payload.display_name,
         user_type=payload.user_type,
         password_hash=hash_password(payload.password),
         last_seen_at=datetime.now(timezone.utc),
     )
     db.add(user)
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(status_code=409, detail="Username already exists") from None
     await db.refresh(user)
 
     clear_attempts(request, "register")
@@ -62,8 +77,8 @@ async def register(request: Request, payload: RegisterRequest, db: AsyncSession 
 async def login(request: Request, payload: LoginRequest, db: AsyncSession = Depends(get_db)) -> dict:
     check_rate_limit(request, "login")
 
-    result = await db.execute(select(User).where(User.username == payload.username))
-    user = result.scalar_one_or_none()
+    matches = await find_username_matches(db, payload.username)
+    user = matches[0] if len(matches) == 1 else None
     if user is None or not verify_password(payload.password, user.password_hash):
         record_attempt(request, "login")
         raise HTTPException(status_code=401, detail="Invalid username or password")

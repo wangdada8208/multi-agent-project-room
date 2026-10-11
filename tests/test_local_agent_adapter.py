@@ -4,6 +4,7 @@ import json
 import subprocess
 import sys
 from pathlib import Path
+from urllib.parse import parse_qs, urlparse
 
 import pytest
 
@@ -62,7 +63,7 @@ def test_call_local_ai_returns_friendly_usage_limit(monkeypatch):
             stderr="ERROR: You've hit your usage limit. Upgrade to Pro.",
         )
 
-    monkeypatch.setattr(subprocess, "run", fake_run)
+    monkeypatch.setattr("local_agent_adapter._run_supervised_sync", fake_run)
 
     response = adapter._call_local_ai("hello")
 
@@ -185,3 +186,48 @@ async def test_unrelated_agent_message_without_mention_is_ignored(monkeypatch):
 
     assert called is False
     assert ws.sent == []
+
+
+@pytest.mark.asyncio
+async def test_websocket_connection_carries_authenticated_token_without_logging_it(monkeypatch, capsys):
+    adapter = LocalAgentAdapter(
+        server="http://test",
+        room="room-1",
+        agent_name="Codex",
+        agent_id="codex-local",
+        command=["codex"],
+        a2a_port=8765,
+        ai_timeout=120,
+        auth_token="mock-secret-token",
+    )
+    captured = {}
+
+    class FakeSocket(FakeWebSocket):
+        def __aiter__(self):
+            async def empty():
+                if False:
+                    yield ""
+            return empty()
+
+    class FakeConnection:
+        async def __aenter__(self):
+            adapter._running = False
+            return FakeSocket()
+
+        async def __aexit__(self, *args):
+            return False
+
+    def fake_connect(url, **kwargs):
+        captured["url"] = url
+        return FakeConnection()
+
+    async def no_catch_up(ws):
+        return None
+
+    monkeypatch.setattr("local_agent_adapter.websockets.connect", fake_connect)
+    monkeypatch.setattr(adapter, "_catch_up_missed_messages", no_catch_up)
+
+    await adapter._ws_loop()
+
+    assert parse_qs(urlparse(captured["url"]).query) == {"token": ["mock-secret-token"]}
+    assert "mock-secret-token" not in capsys.readouterr().out

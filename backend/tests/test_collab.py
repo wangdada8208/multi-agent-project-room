@@ -167,6 +167,31 @@ import asyncio
 
 
 class TestAgentDiscoveryDedup:
+    @pytest.fixture(autouse=True)
+    def mock_discovery_url_policy(self, monkeypatch):
+        """Mock outbound URL policy & network probing for pure DB dedup unit tests."""
+        from urllib.parse import urlsplit
+        from app.a2a.url_policy import ValidatedTarget
+
+        def fake_validate(url: str) -> ValidatedTarget:
+            parsed = urlsplit(url)
+            port = parsed.port or (443 if parsed.scheme == "https" else 80)
+            return ValidatedTarget(
+                scheme=parsed.scheme or "http",
+                original_host=parsed.hostname or "synthetic.test",
+                port=port,
+                pinned_ip="93.184.216.34",
+                is_ipv6=False,
+                base_path=parsed.path or "",
+                is_allowlisted_local=False,
+            )
+
+        async def fake_probe(*args, **kwargs):
+            raise ConnectionError("synthetic probe disabled in unit test")
+
+        monkeypatch.setattr("app.a2a.discovery.validate_agent_card_url", fake_validate)
+        monkeypatch.setattr("app.a2a.discovery.safe_probe_agent_url", fake_probe)
+
     @pytest.mark.asyncio
     async def test_register_upsert_same_name_url(self, db):
         """Same name + URL should update, not create duplicate."""
@@ -225,25 +250,57 @@ class TestAgentDiscoveryDedup:
 
 class TestDialogueAutoRun:
     @pytest.mark.asyncio
-    async def test_dialogues_run_creates_and_executes(self, client: AsyncClient, auth_headers: dict):
+    async def test_dialogues_run_creates_and_executes(self, client: AsyncClient, auth_headers: dict, monkeypatch):
         """dialogues/run should create a dialogue and auto-execute turns."""
-        resp = await client.post("/a2a/dialogue-rpc", json={
-            "jsonrpc": "2.0",
-            "method": "dialogues/run",
-            "params": {
-                "room_id": "auto-run-room",
-                "initiator_agent": "AgentA",
-                "participants": ["AgentB"],
-                "topic": "讨论登录方案",
-                "max_turns": 2,
-            },
-            "id": "run-1",
-        }, headers=auth_headers)
-        assert resp.status_code == 200
-        result = resp.json().get("result", {})
-        assert result["status"] == "active"
-        assert result["auto_run"] is True
-        assert len(result["participants"]) >= 2
+        from app.a2a import server
+
+        room_resp = await client.post("/api/v1/rooms", headers=auth_headers,
+                                      json={"name": "Auto Run Room", "transport": "xmtp"})
+        assert room_resp.status_code == 200
+        room_id = room_resp.json()["room"]["id"]
+        me_resp = await client.get("/api/v1/auth/me", headers=auth_headers)
+        assert me_resp.status_code == 200
+        user_id = me_resp.json()["user"]["id"]
+        permissions = await client.get(f"/api/v1/rooms/{room_id}/permissions", headers=auth_headers)
+        assert permissions.status_code == 200
+        assert any(member["user_id"] == user_id and member["role"] in ("owner", "member")
+                   for member in permissions.json()["members"])
+
+        executed = []
+        loop_tasks = []
+
+        async def fake_loop(dialogue_id):
+            # Exercise background scheduling without network or database work.
+            loop_tasks.append(asyncio.current_task())
+            executed.append(dialogue_id)
+
+        monkeypatch.setattr(server, "_run_dialogue_loop", fake_loop)
+        try:
+            resp = await client.post("/a2a/dialogue-rpc", json={
+                "jsonrpc": "2.0",
+                "method": "dialogues/run",
+                "params": {
+                    "room_id": room_id,
+                    "initiator_agent": "AgentA",
+                    "participants": ["AgentB"],
+                    "topic": "讨论登录方案",
+                    "max_turns": 2,
+                },
+                "id": "run-1",
+            }, headers=auth_headers)
+            await asyncio.sleep(0)
+            assert resp.status_code == 200
+            result = resp.json().get("result", {})
+            assert result["status"] == "active"
+            assert result["auto_run"] is True
+            assert len(result["participants"]) >= 2
+            assert result["room_id"] == room_id
+            assert executed == [result["dialogue_id"]]
+        finally:
+            await asyncio.sleep(0)
+            await asyncio.gather(*loop_tasks)
+            for dialogue_id in executed:
+                server.DIALOGUES.pop(dialogue_id, None)
 
     @pytest.mark.asyncio
     async def test_dialogues_run_requires_room(self, client: AsyncClient, auth_headers: dict):

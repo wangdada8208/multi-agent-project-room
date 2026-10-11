@@ -50,10 +50,17 @@ def test_find_mentioned_agents_subword_boundary():
 
 @pytest.mark.asyncio
 async def test_forward_mention_creates_hidden_agent_channel(db):
-    """Forwarding @Codex should persist the hidden agent channel before task message."""
+    """Forwarding @Codex should persist the hidden agent channel before an authenticated delivery marker."""
+    from app.models.user import User
+    from app.models.room_permission import RoomPermission
+    db.add(User(id="codex-user", username="codex", display_name="Codex", user_type="agent"))
+    # PostgreSQL enforces the registry FK immediately, without ORM relationships
+    # to order these independently added models.
+    await db.flush()
     db.add(
         AgentCardRecord(
             agent_name="Codex",
+            agent_user_id="codex-user",
             agent_card_url="http://localhost:8765",
             is_active=True,
         )
@@ -69,6 +76,8 @@ async def test_forward_mention_creates_hidden_agent_channel(db):
         content="@Codex 你在吗",
     )
 
+    db.add(RoomPermission(room_id="demo-room", user_id="human-1", role="member"))
+    await db.commit()
     await _check_mentions_and_forward(
         source_room_id="demo-room",
         message=source_message,

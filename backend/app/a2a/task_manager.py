@@ -1,20 +1,17 @@
 from __future__ import annotations
-"""A2A Task Manager — handles task lifecycle and routing.
+"""A2A Task Manager — handles task lifecycle, remote dispatch, and WS broadcasting.
 
-State machine:
-  submitted → working → completed
-                      → failed
-                      → canceled
-                      → input_required
+Delegates all transaction boundaries, CAS atomic updates, and audit logging to TaskService.
 """
 
-import uuid
 import logging
-from datetime import datetime, timedelta, timezone
-from sqlalchemy import select
+import uuid
+from typing import Any, Optional
+
 from app.config import get_settings
 from app.core.database import async_session
 from app.a2a.models import A2ATask
+from app.a2a.task_service import TaskService
 from app.a2a.client import A2AClientPool
 from app.a2a.discovery import AgentDiscovery
 from app.ws.connection_manager import connection_manager
@@ -27,35 +24,37 @@ ACTIVE_TASK_STATUSES = ("submitted", "working")
 
 async def submit_task(
     query: str,
-    target_agent: str | None = None,
+    target_agent: Optional[str] = None,
     source_agent: str = "hub",
-    task_id: str | None = None,
-    room_id: str | None = None,
-    source_message_id: str | None = None,
-    requestor_id: str | None = None,
+    task_id: Optional[str] = None,
+    room_id: Optional[str] = None,
+    source_message_id: Optional[str] = None,
+    requestor_id: Optional[str] = None,
     route_remote: bool = True,
+    context_id: Optional[str] = None,
 ) -> dict:
-    """Submit a task. Routes to remote agent if target is specified."""
+    """Submit a task via TaskService. Routes to remote agent if target is specified."""
     tid = task_id or str(uuid.uuid4())
     logger.info("task submitted id=%s target=%s room=%s", tid, target_agent, room_id)
 
-    # Persist initial state
+    # Persist initial state atomically with initial audit event
     async with async_session() as db:
-        db_task = A2ATask(
-            id=tid,
-            source_agent=source_agent,
-            target_agent=target_agent,
+        db_task, _ = await TaskService.create_task(
+            db,
             query=query,
-            status="submitted",
+            target_agent=target_agent,
+            source_agent=source_agent,
+            task_id=tid,
             room_id=room_id,
             source_message_id=source_message_id,
+            context_id=context_id,
+            initial_status="submitted",
         )
-        db.add(db_task)
         await db.commit()
         await db.refresh(db_task)
         await _broadcast_task_update(db_task)
 
-    # Route to remote agent
+    # Route to remote agent if requested
     if route_remote and target_agent and target_agent != "local":
         agents = await AgentDiscovery.list_available()
         target = next((a for a in agents if a["name"] == target_agent), None)
@@ -65,57 +64,77 @@ async def submit_task(
 
         try:
             client = client_pool.get(target["name"], target["url"])
-            result = await client.send_task(tid, query)
+            result = await client.send_task(query, task_id=tid)
         except Exception as e:
             error = f"Target agent '{target_agent}' delivery failed: {e}"
             return await fail_task(tid, error)
 
-        # Update from remote result
+        # Update from remote result using TaskService CAS
+        remote_status = result.get("status", "completed")
+        remote_artifacts = result.get("artifacts", [])
         async with async_session() as db:
-            db_task = await db.get(A2ATask, tid)
+            if remote_status == "completed":
+                db_task, _, _ = await TaskService.complete_task(
+                    db, tid, remote_artifacts
+                )
+            elif remote_status == "failed":
+                db_task, _, _ = await TaskService.fail_task(
+                    db, tid, str(remote_artifacts or "Remote task failed")
+                )
+            else:
+                db_task = await TaskService.get_task(db, tid)
+            await db.commit()
             if db_task:
-                db_task.status = result.get("status", "completed")
-                db_task.result = result.get("artifacts", [])
-                if db_task.status == "completed":
-                    db_task.completed_at = datetime.now(timezone.utc)
-                await db.commit()
                 await db.refresh(db_task)
                 await _broadcast_task_update(db_task)
         return {
             "id": tid,
-            "status": db_task.status if hasattr(locals(), 'db_task') else "submitted",
-            "result": db_task.result if hasattr(locals(), 'db_task') else None,
+            "status": db_task.status if db_task else "submitted",
+            "result": db_task.result if db_task else None,
         }
 
     # Local processing (mark as working, caller completes it)
     async with async_session() as db:
-        db_task = await db.get(A2ATask, tid)
+        db_task, _, _ = await TaskService.start_task(db, tid)
+        await db.commit()
         if db_task:
-            db_task.status = "working"
-            await db.commit()
             await db.refresh(db_task)
             await _broadcast_task_update(db_task)
 
     return {"id": tid, "status": "working", "result": None}
 
 
-async def complete_task(task_id: str, result_data: list[dict]) -> dict:
-    """Mark a task as completed with artifacts."""
+async def complete_task(task_id: str, result_data: Any) -> dict:
+    """Mark a task as completed with artifacts using TaskService CAS."""
     async with async_session() as db:
-        db_task = await db.get(A2ATask, task_id)
+        db_task, _, res_code = await TaskService.complete_task(
+            db, task_id, result_data
+        )
+        await db.commit()
         if not db_task:
             return {"error": "Task not found"}
-        if db_task.status in ("canceled", "completed", "failed"):
-            logger.warning("Rejecting completion for finalized task id=%s status=%s", task_id, db_task.status)
+
+        if res_code == "canceled_overridden_rejected":
+            logger.warning(
+                "Rejecting completion for finalized task id=%s status=%s",
+                task_id,
+                db_task.status,
+            )
             return {
                 "id": task_id,
                 "status": db_task.status,
                 "info": f"Task already finalized as {db_task.status}; late result discarded",
             }
-        db_task.status = "completed"
-        db_task.result = result_data
-        db_task.completed_at = datetime.now(timezone.utc)
-        await db.commit()
+        if res_code in ("already_completed", "failed_overridden_rejected"):
+            logger.warning(
+                "Task id=%s already finalized as %s", task_id, db_task.status
+            )
+            return {
+                "id": task_id,
+                "status": db_task.status,
+                "info": f"Task already finalized as {db_task.status}",
+            }
+
         await db.refresh(db_task)
         await _broadcast_task_update(db_task)
         logger.info("task completed id=%s", task_id)
@@ -123,25 +142,28 @@ async def complete_task(task_id: str, result_data: list[dict]) -> dict:
 
 
 async def fail_task(task_id: str, error: str) -> dict:
-    """Mark a task as failed."""
+    """Mark a task as failed using TaskService CAS."""
     async with async_session() as db:
-        db_task = await db.get(A2ATask, task_id)
+        db_task, _, res_code = await TaskService.fail_task(db, task_id, error)
+        await db.commit()
         if not db_task:
             return {"error": "Task not found"}
-        if db_task.status in ("canceled", "completed", "failed"):
-            logger.warning("Rejecting failure for finalized task id=%s status=%s", task_id, db_task.status)
+
+        if res_code in ("canceled_overridden_rejected", "already_failed", "already_completed"):
+            logger.warning(
+                "Rejecting failure for finalized task id=%s status=%s",
+                task_id,
+                db_task.status,
+            )
             return {
                 "id": task_id,
                 "status": db_task.status,
                 "info": f"Task already finalized as {db_task.status}",
             }
-        db_task.status = "failed"
-        db_task.result = {"error": error}
-        db_task.completed_at = datetime.now(timezone.utc)
-        await db.commit()
+
         await db.refresh(db_task)
         await _broadcast_task_update(db_task)
-        logger.info("task failed id=%s error=%s", task_id, error)
+        logger.info("task failed id=%s", task_id)
     return {"id": task_id, "status": "failed", "error": error}
 
 
@@ -149,8 +171,15 @@ async def get_task(task_id: str) -> dict | None:
     """Get task status and result."""
     await expire_stale_tasks()
     async with async_session() as db:
-        db_task = await db.get(A2ATask, task_id)
+        db_task = await TaskService.get_task(db, task_id)
         return db_task.to_dict() if db_task else None
+
+
+async def get_task_events(task_id: str, after_seq: int = 0, limit: int = 100) -> list[dict]:
+    """Get immutable audit events for a task ordered by event_seq strictly ascending."""
+    async with async_session() as db:
+        events = await TaskService.get_task_events(db, task_id, after_seq=after_seq, limit=limit)
+        return [e.to_dict() for e in events]
 
 
 async def list_tasks(
@@ -159,12 +188,10 @@ async def list_tasks(
     """List tasks, optionally filtered by status."""
     await expire_stale_tasks()
     async with async_session() as db:
-        stmt = select(A2ATask).order_by(A2ATask.created_at.desc())
-        if status:
-            stmt = stmt.where(A2ATask.status == status)
-        stmt = stmt.offset((page - 1) * limit).limit(limit)
-        result = await db.execute(stmt)
-        return [t.to_dict() for t in result.scalars().all()]
+        tasks = await TaskService.list_tasks(
+            db, page=page, limit=limit, status=status
+        )
+        return [t.to_dict() for t in tasks]
 
 
 async def list_room_tasks(
@@ -176,26 +203,22 @@ async def list_room_tasks(
     """List tasks for a room, optionally filtered by status."""
     await expire_stale_tasks()
     async with async_session() as db:
-        stmt = (
-            select(A2ATask)
-            .where(A2ATask.room_id == room_id)
-            .order_by(A2ATask.created_at.desc())
+        tasks = await TaskService.list_room_tasks(
+            db, room_id=room_id, page=page, limit=limit, status=status
         )
-        if status:
-            stmt = stmt.where(A2ATask.status == status)
-        stmt = stmt.offset((page - 1) * limit).limit(limit)
-        result = await db.execute(stmt)
-        return [t.to_dict() for t in result.scalars().all()]
+        return [t.to_dict() for t in tasks]
 
 
-async def link_approval(task_id: str, approval_id: str, status: str = "input_required") -> dict | None:
+async def link_approval(
+    task_id: str, approval_id: str, status: str = "input_required"
+) -> dict | None:
     """Attach an approval to a task and optionally move it to input_required."""
     async with async_session() as db:
-        db_task = await db.get(A2ATask, task_id)
+        db_task, _ = await TaskService.link_approval(
+            db, task_id, approval_id, status
+        )
         if not db_task:
             return None
-        db_task.approval_id = approval_id
-        db_task.status = status
         await db.commit()
         await db.refresh(db_task)
         await _broadcast_task_update(db_task)
@@ -203,16 +226,25 @@ async def link_approval(task_id: str, approval_id: str, status: str = "input_req
 
 
 async def cancel_task(task_id: str) -> dict:
-    """Cancel a running task."""
+    """Cancel a running task using TaskService CAS."""
     async with async_session() as db:
-        db_task = await db.get(A2ATask, task_id)
+        db_task, _, res_code = await TaskService.cancel_task(db, task_id)
+        from app.chat.delivery_service import cancel_deliveries
+        cancel_frames = await cancel_deliveries(db, task_id) if db_task and db_task.status == "canceled" else []
+        await db.commit()
+        # Send control to the private executor channel before room notifications.
+        for channel, frame in cancel_frames:
+            await connection_manager.broadcast(channel, frame)
         if not db_task:
             return {"error": "Task not found"}
-        if db_task.status in ("completed", "failed", "canceled"):
-            return {"id": task_id, "status": db_task.status, "info": "Already finalized"}
-        db_task.status = "canceled"
-        db_task.completed_at = datetime.now(timezone.utc)
-        await db.commit()
+
+        if res_code in ("already_completed", "already_failed", "already_canceled"):
+            return {
+                "id": task_id,
+                "status": db_task.status,
+                "info": "Already finalized",
+            }
+
         await db.refresh(db_task)
         await _broadcast_task_update(db_task)
         if db_task.room_id:
@@ -232,27 +264,10 @@ async def cancel_task(task_id: str) -> dict:
 async def expire_stale_tasks(timeout_seconds: int | None = None) -> dict:
     """Mark submitted/working tasks as failed after the configured timeout."""
     timeout = timeout_seconds or settings.a2a_task_timeout_seconds
-    cutoff = datetime.now(timezone.utc) - timedelta(seconds=timeout)
-    expired: list[A2ATask] = []
-
     async with async_session() as db:
-        result = await db.execute(
-            select(A2ATask).where(
-                A2ATask.status.in_(ACTIVE_TASK_STATUSES),
-                A2ATask.created_at < cutoff,
-            )
-        )
-        expired = list(result.scalars().all())
-        for db_task in expired:
-            db_task.status = "failed"
-            db_task.result = {
-                "error": f"Task timed out after {timeout} seconds",
-            }
-            db_task.completed_at = datetime.now(timezone.utc)
+        expired = await TaskService.expire_stale_tasks(db, timeout)
         await db.commit()
-
         for db_task in expired:
-            await db.refresh(db_task)
             await _broadcast_task_update(db_task)
 
     return {"count": len(expired), "task_ids": [task.id for task in expired]}

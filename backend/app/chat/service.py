@@ -58,7 +58,7 @@ async def cleanup_expired_messages(db: AsyncSession) -> int:
         await db.commit()
         return result.rowcount or 0
     except Exception as err:
-        logger.warning("Failed to cleanup expired messages: %s", err)
+        logger.warning("Failed to cleanup expired messages; details suppressed")
         await db.rollback()
         return 0
 
@@ -72,6 +72,7 @@ async def save_message(
     content: str = "",
     msg_type: MessageType = "text",
     parent_id: str | None = None,
+    client_message_id: str | None = None,
 ) -> Message:
     """Persist a message and return it."""
     room = await db.get(Room, room_id)
@@ -80,6 +81,21 @@ async def save_message(
 
     await cleanup_expired_messages(db)
 
+    if client_message_id is not None:
+        import re
+        if not isinstance(client_message_id, str) or not re.fullmatch(r"[A-Za-z0-9_.:-]{1,128}", client_message_id):
+            raise ValueError("Invalid message idempotency key")
+        # Same lock as counter allocation: concurrent retry cannot pass this
+        # existence check before the original writer commits or rolls back.
+        await db.execute(update(Room).where(Room.id == room_id).values(message_seq=Room.message_seq))
+        previous = (await db.execute(select(Message).where(Message.room_id == room_id,
+            Message.sender_id == sender_id, Message.client_message_id == client_message_id))).scalar_one_or_none()
+        if previous is not None:
+            if (previous.content, previous.msg_type, previous.parent_id, previous.sender_type) != (content, msg_type, parent_id, sender_type):
+                raise ValueError("Message idempotency conflict")
+            previous.replayed = True
+            await db.commit()
+            return previous
     user = await db.get(User, sender_id)
     if user is None:
         display_name = sender_name or sender_id[:128]
@@ -105,6 +121,7 @@ async def save_message(
         content=content,
         msg_type=msg_type,
         parent_id=parent_id,
+        client_message_id=client_message_id,
     )
     db.add(message)
     await db.commit()
