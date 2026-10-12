@@ -6,8 +6,10 @@ import logging
 from datetime import datetime, timezone
 
 from fastapi import HTTPException
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.agent.identity import canonical_identity, expand_casefold_candidates
 
 from app.models.agent_card import AgentCardRecord
 from app.models.user import User
@@ -17,22 +19,22 @@ logger = logging.getLogger(__name__)
 
 
 async def find_username_matches(db: AsyncSession, username: str) -> list[User]:
-    """Use Python casefold for legacy identities, independent of DB collation.
+    """Find all existing user records matching the given username under Unicode casefold.
 
-    New accounts use canonical lowercase names and the existing unique constraint.
-    Never select an arbitrary winner among legacy casefold collisions.
+    Uses expand_casefold_candidates() to query via the unique B-Tree index on User.username.
+    Eliminates full table scans on non-existent usernames and detects ambiguity symmetrically.
     """
-    key = username.casefold()
-    target_clean = username.strip().lower()
-    stmt = select(User).where(func.lower(User.username).in_((target_clean, key)))
+    key = canonical_identity(username)
+    if not key:
+        return []
+
+    candidates = expand_casefold_candidates(username)
+    if not candidates:
+        return []
+
+    stmt = select(User).where(User.username.in_(candidates))
     result = await db.execute(stmt)
-    matches = [user for user in result.scalars().all() if user.username.casefold() == key]
-    if matches:
-        return matches
-    # Fallback for Unicode casefold discrepancies (e.g. 'ß' vs 'ss') where SQL lower()
-    # differs from Python casefold()
-    all_users = (await db.execute(select(User))).scalars().all()
-    return [user for user in all_users if user.username.casefold() == key]
+    return [user for user in result.scalars().all() if canonical_identity(user.username) == key]
 
 
 async def authorize_agent_registration(db: AsyncSession, user: User, name: str) -> str:
@@ -42,8 +44,8 @@ async def authorize_agent_registration(db: AsyncSession, user: User, name: str) 
         raise HTTPException(status_code=401, detail="Authentication required")
     if stored_user.user_type != "agent":
         raise HTTPException(status_code=403, detail="Agent account required")
-    canonical = stored_user.username.casefold()
-    if not isinstance(name, str) or name.casefold() != canonical:
+    canonical = canonical_identity(stored_user.username)
+    if not isinstance(name, str) or canonical_identity(name) != canonical:
         raise HTTPException(status_code=403, detail="Agent name must match authenticated username")
     matches = await find_username_matches(db, stored_user.username)
     if len(matches) != 1 or matches[0].id != stored_user.id:
