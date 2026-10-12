@@ -6,7 +6,7 @@ import logging
 from datetime import datetime, timezone
 
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.agent_card import AgentCardRecord
@@ -22,8 +22,10 @@ async def find_username_matches(db: AsyncSession, username: str) -> list[User]:
     New accounts use canonical lowercase names and the existing unique constraint.
     Never select an arbitrary winner among legacy casefold collisions.
     """
-    result = await db.execute(select(User))
     key = username.casefold()
+    target_clean = username.strip().lower()
+    stmt = select(User).where(func.lower(User.username).in_((target_clean, key)))
+    result = await db.execute(stmt)
     return [user for user in result.scalars().all() if user.username.casefold() == key]
 
 

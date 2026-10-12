@@ -33,8 +33,19 @@ async def validate_task(db, task, agent_id):
     source = await db.get(Message, task.source_message_id) if task and task.source_message_id else None
     room = await db.get(Room, task.room_id) if task and task.room_id else None
     owner = await db.get(User, source.sender_id, populate_existing=True) if source else None
-    identities = list((await db.execute(select(User))).scalars()) if agent else []
-    matches = [identity for identity in identities if slug(identity.username) == slug(agent.username)] if agent else []
+    if agent:
+        target_slug = slug(agent.username)
+        target_clean = agent.username.strip().lower()
+        stmt = select(User).where(
+            (func.lower(User.username) == target_clean)
+            | (func.lower(func.replace(User.username, " ", "_")) == target_slug)
+            | (User.id == agent_id)
+        )
+        identities = list((await db.execute(stmt)).scalars())
+        matches = [identity for identity in identities if slug(identity.username) == target_slug]
+    else:
+        identities = []
+        matches = []
     bound_owner = await db.get(User, agent.owner_user_id, populate_existing=True) if agent and agent.owner_user_id else None
     binding_permission = (await db.execute(select(RoomPermission).where(
         RoomPermission.room_id == task.room_id, RoomPermission.user_id == bound_owner.id
@@ -180,8 +191,19 @@ async def cancel_deliveries(db, task_id):
     if not rows:
         task = await db.get(A2ATask, task_id)
         if task and task.status == "canceled" and task.target_agent:
-            agents = list((await db.execute(select(User).where(User.user_type == "agent"))).scalars())
-            matches = [agent for agent in agents if slug(agent.username) == slug(task.target_agent)]
+            target = task.target_agent
+            target_slug = slug(target)
+            target_clean = target.strip().lower()
+            stmt = select(User).where(
+                User.user_type == "agent",
+                (
+                    (func.lower(User.username) == target_clean)
+                    | (func.lower(func.replace(User.username, " ", "_")) == target_slug)
+                    | (User.id == target)
+                ),
+            )
+            agents = list((await db.execute(stmt)).scalars())
+            matches = [agent for agent in agents if slug(agent.username) == target_slug]
             if len(matches) == 1:
                 frames.append(("_agent_" + slug(matches[0].username), {
                     "type": "task_cancel", "task_id": task_id, "origin_room": task.room_id}))

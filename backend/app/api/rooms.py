@@ -177,6 +177,19 @@ async def get_shared_room_messages(
     if share is None:
         raise HTTPException(status_code=404, detail="Share link expired or not found")
 
+    creator = await db.get(User, share.created_by)
+    if creator is None or getattr(creator, "is_active", True) is False:
+        raise HTTPException(status_code=404, detail="Share link expired or not found")
+
+    creator_perm = (await db.execute(
+        select(RoomPermission).where(
+            RoomPermission.room_id == share.room_id,
+            RoomPermission.user_id == share.created_by,
+        )
+    )).scalar_one_or_none()
+    if not creator_perm or creator_perm.role not in ("owner", "member"):
+        raise HTTPException(status_code=404, detail="Share link expired or not found")
+
     from app.chat.service import list_messages
     room = await db.get(Room, share.room_id)
     if room is None or not room.is_active:
@@ -186,6 +199,48 @@ async def get_shared_room_messages(
         "room_name": room.name if room else "Room",
         "messages": [m.to_dict() for m in messages],
     }
+
+
+@router.delete("/{room_id}/share/{token}")
+async def revoke_share_token(
+    room_id: str,
+    token: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    from app.api.permissions import require_role
+    from app.models.room_share import RoomShareToken
+
+    await require_role(room_id, current_user, db, min_role="owner")
+    stmt = select(RoomShareToken).where(
+        RoomShareToken.room_id == room_id,
+        RoomShareToken.token == token,
+    )
+    share = (await db.execute(stmt)).scalar_one_or_none()
+    if share is None:
+        raise HTTPException(status_code=404, detail="Share token not found")
+    await db.delete(share)
+    await db.commit()
+    return {"revoked": True, "token": token}
+
+
+@router.delete("/{room_id}/share")
+async def revoke_all_share_tokens(
+    room_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    from app.api.permissions import require_role
+    from app.models.room_share import RoomShareToken
+
+    await require_role(room_id, current_user, db, min_role="owner")
+    stmt = select(RoomShareToken).where(RoomShareToken.room_id == room_id)
+    tokens = (await db.execute(stmt)).scalars().all()
+    count = len(tokens)
+    for t in tokens:
+        await db.delete(t)
+    await db.commit()
+    return {"revoked": True, "count": count}
 
 
 class XmtpBindingRequest(BaseModel):

@@ -33,6 +33,11 @@ SENSITIVE_KEY_PATTERNS = (
     "signature",
 )
 
+JWT_PATTERN = re.compile(r"eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}")
+BEARER_PATTERN = re.compile(r"(bearer\s+)[A-Za-z0-9_\-\.]+", re.IGNORECASE)
+API_KEY_PATTERN = re.compile(r"\b(?:sk|pk|token|api|key)[-_][A-Za-z0-9_\-]{16,}\b", re.IGNORECASE)
+PRIVATE_KEY_PATTERN = re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----")
+
 
 def sanitize_payload(payload: Any) -> Any:
     """Recursively scrub sensitive keys and token-like strings from audit event payloads."""
@@ -48,15 +53,19 @@ def sanitize_payload(payload: Any) -> Any:
     if isinstance(payload, (list, tuple)):
         return [sanitize_payload(item) for item in payload]
     if isinstance(payload, str):
-        if "bearer " in payload.lower() or "authorization:" in payload.lower():
-            return re.sub(
-                r"(bearer\s+)[A-Za-z0-9_\-\.]+",
-                r"\1[REDACTED]",
-                payload,
-                flags=re.IGNORECASE,
-            )
+        val = payload
+        if "bearer " in val.lower() or "authorization:" in val.lower():
+            val = BEARER_PATTERN.sub(r"\1[REDACTED]", val)
+        if "-----BEGIN" in val and "PRIVATE KEY-----" in val:
+            val = PRIVATE_KEY_PATTERN.sub("[REDACTED_PRIVATE_KEY]", val)
+        if "eyJ" in val:
+            val = JWT_PATTERN.sub("[REDACTED_JWT]", val)
+        if API_KEY_PATTERN.search(val):
+            val = API_KEY_PATTERN.sub("[REDACTED_KEY]", val)
+        return val
+    if isinstance(payload, (int, float, bool)) or payload is None:
         return payload
-    return payload
+    return str(payload)
 
 
 async def notify_task(session, task_id):

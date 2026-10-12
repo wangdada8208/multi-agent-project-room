@@ -68,7 +68,7 @@ def decode_access_token(token: str) -> dict[str, Any]:
         if not hmac.compare_digest(_b64(expected.digest()), sig):
             raise ValueError("bad signature")
         payload = json.loads(_unb64(body))
-        if int(payload.get("exp", 0)) < int(time.time()):
+        if int(payload.get("exp", 0)) <= int(time.time()):
             raise ValueError("expired token")
         if not payload.get("sub"):
             raise ValueError("missing subject")
@@ -87,4 +87,9 @@ async def get_current_user(
     user = await db.get(User, payload["sub"])
     if user is None:
         raise HTTPException(status_code=401, detail="User not found")
+    token_user_type = payload.get("typ")
+    if token_user_type is not None and token_user_type != user.user_type:
+        raise HTTPException(status_code=401, detail="Account type mismatch")
+    if getattr(user, "is_active", True) is False:
+        raise HTTPException(status_code=401, detail="Inactive account")
     return user

@@ -150,7 +150,7 @@ async def test_storage_and_error_responses_do_not_disclose_code(client, db, iden
 async def test_db_role_collision_and_no_request_owner_override(client, db, identities):
     owner, other, agent, _ = identities
     forged_type = {"Authorization": "Bearer " + create_access_token(agent.id, "human")}
-    assert (await client.post(BASE + "/invitations", headers=forged_type, json={})).status_code == 403
+    assert (await client.post(BASE + "/invitations", headers=forged_type, json={})).status_code in (401, 403)
     invitation = (await issue(client, owner)).json()
     assert (await client.post(BASE + "/claim", headers=headers(agent),
                               json={"code": invitation["code"], "owner_user_id": other.id})).status_code == 422

@@ -52,11 +52,13 @@ async def init_db():
     import app.models.analytics  # noqa: F401
     import app.models.room_share  # noqa: F401
 
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-        if conn.dialect.name == "sqlite":
-            from app.a2a.sse_global_quota import LEASE_METADATA
-            await conn.run_sync(LEASE_METADATA.create_all)
+    env = (settings.environment or "").strip().lower()
+    if env in ("development", "test", "testing", "dev") or engine.dialect.name == "sqlite":
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+            if conn.dialect.name == "sqlite":
+                from app.a2a.sse_global_quota import LEASE_METADATA
+                await conn.run_sync(LEASE_METADATA.create_all)
 
 
 async def get_db() -> AsyncSession:  # type: ignore[misc]

@@ -20,7 +20,7 @@ from fastapi import HTTPException
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 from sse_starlette.sse import EventSourceResponse
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import SQLAlchemyError
 from functools import wraps
 from a2a.auth.user import User as SDKUser
@@ -151,7 +151,15 @@ async def check_task(db, task_id, user, cancel=False):
     room, role = await room_role(db, task.room_id, user)
     if user.user_type == 'agent':
         from app.chat.delivery_service import slug
-        targets = (await db.execute(select(User))).scalars().all()
+        target_slug = slug(task.target_agent) if task.target_agent else ""
+        target_clean = task.target_agent.strip().lower() if task.target_agent else ""
+        stmt = select(User).where(
+            (User.id == task.target_agent)
+            | (func.lower(User.username) == target_clean)
+            | (func.lower(func.replace(User.username, " ", "_")) == target_slug)
+            | (User.id == user.id)
+        )
+        targets = (await db.execute(stmt)).scalars().all()
         matches = [u for u in targets if task.target_agent == u.id or (task.target_agent and slug(task.target_agent) == slug(u.username))]
         if len(matches) != 1 or matches[0].id != user.id or not user.owner_user_id or role == 'viewer':
             raise HTTPException(403, 'Access denied')
@@ -222,18 +230,54 @@ class SQLRequestHandler(DefaultRequestHandler):
             user = await authenticate(context.state['request'], db)
             room, target = await check_send(db, params, user)
             text = sanitize_payload('\n'.join(p.text for p in params.message.parts))
-            source = Message(room_id=room.id, sender_id=user.id, sender_type='human', sender_name=user.display_name, content=text, msg_type='task')
-            db.add(source)
-            await db.flush()
-            task, _ = await TaskService.create_task(db,
-                query=text,
-                source_agent=user.id, target_agent=target.username, room_id=room.id, source_message_id=source.id,
-                context_id=params.message.context_id or str(uuid.uuid4()))
-            from app.chat.delivery_service import create_delivery, offer, slug
-            delivery = await create_delivery(db, task, target.id)
-            frame = await offer(db, delivery)
-            await db.commit()
-            result = self.task_store._to_sdk_task(task)
+            metadata = getattr(params.message, 'metadata', None) or {}
+            client_msg_id = None
+            try:
+                client_msg_id = metadata.get('client_message_id') or metadata.get('clientMessageId')
+            except Exception:
+                pass
+            if client_msg_id:
+                client_msg_id = str(client_msg_id)[:128]
+            existing_msg = None
+            if client_msg_id:
+                existing_msg = (await db.execute(
+                    select(Message).where(
+                        Message.room_id == room.id,
+                        Message.sender_id == user.id,
+                        Message.client_message_id == client_msg_id,
+                    )
+                )).scalar_one_or_none()
+            if existing_msg:
+                existing_task = (await db.execute(
+                    select(A2ATask).where(A2ATask.source_message_id == existing_msg.id)
+                )).scalar_one_or_none()
+                if existing_task:
+                    result = self.task_store._to_sdk_task(existing_task)
+                    task = existing_task
+                    frame = None
+                else:
+                    task, _ = await TaskService.create_task(db,
+                        query=text,
+                        source_agent=user.id, target_agent=target.username, room_id=room.id, source_message_id=existing_msg.id,
+                        context_id=params.message.context_id or str(uuid.uuid4()))
+                    from app.chat.delivery_service import create_delivery, offer, slug
+                    delivery = await create_delivery(db, task, target.id)
+                    frame = await offer(db, delivery)
+                    await db.commit()
+                    result = self.task_store._to_sdk_task(task)
+            else:
+                source = Message(room_id=room.id, sender_id=user.id, sender_type='human', sender_name=user.display_name, content=text, msg_type='task', client_message_id=client_msg_id)
+                db.add(source)
+                await db.flush()
+                task, _ = await TaskService.create_task(db,
+                    query=text,
+                    source_agent=user.id, target_agent=target.username, room_id=room.id, source_message_id=source.id,
+                    context_id=params.message.context_id or str(uuid.uuid4()))
+                from app.chat.delivery_service import create_delivery, offer, slug
+                delivery = await create_delivery(db, task, target.id)
+                frame = await offer(db, delivery)
+                await db.commit()
+                result = self.task_store._to_sdk_task(task)
         from app.ws.connection_manager import connection_manager
         if frame:
             await connection_manager.broadcast('_agent_' + slug(target.username), frame)
@@ -575,9 +619,26 @@ def guarded(endpoint, handler, operation, rpc=False):
                         params.configuration.return_immediately = True  # Streaming never blocks on execution.
                         task = await handler.on_message_send(params, ContextBuilder().build(request))
                         task_id = task.id
-                        async with sse_session() as db:
-                            if not await quota_policy.bind_task(db, lease.lease_id, HUB_ID, task_id):
-                                raise QuotaUnavailable()
+                        bind_ok = False
+                        try:
+                            async with sse_session() as db:
+                                bind_ok = await quota_policy.bind_task(db, lease.lease_id, HUB_ID, task_id)
+                        except Exception:
+                            bind_ok = False
+                        if not bind_ok:
+                            with anyio.move_on_after(SSE_DB_SECONDS + 1, shield=True):
+                                try:
+                                    async with sse_session() as db:
+                                        t_cancel, _, _ = await TaskService.cancel_task(db, task_id)
+                                        from app.chat.delivery_service import cancel_deliveries
+                                        frames = await cancel_deliveries(db, task_id) if t_cancel and t_cancel.status == 'canceled' else []
+                                        await db.commit()
+                                    from app.ws.connection_manager import connection_manager
+                                    for channel, frame in frames:
+                                        await connection_manager.broadcast(channel, frame)
+                                except Exception:
+                                    pass
+                            raise QuotaUnavailable()
                     async def stream():
                         try:
                             async for event in persisted_events(request, task_id, after, body.get('id'), rpc):

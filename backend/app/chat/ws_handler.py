@@ -129,8 +129,18 @@ async def _check_mentions_and_forward(
 
     for agent_name in mentioned:
         async with async_session() as db:
-            agents = list((await db.execute(select(User).where(User.user_type == "agent"))).scalars())
-            matches = [agent for agent in agents if _agent_slug(agent.username) == _agent_slug(agent_name)]
+            target_slug = _agent_slug(agent_name)
+            target_clean = agent_name.strip().lower()
+            stmt = select(User).where(
+                User.user_type == "agent",
+                (
+                    (func.lower(User.username) == target_clean)
+                    | (func.lower(func.replace(User.username, " ", "_")) == target_slug)
+                    | (User.id == agent_name)
+                ),
+            )
+            agents = list((await db.execute(stmt)).scalars())
+            matches = [agent for agent in agents if _agent_slug(agent.username) == target_slug]
             if len(matches) != 1:
                 continue
             agent = matches[0]
@@ -228,9 +238,12 @@ async def handle_chat(websocket: WebSocket, room_id: str, token: str = Query(def
 
         if is_agent_channel:
             requested_slug = _agent_slug(room_id[len("_agent_"):])
-            matches = (await db.execute(
-                select(User)
-            )).scalars().all()
+            stmt = select(User).where(
+                (func.lower(User.username) == requested_slug)
+                | (func.lower(func.replace(User.username, " ", "_")) == requested_slug)
+                | (User.id == user.id)
+            )
+            matches = (await db.execute(stmt)).scalars().all()
             matching_users = [candidate for candidate in matches
                               if _agent_slug(candidate.username) == requested_slug]
             if (user.user_type != "agent" or not requested_slug
@@ -272,10 +285,17 @@ async def handle_chat(websocket: WebSocket, room_id: str, token: str = Query(def
                     and claims.get("sub") == actor.id and claims.get("typ") == actor.user_type):
                 return False
             if is_agent_channel:
-                identities = (await db.execute(select(User))).scalars().all()
-                matches = [item for item in identities if _agent_slug(item.username) == _agent_slug(actor.username)]
+                actor_slug = _agent_slug(actor.username)
+                actor_clean = actor.username.strip().lower()
+                stmt = select(User).where(
+                    (func.lower(User.username) == actor_clean)
+                    | (func.lower(func.replace(User.username, " ", "_")) == actor_slug)
+                    | (User.id == actor.id)
+                )
+                identities = (await db.execute(stmt)).scalars().all()
+                matches = [item for item in identities if _agent_slug(item.username) == actor_slug]
                 return (actor.user_type == "agent" and len(matches) == 1
-                        and room_id == "_agent_" + _agent_slug(actor.username))
+                        and room_id == "_agent_" + actor_slug)
             room = await db.get(Room, room_id)
             permission = (await db.execute(select(RoomPermission).where(
                 RoomPermission.room_id == room_id, RoomPermission.user_id == actor.id))).scalar_one_or_none()

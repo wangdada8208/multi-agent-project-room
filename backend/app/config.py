@@ -1,5 +1,5 @@
 from functools import lru_cache
-from pydantic import SecretStr
+from pydantic import SecretStr, model_validator
 from pydantic_settings import BaseSettings
 
 
@@ -19,8 +19,20 @@ class Settings(BaseSettings):
     agent_enrollment_secret: SecretStr = SecretStr("")
     auth_token_ttl_minutes: int = 60 * 24 * 7
     rate_limit_per_minute: int = 60
+    environment: str = "development"
+    trusted_proxies: list[str] = ["127.0.0.1", "::1"]
 
     model_config = {"env_file": ".env", "env_prefix": "MAPR_"}
+
+    @model_validator(mode="after")
+    def validate_production_secrets(self) -> "Settings":
+        env = (self.environment or "").strip().lower()
+        if env not in ("development", "test", "testing", "dev"):
+            if not self.auth_secret_key or self.auth_secret_key == "dev-change-me" or len(self.auth_secret_key) < 32:
+                raise ValueError(
+                    "MAPR_AUTH_SECRET_KEY must be configured with >=32 chars in non-development environments"
+                )
+        return self
 
 
 @lru_cache

@@ -429,12 +429,19 @@ async def _run_dialogue_loop(dialogue_id: str):
                 if dialogue["status"] != "active":
                     break
 
-                from sqlalchemy import select
+                from sqlalchemy import func, select
                 from app.chat.delivery_service import slug
                 async with async_session() as db:
-                    identities = (await db.execute(select(User))).scalars().all()
-                    matches = [actor for actor in identities if slug(actor.username) == slug(agent_name)]
-                    if not matches and slug(agent_name) == "hub":
+                    target_slug = slug(agent_name)
+                    target_clean = agent_name.strip().lower()
+                    stmt = select(User).where(
+                        (func.lower(User.username) == target_clean)
+                        | (func.lower(func.replace(User.username, " ", "_")) == target_slug)
+                        | (User.id == agent_name)
+                    )
+                    identities = (await db.execute(stmt)).scalars().all()
+                    matches = [actor for actor in identities if slug(actor.username) == target_slug]
+                    if not matches and target_slug == "hub":
                         continue  # Hub is a control initiator, not a remote executor.
                     if len(matches) != 1 or matches[0].user_type != "agent":
                         dialogue.update(status="ended", reason="agent_identity_missing", ended_at=_now())
