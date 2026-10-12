@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     auth_token_ttl_minutes: int = 60 * 24 * 7
     rate_limit_per_minute: int = 60
     environment: str = "development"
-    trusted_proxies: list[str] = ["127.0.0.1", "::1"]
+    trusted_proxies: list[str] = ["127.0.0.1", "::1", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"]
 
     model_config = {"env_file": ".env", "env_prefix": "MAPR_"}
 

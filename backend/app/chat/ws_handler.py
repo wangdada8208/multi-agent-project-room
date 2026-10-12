@@ -232,7 +232,7 @@ async def handle_chat(websocket: WebSocket, room_id: str, token: str = Query(def
     is_agent_channel = room_id.startswith("_agent_")
     async with async_session() as db:
         user = await db.get(User, authenticated_user_id)
-        if user is None or token_user_type != user.user_type:
+        if user is None or token_user_type != user.user_type or not getattr(user, "is_active", True):
             await websocket.close(code=4003, reason="User identity is not authorized")
             return
 
@@ -278,29 +278,32 @@ async def handle_chat(websocket: WebSocket, room_id: str, token: str = Query(def
 
     async def authorize_outbound():
         # Idle sockets must lose subscriptions too, even without another inbound frame.
-        claims = decode_access_token(token)
-        async with async_session() as db:
-            actor = await db.get(User, authenticated_user_id)
-            if not (actor and actor.user_type == authenticated_user_type
-                    and claims.get("sub") == actor.id and claims.get("typ") == actor.user_type):
-                return False
-            if is_agent_channel:
-                actor_slug = _agent_slug(actor.username)
-                actor_clean = actor.username.strip().lower()
-                stmt = select(User).where(
-                    (func.lower(User.username) == actor_clean)
-                    | (func.lower(func.replace(User.username, " ", "_")) == actor_slug)
-                    | (User.id == actor.id)
-                )
-                identities = (await db.execute(stmt)).scalars().all()
-                matches = [item for item in identities if _agent_slug(item.username) == actor_slug]
-                return (actor.user_type == "agent" and len(matches) == 1
-                        and room_id == "_agent_" + actor_slug)
-            room = await db.get(Room, room_id)
-            permission = (await db.execute(select(RoomPermission).where(
-                RoomPermission.room_id == room_id, RoomPermission.user_id == actor.id))).scalar_one_or_none()
-            return bool(room and room.is_active and room.transport == authenticated_transport
-                        and permission and permission.role in {"viewer", "member", "owner"})
+        try:
+            claims = decode_access_token(token)
+            async with async_session() as db:
+                actor = await db.get(User, authenticated_user_id)
+                if not (actor and getattr(actor, "is_active", True) and actor.user_type == authenticated_user_type
+                        and claims.get("sub") == actor.id and claims.get("typ") == actor.user_type):
+                    return False
+                if is_agent_channel:
+                    actor_slug = _agent_slug(actor.username)
+                    actor_clean = actor.username.strip().lower()
+                    stmt = select(User).where(
+                        (func.lower(User.username) == actor_clean)
+                        | (func.lower(func.replace(User.username, " ", "_")) == actor_slug)
+                        | (User.id == actor.id)
+                    )
+                    identities = (await db.execute(stmt)).scalars().all()
+                    matches = [item for item in identities if _agent_slug(item.username) == actor_slug]
+                    return (actor.user_type == "agent" and len(matches) == 1
+                            and room_id == "_agent_" + actor_slug)
+                room = await db.get(Room, room_id)
+                permission = (await db.execute(select(RoomPermission).where(
+                    RoomPermission.room_id == room_id, RoomPermission.user_id == actor.id))).scalar_one_or_none()
+                return bool(room and room.is_active and room.transport == authenticated_transport
+                            and permission and permission.role in {"viewer", "member", "owner"})
+        except Exception:
+            return False
 
     # Cursor is scoped to this authorized room, never UUID/time or another room.
     try:
@@ -343,7 +346,7 @@ async def handle_chat(websocket: WebSocket, room_id: str, token: str = Query(def
                 live_claims = decode_access_token(token)
                 async with async_session() as db:
                     live_user = await db.get(User, authenticated_user_id, populate_existing=True)
-                    valid_identity = bool(live_user and live_user.user_type == authenticated_user_type
+                    valid_identity = bool(live_user and getattr(live_user, "is_active", True) and live_user.user_type == authenticated_user_type
                         and live_claims.get("sub") == authenticated_user_id
                         and live_claims.get("typ") == authenticated_user_type)
                 if not valid_identity:
@@ -401,7 +404,7 @@ async def handle_chat(websocket: WebSocket, room_id: str, token: str = Query(def
                         raise ds.DeliveryDenied()
                     async with async_session() as db:
                         current = await db.get(User, authenticated_user_id, populate_existing=True)
-                        if not current or current.user_type != "agent" or "_agent_" + _agent_slug(current.username) != room_id:
+                        if not current or not getattr(current, "is_active", True) or current.user_type != "agent" or "_agent_" + _agent_slug(current.username) != room_id:
                             raise ds.DeliveryDenied()
                         if msg_type == "task_resume":
                             frames, cursor = await ds.resume(db, current.id, raw.get("cursor", ""))
@@ -431,7 +434,7 @@ async def handle_chat(websocket: WebSocket, room_id: str, token: str = Query(def
                         ))).scalar_one_or_none()
                         task = await db.get(A2ATask, str(raw.get("task_id", "")))
                         source = await db.get(Message, task.source_message_id) if task and task.source_message_id else None
-                        if not (actor and actor.user_type == "human" and permission
+                        if not (actor and getattr(actor, "is_active", True) and actor.user_type == "human" and permission
                                 and (permission.role == "owner" or (permission.role == "member" and source and source.sender_id == actor.id))
                                 and task and task.room_id == room_id):
                             raise ds.DeliveryDenied()
@@ -484,7 +487,7 @@ async def handle_chat(websocket: WebSocket, room_id: str, token: str = Query(def
                         current_permission = (await db.execute(select(RoomPermission).where(
                             RoomPermission.room_id == room_id, RoomPermission.user_id == authenticated_user_id
                         ))).scalar_one_or_none()
-                        if not actor or actor.user_type != authenticated_user_type or not current_permission:
+                        if not actor or not getattr(actor, "is_active", True) or actor.user_type != authenticated_user_type or not current_permission:
                             await connection_manager.send_checked(websocket, {"type": "error", "code": "room_access_denied"})
                             continue
                         role = current_permission.role

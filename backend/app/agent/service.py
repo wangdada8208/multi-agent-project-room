@@ -26,7 +26,13 @@ async def find_username_matches(db: AsyncSession, username: str) -> list[User]:
     target_clean = username.strip().lower()
     stmt = select(User).where(func.lower(User.username).in_((target_clean, key)))
     result = await db.execute(stmt)
-    return [user for user in result.scalars().all() if user.username.casefold() == key]
+    matches = [user for user in result.scalars().all() if user.username.casefold() == key]
+    if matches:
+        return matches
+    # Fallback for Unicode casefold discrepancies (e.g. 'ß' vs 'ss') where SQL lower()
+    # differs from Python casefold()
+    all_users = (await db.execute(select(User))).scalars().all()
+    return [user for user in all_users if user.username.casefold() == key]
 
 
 async def authorize_agent_registration(db: AsyncSession, user: User, name: str) -> str:

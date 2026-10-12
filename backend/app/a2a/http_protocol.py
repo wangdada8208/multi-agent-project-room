@@ -9,6 +9,7 @@ import inspect
 import base64
 import hashlib
 import hmac
+import logging
 import math
 import json
 import time
@@ -21,7 +22,7 @@ from starlette.responses import JSONResponse
 from starlette.routing import Route
 from sse_starlette.sse import EventSourceResponse
 from sqlalchemy import func, select
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from functools import wraps
 from a2a.auth.user import User as SDKUser
 from a2a.server.context import ServerCallContext
@@ -46,6 +47,7 @@ from app.a2a.task_service import TaskService, TERMINAL_STATUSES, sanitize_payloa
 from app.a2a.sse_global_quota import SSEGlobalQuota, QuotaExceeded, QuotaUnavailable
 
 quota_policy = SSEGlobalQuota()
+logger = logging.getLogger(__name__)
 HUB_ID = str(uuid.uuid4())
 
 PAGE_SIZE = 100
@@ -233,11 +235,30 @@ class SQLRequestHandler(DefaultRequestHandler):
             metadata = getattr(params.message, 'metadata', None) or {}
             client_msg_id = None
             try:
-                client_msg_id = metadata.get('client_message_id') or metadata.get('clientMessageId')
+                if hasattr(metadata, 'DESCRIPTOR'):
+                    from google.protobuf.json_format import MessageToDict
+                    meta_dict = MessageToDict(metadata)
+                elif isinstance(metadata, dict):
+                    meta_dict = metadata
+                else:
+                    meta_dict = dict(metadata)
+                raw_meta = meta_dict.get('client_message_id') or meta_dict.get('clientMessageId')
+                if raw_meta and str(raw_meta).strip():
+                    client_msg_id = str(raw_meta).strip()
             except Exception:
                 pass
+
+            if not client_msg_id:
+                std_msg_id = getattr(params.message, 'message_id', None) or getattr(params.message, 'messageId', None)
+                if not std_msg_id and isinstance(params.message, dict):
+                    std_msg_id = params.message.get('message_id') or params.message.get('messageId')
+                if std_msg_id and str(std_msg_id).strip():
+                    client_msg_id = str(std_msg_id).strip()
+
             if client_msg_id:
                 client_msg_id = str(client_msg_id)[:128]
+
+            is_new_task = True
             existing_msg = None
             if client_msg_id:
                 existing_msg = (await db.execute(
@@ -247,14 +268,20 @@ class SQLRequestHandler(DefaultRequestHandler):
                         Message.client_message_id == client_msg_id,
                     )
                 )).scalar_one_or_none()
+
             if existing_msg:
+                if existing_msg.content != text:
+                    raise HTTPException(409, 'Idempotency conflict: payload mismatch')
                 existing_task = (await db.execute(
                     select(A2ATask).where(A2ATask.source_message_id == existing_msg.id)
                 )).scalar_one_or_none()
                 if existing_task:
+                    if existing_task.target_agent != target.username and existing_task.target_agent != target.id:
+                        raise HTTPException(409, 'Idempotency conflict: target mismatch')
                     result = self.task_store._to_sdk_task(existing_task)
                     task = existing_task
                     frame = None
+                    is_new_task = False
                 else:
                     task, _ = await TaskService.create_task(db,
                         query=text,
@@ -265,19 +292,68 @@ class SQLRequestHandler(DefaultRequestHandler):
                     frame = await offer(db, delivery)
                     await db.commit()
                     result = self.task_store._to_sdk_task(task)
+                    is_new_task = True
             else:
                 source = Message(room_id=room.id, sender_id=user.id, sender_type='human', sender_name=user.display_name, content=text, msg_type='task', client_message_id=client_msg_id)
                 db.add(source)
-                await db.flush()
-                task, _ = await TaskService.create_task(db,
-                    query=text,
-                    source_agent=user.id, target_agent=target.username, room_id=room.id, source_message_id=source.id,
-                    context_id=params.message.context_id or str(uuid.uuid4()))
-                from app.chat.delivery_service import create_delivery, offer, slug
-                delivery = await create_delivery(db, task, target.id)
-                frame = await offer(db, delivery)
-                await db.commit()
-                result = self.task_store._to_sdk_task(task)
+                try:
+                    await db.flush()
+                    task, _ = await TaskService.create_task(db,
+                        query=text,
+                        source_agent=user.id, target_agent=target.username, room_id=room.id, source_message_id=source.id,
+                        context_id=params.message.context_id or str(uuid.uuid4()))
+                    from app.chat.delivery_service import create_delivery, offer, slug
+                    delivery = await create_delivery(db, task, target.id)
+                    frame = await offer(db, delivery)
+                    await db.commit()
+                    result = self.task_store._to_sdk_task(task)
+                    is_new_task = True
+                except IntegrityError:
+                    await db.rollback()
+                    if client_msg_id:
+                        existing_msg = (await db.execute(
+                            select(Message).where(
+                                Message.room_id == room.id,
+                                Message.sender_id == user.id,
+                                Message.client_message_id == client_msg_id,
+                            )
+                        )).scalar_one_or_none()
+                        if existing_msg:
+                            if existing_msg.content != text:
+                                raise HTTPException(409, 'Idempotency conflict: payload mismatch')
+                            existing_task = (await db.execute(
+                                select(A2ATask).where(A2ATask.source_message_id == existing_msg.id)
+                            )).scalar_one_or_none()
+                            if existing_task:
+                                if existing_task.target_agent != target.username and existing_task.target_agent != target.id:
+                                    raise HTTPException(409, 'Idempotency conflict: target mismatch')
+                                result = self.task_store._to_sdk_task(existing_task)
+                                task = existing_task
+                                frame = None
+                                is_new_task = False
+                            else:
+                                task, _ = await TaskService.create_task(db,
+                                    query=text,
+                                    source_agent=user.id, target_agent=target.username, room_id=room.id, source_message_id=existing_msg.id,
+                                    context_id=params.message.context_id or str(uuid.uuid4()))
+                                from app.chat.delivery_service import create_delivery, offer, slug
+                                delivery = await create_delivery(db, task, target.id)
+                                frame = await offer(db, delivery)
+                                await db.commit()
+                                result = self.task_store._to_sdk_task(task)
+                                is_new_task = True
+                        else:
+                            raise
+                    else:
+                        raise
+
+            context.state['_is_new_task'] = is_new_task
+            req = context.state.get('request')
+            if req and hasattr(req, 'state'):
+                try:
+                    req.state._is_new_task = is_new_task
+                except Exception:
+                    pass
         from app.ws.connection_manager import connection_manager
         if frame:
             await connection_manager.broadcast('_agent_' + slug(target.username), frame)
@@ -617,8 +693,15 @@ def guarded(endpoint, handler, operation, rpc=False):
                 try:
                     if method == 'SendStreamingMessage':
                         params.configuration.return_immediately = True  # Streaming never blocks on execution.
-                        task = await handler.on_message_send(params, ContextBuilder().build(request))
+                        call_ctx = ContextBuilder().build(request)
+                        task = await handler.on_message_send(params, call_ctx)
                         task_id = task.id
+                        is_new_task = call_ctx.state.get('_is_new_task')
+                        if is_new_task is None and hasattr(request, 'state'):
+                            is_new_task = getattr(request.state, '_is_new_task', True)
+                        if is_new_task is None:
+                            is_new_task = True
+
                         bind_ok = False
                         try:
                             async with sse_session() as db:
@@ -626,18 +709,21 @@ def guarded(endpoint, handler, operation, rpc=False):
                         except Exception:
                             bind_ok = False
                         if not bind_ok:
-                            with anyio.move_on_after(SSE_DB_SECONDS + 1, shield=True):
-                                try:
-                                    async with sse_session() as db:
-                                        t_cancel, _, _ = await TaskService.cancel_task(db, task_id)
-                                        from app.chat.delivery_service import cancel_deliveries
-                                        frames = await cancel_deliveries(db, task_id) if t_cancel and t_cancel.status == 'canceled' else []
-                                        await db.commit()
-                                    from app.ws.connection_manager import connection_manager
-                                    for channel, frame in frames:
-                                        await connection_manager.broadcast(channel, frame)
-                                except Exception:
-                                    pass
+                            if is_new_task:
+                                with anyio.move_on_after(SSE_DB_SECONDS + 1, shield=True):
+                                    try:
+                                        async with sse_session() as db:
+                                            t_cancel, _, _ = await TaskService.cancel_task(db, task_id)
+                                            from app.chat.delivery_service import cancel_deliveries
+                                            frames = await cancel_deliveries(db, task_id) if t_cancel and t_cancel.status == 'canceled' else []
+                                            await db.commit()
+                                        from app.ws.connection_manager import connection_manager
+                                        for channel, frame in frames:
+                                            await connection_manager.broadcast(channel, frame)
+                                    except Exception as exc:
+                                        logger.warning("Failed to cancel newly created task %s after SSE bind failure: %s", task_id, exc)
+                            else:
+                                logger.info("Preserving existing task %s without cancellation after SSE bind failure", task_id)
                             raise QuotaUnavailable()
                     async def stream():
                         try:

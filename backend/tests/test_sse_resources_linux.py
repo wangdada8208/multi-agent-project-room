@@ -229,11 +229,17 @@ async def state():
     (tmp_path / 'process.json').write_text(json.dumps({'pid':process.pid, 'pgid':os.getpgid(process.pid), 'port':port}))
     client = httpx.AsyncClient(base_url=f'http://127.0.0.1:{port}', trust_env=False, timeout=5)
     headers = {'Authorization': 'Bearer '+create_access_token(owner.id), 'A2A-Version':'1.0'}
-    params = {'configuration': {'returnImmediately': True}, 'message': {
-        'messageId': secrets.token_hex(8), 'role': 'ROLE_USER', 'parts': [{'text': 'synthetic no-model task'}],
-        'metadata': {'roomId': room.id, 'targetAgent': agent.id}}}
     async def create():
-        response = await client.post('/a2a/message:send', headers=headers, json=params)
+        payload = {
+            'configuration': {'returnImmediately': True},
+            'message': {
+                'messageId': secrets.token_hex(8),
+                'role': 'ROLE_USER',
+                'parts': [{'text': 'synthetic no-model task'}],
+                'metadata': {'roomId': room.id, 'targetAgent': agent.id},
+            },
+        }
+        response = await client.post('/a2a/message:send', headers=headers, json=payload)
         assert response.status_code == 200, response.text
         return response.json()['task']['id']
     async def state(slots=0):

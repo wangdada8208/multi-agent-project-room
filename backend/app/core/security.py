@@ -72,6 +72,8 @@ def decode_access_token(token: str) -> dict[str, Any]:
             raise ValueError("expired token")
         if not payload.get("sub"):
             raise ValueError("missing subject")
+        if not payload.get("typ"):
+            raise ValueError("missing token type")
         return payload
     except Exception as exc:
         raise HTTPException(status_code=401, detail="Invalid token") from exc
@@ -88,8 +90,8 @@ async def get_current_user(
     if user is None:
         raise HTTPException(status_code=401, detail="User not found")
     token_user_type = payload.get("typ")
-    if token_user_type is not None and token_user_type != user.user_type:
+    if token_user_type != user.user_type:
         raise HTTPException(status_code=401, detail="Account type mismatch")
-    if getattr(user, "is_active", True) is False:
+    if not getattr(user, "is_active", True):
         raise HTTPException(status_code=401, detail="Inactive account")
     return user

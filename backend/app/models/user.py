@@ -24,6 +24,7 @@ class User(Base):
     owner_bound_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     avatar_url: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
     is_online: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     password_hash: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
     last_seen_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
@@ -38,6 +39,7 @@ class User(Base):
             "user_type": self.user_type,
             "avatar_url": self.avatar_url,
             "is_online": self.is_online,
+            "is_active": self.is_active,
             "last_seen_at": self.last_seen_at.isoformat() if self.last_seen_at else None,
             "created_at": self.created_at.isoformat(),
         }

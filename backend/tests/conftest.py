@@ -23,11 +23,14 @@ if str(REPO_ROOT) not in sys.path:
 
 from app.a2a.sse_global_quota import LEASE_METADATA
 from app.main import app
+from app.core import database as core_database
 from app.core.database import Base, get_db
 from app.a2a import task_manager as a2a_task_manager
 from app.a2a import server as a2a_server
 from app.a2a import discovery as a2a_discovery
 from app.chat import ws_handler as chat_ws_handler
+from app.ws.connection_manager import connection_manager
+from app.auth.rate_limit import _attempts, _blocked_until
 
 # Use SQLite for tests (fast, no external deps)
 TEST_DATABASE_URL = os.environ.get("MAPR_TEST_DATABASE_URL", "sqlite+aiosqlite:///./test.db")
@@ -40,6 +43,7 @@ if not make_url(TEST_DATABASE_URL).drivername.startswith("sqlite"):
 engine = create_async_engine(TEST_DATABASE_URL, echo=False, poolclass=NullPool)
 test_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
+core_database.async_session = test_session
 a2a_task_manager.async_session = test_session
 a2a_server.async_session = test_session
 a2a_discovery.async_session = test_session
@@ -49,10 +53,16 @@ chat_ws_handler.async_session = test_session
 @pytest_asyncio.fixture(autouse=True)
 async def setup_db():
     """Create tables before each test, drop after."""
+    connection_manager.reset()
+    _attempts.clear()
+    _blocked_until.clear()
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
         await conn.run_sync(LEASE_METADATA.create_all)
     yield
+    connection_manager.reset()
+    _attempts.clear()
+    _blocked_until.clear()
     async with engine.begin() as conn:
         await conn.run_sync(LEASE_METADATA.drop_all)
         await conn.run_sync(Base.metadata.drop_all)

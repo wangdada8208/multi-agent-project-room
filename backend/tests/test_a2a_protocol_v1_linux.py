@@ -10,6 +10,7 @@ async def test_anonymous_standard_routes_rejected(client,path,method):
 import asyncio
 import json
 import socket
+import uuid
 from types import SimpleNamespace
 import pytest_asyncio
 import httpx
@@ -42,7 +43,7 @@ async def actors(db):
     return SimpleNamespace(users=users,room=room,headers=headers)
 
 def message(actors):
-    return {'configuration':{'returnImmediately':True}, 'message':{'messageId':'m-1','role':'ROLE_USER','parts':[{'text':'public task'}],
+    return {'configuration':{'returnImmediately':True}, 'message':{'messageId':f'm-{uuid.uuid4().hex[:8]}','role':'ROLE_USER','parts':[{'text':'public task'}],
         'metadata':{'roomId':actors.room.id,'targetAgent':actors.users['agent'].id}}}
 
 async def send(client,actors,rest=False):

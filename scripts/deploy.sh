@@ -63,7 +63,7 @@ address = os.environ.get('VITE_XMTP_WORKER_ADDRESS', '')
 xmtp_env = os.environ.get('VITE_XMTP_ENV', '')
 if not re.fullmatch(r'0x[0-9a-fA-F]{40}', address) or xmtp_env not in ('dev', 'production', 'local'):
     raise SystemExit('Valid public worker address and matching XMTP environment required')
-values = {'VITE_XMTP_WORKER_ADDRESS': address, 'VITE_XMTP_ENV': xmtp_env, 'MAPR_FRONTEND_PORT': os.environ['MAPR_FRONTEND_PORT']}
+values = {'VITE_XMTP_WORKER_ADDRESS': address, 'VITE_XMTP_ENV': xmtp_env, 'MAPR_FRONTEND_PORT': os.environ['MAPR_FRONTEND_PORT'], 'MAPR_ENVIRONMENT': 'production'}
 if not re.search(r'^MAPR_DATABASE_PASSWORD=.+$', raw, re.M):
     password = subprocess.check_output(os.environ['MAPR_COMPOSE_COMMAND'].split() + ['exec', '-T', 'postgres', 'printenv', 'POSTGRES_PASSWORD'], text=True).strip()
     if not re.fullmatch(r'[A-Za-z0-9_~.-]+', password):
@@ -92,10 +92,10 @@ migration_started=true
 "${dc[@]}" up -d --no-build backend frontend
 healthy=false
 for attempt in {1..20}; do
-  if curl --fail --silent --max-time 5 "http://127.0.0.1:$frontend_port/health" >/dev/null; then healthy=true; break; fi
+  if curl --fail --silent --max-time 5 "http://127.0.0.1:$frontend_port/ready" >/dev/null; then healthy=true; break; fi
   sleep 2
 done
-[[ "$healthy" == true ]] || { echo 'Health check failed' >&2; false; }
+[[ "$healthy" == true ]] || { echo 'Readiness check failed' >&2; false; }
 trap - ERR
 "${dc[@]}" ps
 python3 - "$backup" <<'PYPERM'

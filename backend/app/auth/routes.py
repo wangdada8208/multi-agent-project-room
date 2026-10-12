@@ -40,18 +40,21 @@ def _auth_response(user: User) -> dict:
 
 @router.post("/register")
 async def register(request: Request, payload: RegisterRequest, db: AsyncSession = Depends(get_db)) -> dict:
-    check_rate_limit(request, "register")
+    canonical_username = payload.username.casefold()
+    check_rate_limit(request, "register", identifier=canonical_username)
 
     if payload.user_type == "agent":
         secret = get_settings().agent_enrollment_secret.get_secret_value()
         key = request.headers.get("X-Agent-Enrollment-Key", "")
         if not secret or not hmac.compare_digest(key.encode("utf-8"), secret.encode("utf-8")):
+            record_attempt(request, "register", identifier=canonical_username)
             raise HTTPException(status_code=403, detail="Agent enrollment requires administrator authorization")
 
     # Canonicalize all new accounts so human and agent names share the existing
     # DB unique constraint even across processes; no process-local lock is used.
-    username = payload.username.casefold()
+    username = canonical_username
     if await find_username_matches(db, username):
+        record_attempt(request, "register", identifier=canonical_username)
         raise HTTPException(status_code=409, detail="Username already exists")
 
     user = User(
@@ -66,24 +69,30 @@ async def register(request: Request, payload: RegisterRequest, db: AsyncSession 
         await db.commit()
     except IntegrityError:
         await db.rollback()
+        record_attempt(request, "register", identifier=canonical_username)
         raise HTTPException(status_code=409, detail="Username already exists") from None
     await db.refresh(user)
 
-    clear_attempts(request, "register")
+    clear_attempts(request, "register", identifier=canonical_username)
     return _auth_response(user)
 
 
 @router.post("/login")
 async def login(request: Request, payload: LoginRequest, db: AsyncSession = Depends(get_db)) -> dict:
-    check_rate_limit(request, "login")
+    canonical_username = payload.username.casefold()
+    check_rate_limit(request, "login", identifier=canonical_username)
 
     matches = await find_username_matches(db, payload.username)
     user = matches[0] if len(matches) == 1 else None
     if user is None or not verify_password(payload.password, user.password_hash):
-        record_attempt(request, "login")
+        record_attempt(request, "login", identifier=canonical_username)
         raise HTTPException(status_code=401, detail="Invalid username or password")
 
-    clear_attempts(request, "login")
+    if not getattr(user, "is_active", True):
+        record_attempt(request, "login", identifier=canonical_username)
+        raise HTTPException(status_code=401, detail="Inactive account")
+
+    clear_attempts(request, "login", identifier=canonical_username)
     user.last_seen_at = datetime.now(timezone.utc)
     await db.commit()
     await db.refresh(user)

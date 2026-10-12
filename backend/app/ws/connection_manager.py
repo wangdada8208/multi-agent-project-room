@@ -120,5 +120,11 @@ class ConnectionManager:
 
         await asyncio.gather(*(send_one(ws) for ws in self._connections.get(room_id, set()).copy()))
 
+    def reset(self) -> None:
+        self.online.clear()
+        self._connections.clear()
+        self._participants.clear()
+        self._authorization_checks.clear()
+
 
 connection_manager = ConnectionManager()

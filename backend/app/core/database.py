@@ -59,6 +59,9 @@ async def init_db():
             if conn.dialect.name == "sqlite":
                 from app.a2a.sse_global_quota import LEASE_METADATA
                 await conn.run_sync(LEASE_METADATA.create_all)
+    else:
+        async with engine.connect() as conn:
+            await conn.execute(__import__("sqlalchemy").text("SELECT 1"))
 
 
 async def get_db() -> AsyncSession:  # type: ignore[misc]

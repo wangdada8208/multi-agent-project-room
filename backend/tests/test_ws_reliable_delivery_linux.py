@@ -648,3 +648,5 @@ async def test_real_websocket_ack_progress_resume_and_seq_replay(db):
         server.should_exit = True
         await asyncio.wait_for(serving, 5)
         listener.close()
+        from app.ws.connection_manager import connection_manager
+        connection_manager.reset()
