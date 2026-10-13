@@ -13,7 +13,7 @@ from app.config import get_settings
 from app.agent.service import find_username_matches
 from app.core.security import create_access_token, get_current_user, hash_password, verify_password
 from app.models.user import User
-from .rate_limit import check_rate_limit, record_attempt, clear_attempts
+from .rate_limit import check_rate_limit, clear_attempts
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
@@ -41,20 +41,21 @@ def _auth_response(user: User) -> dict:
 @router.post("/register")
 async def register(request: Request, payload: RegisterRequest, db: AsyncSession = Depends(get_db)) -> dict:
     canonical_username = payload.username.casefold()
-    check_rate_limit(request, "register", identifier=canonical_username)
+    # Reserve the attempt up front: every registration try counts, successful or
+    # not, and the reservation happens in the same atomic step as the threshold
+    # check so concurrent requests cannot slip past the limit together.
+    await check_rate_limit(request, "register", identifier=canonical_username)
 
     if payload.user_type == "agent":
         secret = get_settings().agent_enrollment_secret.get_secret_value()
         key = request.headers.get("X-Agent-Enrollment-Key", "")
         if not secret or not hmac.compare_digest(key.encode("utf-8"), secret.encode("utf-8")):
-            record_attempt(request, "register", identifier=canonical_username)
             raise HTTPException(status_code=403, detail="Agent enrollment requires administrator authorization")
 
     # Canonicalize all new accounts so human and agent names share the existing
     # DB unique constraint even across processes; no process-local lock is used.
     username = canonical_username
     if await find_username_matches(db, username):
-        record_attempt(request, "register", identifier=canonical_username)
         raise HTTPException(status_code=409, detail="Username already exists")
 
     user = User(
@@ -69,30 +70,36 @@ async def register(request: Request, payload: RegisterRequest, db: AsyncSession 
         await db.commit()
     except IntegrityError:
         await db.rollback()
-        record_attempt(request, "register", identifier=canonical_username)
         raise HTTPException(status_code=409, detail="Username already exists") from None
     await db.refresh(user)
 
-    clear_attempts(request, "register", identifier=canonical_username)
+    # The registration attempt was already reserved above; a success does not
+    # erase it, so bulk account creation stays rate limited.
     return _auth_response(user)
 
 
 @router.post("/login")
 async def login(request: Request, payload: LoginRequest, db: AsyncSession = Depends(get_db)) -> dict:
     canonical_username = payload.username.casefold()
-    check_rate_limit(request, "login", identifier=canonical_username)
+    # Reserving the attempt here makes the check atomic with the count, so a
+    # burst of concurrent guesses can no longer race past the threshold.
+    reservation = await check_rate_limit(request, "login", identifier=canonical_username)
 
     matches = await find_username_matches(db, payload.username)
     user = matches[0] if len(matches) == 1 else None
     if user is None or not verify_password(payload.password, user.password_hash):
-        record_attempt(request, "login", identifier=canonical_username)
         raise HTTPException(status_code=401, detail="Invalid username or password")
 
     if not getattr(user, "is_active", True):
-        record_attempt(request, "login", identifier=canonical_username)
         raise HTTPException(status_code=401, detail="Inactive account")
 
-    clear_attempts(request, "login", identifier=canonical_username)
+    # A successful login undoes only its own reservation and the account's
+    # failure record.  The IP-level record is deliberately left alone: an
+    # attacker holding any valid account must not be able to erase the attack
+    # trail by logging in.
+    if reservation is not None:
+        await reservation.release()
+    await clear_attempts(request, "login", identifier=canonical_username)
     user.last_seen_at = datetime.now(timezone.utc)
     await db.commit()
     await db.refresh(user)
