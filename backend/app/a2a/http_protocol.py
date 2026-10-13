@@ -12,6 +12,7 @@ import hmac
 import logging
 import math
 import json
+import re
 import time
 import uuid
 import anyio
@@ -51,6 +52,9 @@ logger = logging.getLogger(__name__)
 HUB_ID = str(uuid.uuid4())
 
 PAGE_SIZE = 100
+# Idempotency keys are stored and compared verbatim; never truncated. The
+# allowed alphabet keeps them safe as log/SQL values and portable across clients.
+IDEMPOTENCY_KEY_RE = re.compile(r"^[A-Za-z0-9_.:-]{1,128}$")
 STREAM_SECONDS = 60.0
 POLL_SECONDS = 0.25
 HEARTBEAT_SECONDS = 10.0
@@ -59,6 +63,14 @@ MAX_USER_STREAMS = 4
 BLOCKING_SECONDS = 60.0
 SSE_DB_SECONDS = 3.0
 INTERRUPTED_STATUSES = ('input_required',)
+# ListTasks pages over the *permission-filtered* stream, so a raw SQL window can
+# never be emitted verbatim. Rows are scanned in bounded batches until the page
+# is full (or one extra visible row proves a further page exists).
+LIST_TASKS_SCAN_BATCH = 64
+LIST_TASKS_SCAN_LIMIT = 4096
+# Compensation of a freshly created task after an SSE lease bind failure is
+# retried before the task is durably marked failed.
+BIND_COMPENSATION_ATTEMPTS = 2
 _streams: dict[str, int] = {}
 
 
@@ -66,6 +78,21 @@ def sessions():
     # Same injectable SQL factory as the existing SDK TaskStore.
     from app.a2a import server
     return server.async_session()
+
+
+def _target_matches(existing_target: str | None, target_username: str, target_id: str) -> bool:
+    """Whether a persisted task target addresses the same agent as this request.
+
+    The idempotency key is stable across retries that spell the agent the same
+    way, and `check_task` itself resolves targets by normalized slug, so the
+    conflict rule accepts the stored slug/id as well as the raw value.
+    """
+    if not existing_target:
+        return False
+    if existing_target in (target_username, target_id):
+        return True
+    from app.chat.delivery_service import slug
+    return slug(existing_target) == slug(target_username)
 
 
 class Identity(SDKUser):
@@ -95,7 +122,10 @@ def decode_http_token(token):
     Both formats expire and identify an existing DB account.
     """
     if token.count('.') != 2:
-        return decode_access_token(token)
+        claims = decode_access_token(token)
+        if claims.get('typ') not in ('human', 'agent'):
+            raise HTTPException(401, 'Invalid token')
+        return claims
     try:
         from app.config import get_settings
         header, payload, signature = token.split('.')
@@ -117,6 +147,8 @@ def decode_http_token(token):
                 raise ValueError
         if not isinstance(claims.get('sub'), str) or not claims['sub']:
             raise ValueError
+        if claims.get('typ') not in ('human', 'agent'):
+            raise ValueError
         return claims
     except Exception:
         raise HTTPException(401, 'Invalid token') from None
@@ -128,7 +160,8 @@ async def authenticate(request, db):
         raise HTTPException(401, 'Authentication required')
     payload = decode_http_token(header[7:])
     user = await db.get(User, payload['sub'])
-    if user is None or user.user_type not in ('human', 'agent') or payload.get('typ', user.user_type) != user.user_type:
+    # typ is required and must match the stored account type; no fallback.
+    if user is None or user.user_type not in ('human', 'agent') or payload.get('typ') != user.user_type:
         raise HTTPException(401, 'Invalid account')
     # The current model has no disabled flag. If added, fail closed here.
     if getattr(user, 'is_active', True) is False:
@@ -231,6 +264,16 @@ class SQLRequestHandler(DefaultRequestHandler):
         async with sessions() as db:
             user = await authenticate(context.state['request'], db)
             room, target = await check_send(db, params, user)
+            # Snapshot every scalar we need before any flush/rollback: an async
+            # rollback expires attached ORM instances, and later attribute reads
+            # would raise MissingGreenlet outside the greenlet context.
+            user_id = user.id
+            user_display_name = user.display_name
+            room_id = room.id
+            target_id = target.id
+            target_username = target.username
+            from app.chat.delivery_service import create_delivery, offer, slug
+            target_slug = slug(target_username)
             text = sanitize_payload('\n'.join(p.text for p in params.message.parts))
             metadata = getattr(params.message, 'metadata', None) or {}
             client_msg_id = None
@@ -255,16 +298,17 @@ class SQLRequestHandler(DefaultRequestHandler):
                 if std_msg_id and str(std_msg_id).strip():
                     client_msg_id = str(std_msg_id).strip()
 
-            if client_msg_id:
-                client_msg_id = str(client_msg_id)[:128]
+            if client_msg_id and not IDEMPOTENCY_KEY_RE.match(client_msg_id):
+                # Never silently truncate or normalize: reject and let the client fix it.
+                raise HTTPException(400, 'Invalid idempotency key format')
 
             is_new_task = True
             existing_msg = None
             if client_msg_id:
                 existing_msg = (await db.execute(
                     select(Message).where(
-                        Message.room_id == room.id,
-                        Message.sender_id == user.id,
+                        Message.room_id == room_id,
+                        Message.sender_id == user_id,
                         Message.client_message_id == client_msg_id,
                     )
                 )).scalar_one_or_none()
@@ -276,7 +320,7 @@ class SQLRequestHandler(DefaultRequestHandler):
                     select(A2ATask).where(A2ATask.source_message_id == existing_msg.id)
                 )).scalar_one_or_none()
                 if existing_task:
-                    if existing_task.target_agent != target.username and existing_task.target_agent != target.id:
+                    if not _target_matches(existing_task.target_agent, target_username, target_id):
                         raise HTTPException(409, 'Idempotency conflict: target mismatch')
                     result = self.task_store._to_sdk_task(existing_task)
                     task = existing_task
@@ -285,65 +329,79 @@ class SQLRequestHandler(DefaultRequestHandler):
                 else:
                     task, _ = await TaskService.create_task(db,
                         query=text,
-                        source_agent=user.id, target_agent=target.username, room_id=room.id, source_message_id=existing_msg.id,
+                        source_agent=user_id, target_agent=target_username, room_id=room_id, source_message_id=existing_msg.id,
                         context_id=params.message.context_id or str(uuid.uuid4()))
-                    from app.chat.delivery_service import create_delivery, offer, slug
-                    delivery = await create_delivery(db, task, target.id)
+                    delivery = await create_delivery(db, task, target_id)
                     frame = await offer(db, delivery)
                     await db.commit()
                     result = self.task_store._to_sdk_task(task)
                     is_new_task = True
             else:
-                source = Message(room_id=room.id, sender_id=user.id, sender_type='human', sender_name=user.display_name, content=text, msg_type='task', client_message_id=client_msg_id)
+                source = Message(room_id=room_id, sender_id=user_id, sender_type='human', sender_name=user_display_name, content=text, msg_type='task', client_message_id=client_msg_id)
                 db.add(source)
                 try:
                     await db.flush()
                     task, _ = await TaskService.create_task(db,
                         query=text,
-                        source_agent=user.id, target_agent=target.username, room_id=room.id, source_message_id=source.id,
+                        source_agent=user_id, target_agent=target_username, room_id=room_id, source_message_id=source.id,
                         context_id=params.message.context_id or str(uuid.uuid4()))
-                    from app.chat.delivery_service import create_delivery, offer, slug
-                    delivery = await create_delivery(db, task, target.id)
+                    delivery = await create_delivery(db, task, target_id)
                     frame = await offer(db, delivery)
                     await db.commit()
                     result = self.task_store._to_sdk_task(task)
                     is_new_task = True
                 except IntegrityError:
+                    # A concurrent request won the unique-key race. Roll back and
+                    # adopt its persisted message/task so both callers converge.
+                    # `rollback()` expires every ORM instance in this session, so
+                    # only the scalar snapshots taken before the flush are read
+                    # afterwards; every object touched below is (re)loaded by a
+                    # fresh statement issued after the rollback, which is what
+                    # keeps a stale expired object from raising MissingGreenlet.
                     await db.rollback()
-                    if client_msg_id:
+                    if not client_msg_id:
+                        raise
+                    # A third concurrent writer can still be committing the same
+                    # task/delivery, so re-reading is retried a bounded number of
+                    # times before the failure is surfaced.
+                    for _attempt in range(3):
                         existing_msg = (await db.execute(
                             select(Message).where(
-                                Message.room_id == room.id,
-                                Message.sender_id == user.id,
+                                Message.room_id == room_id,
+                                Message.sender_id == user_id,
                                 Message.client_message_id == client_msg_id,
                             )
                         )).scalar_one_or_none()
-                        if existing_msg:
-                            if existing_msg.content != text:
-                                raise HTTPException(409, 'Idempotency conflict: payload mismatch')
-                            existing_task = (await db.execute(
-                                select(A2ATask).where(A2ATask.source_message_id == existing_msg.id)
-                            )).scalar_one_or_none()
-                            if existing_task:
-                                if existing_task.target_agent != target.username and existing_task.target_agent != target.id:
-                                    raise HTTPException(409, 'Idempotency conflict: target mismatch')
-                                result = self.task_store._to_sdk_task(existing_task)
-                                task = existing_task
-                                frame = None
-                                is_new_task = False
-                            else:
-                                task, _ = await TaskService.create_task(db,
-                                    query=text,
-                                    source_agent=user.id, target_agent=target.username, room_id=room.id, source_message_id=existing_msg.id,
-                                    context_id=params.message.context_id or str(uuid.uuid4()))
-                                from app.chat.delivery_service import create_delivery, offer, slug
-                                delivery = await create_delivery(db, task, target.id)
-                                frame = await offer(db, delivery)
-                                await db.commit()
-                                result = self.task_store._to_sdk_task(task)
-                                is_new_task = True
-                        else:
-                            raise
+                        if existing_msg is None:
+                            await db.rollback()
+                            continue
+                        if existing_msg.content != text:
+                            raise HTTPException(409, 'Idempotency conflict: payload mismatch')
+                        existing_task = (await db.execute(
+                            select(A2ATask).where(A2ATask.source_message_id == existing_msg.id)
+                        )).scalar_one_or_none()
+                        if existing_task is not None:
+                            if not _target_matches(existing_task.target_agent, target_username, target_id):
+                                raise HTTPException(409, 'Idempotency conflict: target mismatch')
+                            result = self.task_store._to_sdk_task(existing_task)
+                            task = existing_task
+                            frame = None
+                            is_new_task = False
+                            break
+                        try:
+                            task, _ = await TaskService.create_task(db,
+                                query=text,
+                                source_agent=user_id, target_agent=target_username, room_id=room_id, source_message_id=existing_msg.id,
+                                context_id=params.message.context_id or str(uuid.uuid4()))
+                            delivery = await create_delivery(db, task, target_id)
+                            frame = await offer(db, delivery)
+                            await db.commit()
+                        except IntegrityError:
+                            await db.rollback()
+                            continue
+                        result = self.task_store._to_sdk_task(task)
+                        is_new_task = True
+                        break
                     else:
                         raise
 
@@ -354,9 +412,17 @@ class SQLRequestHandler(DefaultRequestHandler):
                     req.state._is_new_task = is_new_task
                 except Exception:
                     pass
+            task_id = task.id
         from app.ws.connection_manager import connection_manager
         if frame:
-            await connection_manager.broadcast('_agent_' + slug(target.username), frame)
+            try:
+                await connection_manager.broadcast('_agent_' + target_slug, frame)
+            except Exception as exc:
+                # The message, task and delivery are already committed, so a push
+                # failure must not turn a durable, idempotent send into an error
+                # the client cannot retry; the queued delivery still reaches the
+                # agent. Log the class name only so payloads never reach logs.
+                logger.warning("Failed to push task %s to its target agent: %s", task_id, type(exc).__name__)
         if params.configuration.return_immediately:
             return result
         # A standard send blocks by default, but holds no SQL transaction while waiting.
@@ -364,12 +430,12 @@ class SQLRequestHandler(DefaultRequestHandler):
         while time.monotonic() < deadline:
             if await context.state['request'].is_disconnected():
                 raise InternalError('Caller disconnected; task remains persisted')
-            result = await self.on_get_task(pb.GetTaskRequest(id=task.id), context)
+            result = await self.on_get_task(pb.GetTaskRequest(id=task_id), context)
             if result.status.state in (pb.TASK_STATE_COMPLETED, pb.TASK_STATE_FAILED,
                                        pb.TASK_STATE_CANCELED, pb.TASK_STATE_INPUT_REQUIRED):
                 return result
             await asyncio.sleep(POLL_SECONDS)
-        raise InternalError('Blocking wait limit reached; use GetTask', data={'taskId':task.id})
+        raise InternalError('Blocking wait limit reached; use GetTask', data={'taskId':task_id})
 
     @storage_boundary
     async def on_get_task(self, params, context):
@@ -402,10 +468,33 @@ class SQLRequestHandler(DefaultRequestHandler):
     async def on_list_tasks(self, params, context):
         async with sessions() as db:
             user = await authenticate(context.state['request'], db)
-            # Filter in SQL by room membership before bounded pagination.
-            stmt = select(A2ATask).join(RoomPermission, RoomPermission.room_id == A2ATask.room_id).where(RoomPermission.user_id == user.id)
+            # Filter by active room and role in SQL before pagination bounds so
+            # the offset/limit window never drifts when rows are filtered out.
+            stmt = (
+                select(A2ATask)
+                .join(Room, Room.id == A2ATask.room_id)
+                .join(RoomPermission, RoomPermission.room_id == A2ATask.room_id)
+                .where(
+                    Room.is_active.is_(True),
+                    RoomPermission.user_id == user.id,
+                    RoomPermission.role.in_(('owner', 'member', 'viewer')),
+                )
+            )
             if user.user_type == 'agent':
-                stmt = stmt.where(A2ATask.target_agent.in_((user.id, user.username)))
+                # `check_task` is the authoritative filter: it requires the
+                # requesting agent to be the task target (resolved by normalized
+                # slug, and only when that match is unique) and the room owner to
+                # be a non-viewer. Only the owner condition narrows faithfully in
+                # SQL; the target match stays with `check_task` below, because
+                # narrowing it by id/username here silently hid tasks whose target
+                # was stored as a slug or a display name.
+                stmt = stmt.where(RoomPermission.role.in_(('owner', 'member')))
+                if user.owner_user_id:
+                    from sqlalchemy.orm import aliased
+                    OwnerPermission = aliased(RoomPermission)
+                    stmt = stmt.join(OwnerPermission, (OwnerPermission.room_id == A2ATask.room_id) & (OwnerPermission.user_id == user.owner_user_id)).where(OwnerPermission.role.in_(('owner', 'member')))
+                else:
+                    stmt = stmt.where(A2ATask.id == -1)
             if params.context_id:
                 stmt = stmt.where(A2ATask.context_id == params.context_id)
             if params.status:
@@ -420,19 +509,42 @@ class SQLRequestHandler(DefaultRequestHandler):
             if params.page_size < 0 or params.page_size > PAGE_SIZE:
                 raise InvalidParamsError('Invalid page size')
             size = params.page_size or 50
-            rows = (await db.execute(stmt.order_by(A2ATask.id).offset(offset).limit(size + 1))).scalars().all()
+            # created_at alone is not unique; id is the deterministic tiebreaker.
+            ordered = stmt.order_by(A2ATask.created_at.desc(), A2ATask.id.desc())
             response = pb.ListTasksResponse(page_size=size)
-            for row in rows[:size]:
-                try:
-                    _, room = await check_task(db, row.id, user)
-                except HTTPException:
-                    continue
-                task = self.task_store._to_sdk_task(row)
-                if not params.include_artifacts or room.transport == 'xmtp' or row.status == 'failed':
-                    task.ClearField('artifacts')
-                response.tasks.append(task)
-            if len(rows) > size:
-                response.next_page_token = str(offset + size)
+            # The SQL pre-filter is a superset of the permissions `check_task`
+            # enforces, so a raw window can still hold rows the caller may not
+            # see. Page over the *accepted* stream instead: scan in bounded
+            # batches until the page is full, or one further visible row proves a
+            # next page. That keeps pages full and stops the token from skipping
+            # past visible rows, which a post-window `continue` used to do.
+            cursor = offset
+            scanned = 0
+            next_offset = None
+            while scanned < LIST_TASKS_SCAN_LIMIT and next_offset is None:
+                batch = (await db.execute(ordered.offset(cursor).limit(LIST_TASKS_SCAN_BATCH))).scalars().all()
+                if not batch:
+                    break
+                for row in batch:
+                    start = cursor
+                    cursor += 1
+                    scanned += 1
+                    try:
+                        _, room = await check_task(db, row.id, user)
+                    except HTTPException:
+                        continue
+                    if len(response.tasks) == size:
+                        next_offset = start
+                        break
+                    task = self.task_store._to_sdk_task(row)
+                    if not params.include_artifacts or room.transport == 'xmtp' or row.status == 'failed':
+                        task.ClearField('artifacts')
+                    response.tasks.append(task)
+            if next_offset is not None:
+                response.next_page_token = str(next_offset)
+            elif scanned >= LIST_TASKS_SCAN_LIMIT and len(response.tasks) == size:
+                # Scan budget exhausted with a full page: more rows may exist.
+                response.next_page_token = str(cursor)
             return response
 
 
@@ -449,6 +561,44 @@ async def sse_session():
             # close could leave SQLAlchemy's shielded cleanup task unfinished.
             async with asyncio.timeout(SSE_DB_SECONDS):
                 yield db
+
+
+async def compensate_bind_failure(task_id: str) -> None:
+    """Undo a freshly created task whose SSE lease could not be bound.
+
+    The send already committed the message and the task, so a client retrying
+    with the same idempotency key still resolves to this task; compensation is
+    therefore safe, but it must never be silent. It is retried, and if it keeps
+    failing the task is durably marked failed so an idempotent GetTask or
+    SendMessage retry observes a terminal, recoverable state instead of a task
+    that appears to be alive forever.
+    """
+    for attempt in range(1, BIND_COMPENSATION_ATTEMPTS + 1):
+        with anyio.move_on_after(SSE_DB_SECONDS + 1, shield=True):
+            try:
+                async with sse_session() as db:
+                    t_cancel, _, _ = await TaskService.cancel_task(db, task_id)
+                    from app.chat.delivery_service import cancel_deliveries
+                    frames = await cancel_deliveries(db, task_id) if t_cancel and t_cancel.status == 'canceled' else []
+                    await db.commit()
+                from app.ws.connection_manager import connection_manager
+                for channel, frame in frames:
+                    await connection_manager.broadcast(channel, frame)
+                return
+            except Exception as exc:
+                # Log only the class name: prompts, payloads, tokens and encrypted
+                # plaintext must never leak into logs.
+                logger.warning(
+                    "Failed to cancel newly created task %s after SSE bind failure (attempt %d): %s",
+                    task_id, attempt, type(exc).__name__,
+                )
+    with anyio.move_on_after(SSE_DB_SECONDS + 1, shield=True):
+        try:
+            async with sse_session() as db:
+                await TaskService.fail_task(db, task_id, 'SSE lease bind failed; delivery not confirmed')
+                await db.commit()
+        except Exception as exc:
+            logger.warning("Failed to mark task %s failed after SSE bind failure: %s", task_id, type(exc).__name__)
 
 
 async def persisted_events(request, task_id, after, rpc_id=None, rpc=False):
@@ -608,7 +758,7 @@ def guarded(endpoint, handler, operation, rpc=False):
                 if len(raw) > 65536:
                     raise HTTPException(413, 'Request too large')
                 try:
-                    body = sanitize_payload(json.loads(raw)) if raw else {}
+                    body = json.loads(raw) if raw else {}
                 except (ValueError, UnicodeDecodeError):
                     raise JSONParseError() from None
                 if not isinstance(body, dict):
@@ -619,7 +769,11 @@ def guarded(endpoint, handler, operation, rpc=False):
                     if (body.get('jsonrpc') != '2.0' or 'id' not in body
                             or (body['id'] is not None and type(body['id']) not in (str,int))):
                         raise InvalidRequestError()
-                # SDK debug logging sees only sanitized data, never bearer strings.
+                # `_json`/`_body` are the protocol payload the SDK dispatcher
+                # parses, so they must stay byte-exact. Redaction is a logging
+                # concern: sanitizing here rewrites protocol fields whose names
+                # look sensitive (e.g. the ListTasks `pageToken` cursor becomes
+                # "[REDACTED]" and pagination breaks).
                 request._json = body
                 request._body = json.dumps(body).encode()
                 method = body.get('method') if rpc else operation
@@ -698,9 +852,11 @@ def guarded(endpoint, handler, operation, rpc=False):
                         task_id = task.id
                         is_new_task = call_ctx.state.get('_is_new_task')
                         if is_new_task is None and hasattr(request, 'state'):
-                            is_new_task = getattr(request.state, '_is_new_task', True)
+                            is_new_task = getattr(request.state, '_is_new_task', None)
                         if is_new_task is None:
-                            is_new_task = True
+                            # Fail safe: unknown provenance must never cancel a
+                            # task that may predate this request.
+                            is_new_task = False
 
                         bind_ok = False
                         try:
@@ -710,18 +866,10 @@ def guarded(endpoint, handler, operation, rpc=False):
                             bind_ok = False
                         if not bind_ok:
                             if is_new_task:
-                                with anyio.move_on_after(SSE_DB_SECONDS + 1, shield=True):
-                                    try:
-                                        async with sse_session() as db:
-                                            t_cancel, _, _ = await TaskService.cancel_task(db, task_id)
-                                            from app.chat.delivery_service import cancel_deliveries
-                                            frames = await cancel_deliveries(db, task_id) if t_cancel and t_cancel.status == 'canceled' else []
-                                            await db.commit()
-                                        from app.ws.connection_manager import connection_manager
-                                        for channel, frame in frames:
-                                            await connection_manager.broadcast(channel, frame)
-                                    except Exception as exc:
-                                        logger.warning("Failed to cancel newly created task %s after SSE bind failure: %s", task_id, exc)
+                                # The task was created by this request, so it is
+                                # safe to compensate. A pre-existing task is never
+                                # touched here: a failed lease must not destroy it.
+                                await compensate_bind_failure(task_id)
                             else:
                                 logger.info("Preserving existing task %s without cancellation after SSE bind failure", task_id)
                             raise QuotaUnavailable()
@@ -738,7 +886,8 @@ def guarded(endpoint, handler, operation, rpc=False):
             return await endpoint(request)
         except HTTPException as exc:
             if exc.status_code == 400:
-                return protocol_error(InvalidParamsError(), request_id, rpc)
+                # Surface the specific validation detail instead of a bare error.
+                return protocol_error(InvalidParamsError(exc.detail or None), request_id, rpc)
             return JSONResponse({'detail':exc.detail}, status_code=exc.status_code)
         except A2AError as exc:
             return protocol_error(exc, request_id, rpc)

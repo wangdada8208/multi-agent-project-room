@@ -317,13 +317,15 @@ async def test_standard_version_and_client_result_compatibility(client,actors):
 async def test_standard_jwt_algorithm_expiry_signature_and_db_identity(client,actors):
     import base64,hashlib,hmac,time
     from app.config import get_settings
-    def jwt(alg='HS256',exp=None,key=None,sub=None):
+    def jwt(alg='HS256',exp=None,key=None,sub=None,typ='human'):
         def encode(obj):
             return base64.urlsafe_b64encode(json.dumps(obj).encode()).decode().rstrip('=')
-        body=encode({'alg':alg,'typ':'JWT'})+'.'+encode({'sub':sub or actors.users['owner'].id,'exp':exp if exp is not None else time.time()+60})
+        body=encode({'alg':alg,'typ':'JWT'})+'.'+encode({'sub':sub or actors.users['owner'].id,'exp':exp if exp is not None else time.time()+60,'typ':typ} if typ else {'sub':sub or actors.users['owner'].id,'exp':exp if exp is not None else time.time()+60})
         sig=hmac.new((key or get_settings().auth_secret_key).encode(),body.encode(),hashlib.sha256).digest()
         return body+'.'+base64.urlsafe_b64encode(sig).decode().rstrip('=')
-    for token,code in [(jwt(),200),(jwt(alg='none'),401),(jwt(exp=time.time()-1),401),(jwt(key='synthetic-wrong'),401),(jwt(sub='missing'),401)]:
+    # A token with no `typ` claim is rejected: the audit requires typ to be present
+    # and to match the stored account type, with no fallback.
+    for token,code in [(jwt(),200),(jwt(alg='none'),401),(jwt(exp=time.time()-1),401),(jwt(key='synthetic-wrong'),401),(jwt(sub='missing'),401),(jwt(typ=None),401),(jwt(typ='agent'),401)]:
         r=await client.get('/a2a/tasks',headers={'Authorization':'Bearer '+token,'A2A-Version':'1.0'})
         assert r.status_code==code
         assert token not in r.text
