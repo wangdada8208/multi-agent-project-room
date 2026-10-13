@@ -11,6 +11,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.a2a.models import A2ATask, TaskEvent
+from app.core.observability import metrics
 
 logger = logging.getLogger(__name__)
 
@@ -281,8 +282,14 @@ class TaskService:
                     "info": "Late completion discarded because task is already canceled",
                 },
             )
+            metrics.increment("task_service.late_completion_discarded", current_status="canceled")
             logger.warning(
-                "Late completion discarded for canceled task id=%s", task_id
+                "Late completion discarded for canceled task",
+                extra={
+                    "task_id": task_id,
+                    "attempted_status": "completed",
+                    "current_status": "canceled",
+                },
             )
             return task, event, "canceled_overridden_rejected"
 

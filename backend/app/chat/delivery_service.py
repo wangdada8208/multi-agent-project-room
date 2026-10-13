@@ -12,6 +12,7 @@ from app.models.room_permission import RoomPermission
 from app.chat.models import Message
 from app.a2a.models import A2ATask
 from app.a2a.task_service import TaskService, ACTIVE_STATUSES, _append_event, notify_task
+from app.core.observability import metrics
 
 LEASE_SECONDS = 60
 PAGE_SIZE = 50
@@ -81,6 +82,7 @@ async def offer(db, delivery):
     await db.refresh(task)
     await db.refresh(delivery)
     if task.status not in ACTIVE_STATUSES:
+        metrics.increment("delivery.offer_skipped", reason="inactive")
         return None
     stamp = now()
     changed = await db.execute(update(Delivery).execution_options(synchronize_session=False).where(
@@ -88,9 +90,11 @@ async def offer(db, delivery):
         Delivery.attempt == delivery.attempt,
     ).values(attempt=Delivery.attempt + 1, delivered_at=stamp, updated_at=stamp))
     if changed.rowcount != 1:
+        metrics.increment("delivery.offer_skipped", reason="cas_miss")
         return None
     await db.refresh(delivery)
     await notify_task(db, task.id)
+    metrics.increment("delivery.offered")
     return {"v": 1, "type": "agent_task", "task_id": task.id,
             "delivery_id": delivery.delivery_id, "attempt": delivery.attempt,
             "deadline": (stamp + timedelta(seconds=LEASE_SECONDS)).isoformat(),
@@ -150,6 +154,7 @@ async def control(db, agent_id, connection_id, raw):
         if changed.rowcount != 1:
             raise DeliveryDenied()
         await TaskService.start_task(db, task.id)
+        metrics.increment("delivery.acked")
         await _append_event(db, task.id, "delivery_acked", {"delivery_id": delivery.delivery_id})
     else:
         if not (delivery.state == "acked" and delivery.lease_owner == connection_id
@@ -161,6 +166,7 @@ async def control(db, agent_id, connection_id, raw):
             updated_at=stamp, lease_until=stamp + timedelta(seconds=LEASE_SECONDS)))
         if changed.rowcount != 1:
             raise DeliveryDenied()
+        metrics.increment("delivery.lease_renewed", kind=kind)
         if kind == "task_progress":
             phase = raw.get("phase")
             percent = raw.get("percent")
@@ -307,6 +313,7 @@ async def expire_delivery(db, delivery_id, stamp=None):
         return None
     await TaskService.pause_task(db, task.id, "lease_expired")
     await _append_event(db, task.id, "delivery_uncertain", {"reason": "lease_expired"})
+    metrics.increment("delivery.expired")
     return {"v": 1, "type": "task_uncertain", "task_id": task.id,
             "delivery_id": delivery_id, "attempt": delivery.attempt}
 
