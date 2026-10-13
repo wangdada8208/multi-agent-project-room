@@ -45,6 +45,12 @@ services:
     volumes:
       - repos:/data/repos
       - kb:/data/knowledge
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/ready')"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
 
   frontend:
     image: ghcr.io/wangdada8208/multi-agent-project-room-frontend:${IMAGE_TAG:-latest}
@@ -57,7 +63,8 @@ services:
     ports:
       - "127.0.0.1:${MAPR_FRONTEND_PORT:-5173}:80"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
 
 volumes:
   postgres_data:

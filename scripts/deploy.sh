@@ -63,6 +63,41 @@ address = os.environ.get('VITE_XMTP_WORKER_ADDRESS', '')
 xmtp_env = os.environ.get('VITE_XMTP_ENV', '')
 if not re.fullmatch(r'0x[0-9a-fA-F]{40}', address) or xmtp_env not in ('dev', 'production', 'local'):
     raise SystemExit('Valid public worker address and matching XMTP environment required')
+
+# Pre-flight secret validation: ensure production cannot start with insecure defaults or placeholders
+is_synthetic = bool(re.search(r'^SYNTHETIC=1', raw, re.M) or os.environ.get('SYNTHETIC') == '1')
+if not is_synthetic:
+    INSECURE_SECRET_BLACKLIST = {
+        'dev-change-me',
+        'change-me-before-production',
+        'change-me',
+        'changeme',
+        'replace-me',
+        'replace-with-openssl-rand-hex-32-in-production',
+        'your-secret-key',
+        'placeholder',
+        'secret',
+        'admin',
+        'password',
+        'default',
+        'example',
+    }
+    auth_match = re.search(r'^MAPR_AUTH_SECRET_KEY=(.*)$', raw, re.M)
+    auth_key = os.environ.get('MAPR_AUTH_SECRET_KEY') or (auth_match.group(1) if auth_match else '')
+    if auth_key.startswith('"') and auth_key.endswith('"'):
+        auth_key = auth_key[1:-1]
+    elif auth_key.startswith("'") and auth_key.endswith("'"):
+        auth_key = auth_key[1:-1]
+    stripped = auth_key.strip()
+    if not stripped or auth_key != stripped:
+        raise SystemExit('MAPR_AUTH_SECRET_KEY must not contain leading or trailing whitespace and cannot be empty')
+    if len(stripped) < 32:
+        raise SystemExit('MAPR_AUTH_SECRET_KEY must be configured with >=32 chars in non-development environments')
+    if stripped.lower() in INSECURE_SECRET_BLACKLIST:
+        raise SystemExit(f"MAPR_AUTH_SECRET_KEY cannot use known insecure placeholder '{stripped}'")
+    if len(set(stripped)) < 4:
+        raise SystemExit('MAPR_AUTH_SECRET_KEY has insufficient character entropy (must contain at least 4 unique characters)')
+
 values = {'VITE_XMTP_WORKER_ADDRESS': address, 'VITE_XMTP_ENV': xmtp_env, 'MAPR_FRONTEND_PORT': os.environ['MAPR_FRONTEND_PORT'], 'MAPR_ENVIRONMENT': 'production'}
 if not re.search(r'^MAPR_DATABASE_PASSWORD=.+$', raw, re.M):
     password = subprocess.check_output(os.environ['MAPR_COMPOSE_COMMAND'].split() + ['exec', '-T', 'postgres', 'printenv', 'POSTGRES_PASSWORD'], text=True).strip()

@@ -54,11 +54,12 @@ def test_production_secret_validation_rejects_insecure_defaults():
         )
 
     # Production with secure secrets must pass
+    valid_key = "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6"
     settings_secure = Settings(
         environment="production",
-        auth_secret_key="a" * 32,
+        auth_secret_key=valid_key,
     )
-    assert settings_secure.auth_secret_key == "a" * 32
+    assert settings_secure.auth_secret_key == valid_key
 
     # Development allows dev secrets
     settings_dev = Settings(
