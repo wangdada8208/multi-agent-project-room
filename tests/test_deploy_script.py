@@ -64,7 +64,7 @@ if [[ "$*" == *"alembic"* && "$FAILURE" == migration ]]; then exit 7; fi
         assert "VITE_XMTP_ENV=dev" in (target / ".env").read_text().splitlines()
         assert "MAPR_DATABASE_PASSWORD=synthetic_password" in (target / ".env").read_text().splitlines()
         assert "MAPR_FRONTEND_PORT=18180" in (target / ".env").read_text().splitlines()
-        assert "http://127.0.0.1:18180/health" in calls
+        assert "http://127.0.0.1:18180/ready" in calls
         if failure == "compose_standalone":
             assert "pull backend frontend" not in calls
             assert "Using already downloaded immutable images" in result.stdout

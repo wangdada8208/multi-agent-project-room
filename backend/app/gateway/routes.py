@@ -5,7 +5,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.database import check_database_connection, get_db
+from app.core.database import check_database_connection, check_database_readiness, get_db
 from app.config import get_settings
 
 router = APIRouter(tags=["gateway"])
@@ -22,25 +22,26 @@ async def health() -> dict:
 
 @router.get("/ready")
 async def readiness(db: AsyncSession = Depends(get_db)) -> JSONResponse:
-    try:
-        await asyncio.wait_for(db.execute(text("SELECT 1")), timeout=2.0)
+    db_ready = await check_database_readiness(db)
+    if db_ready.get("status") == "ready":
         return JSONResponse(
             status_code=200,
             content={
                 "status": "ready",
                 "service": "Multi-Agent Project Room",
                 "database": "connected",
+                "revision": db_ready.get("revision"),
             },
         )
-    except Exception:
-        return JSONResponse(
-            status_code=503,
-            content={
-                "status": "not ready",
-                "service": "Multi-Agent Project Room",
-                "database": "unavailable",
-            },
-        )
+    return JSONResponse(
+        status_code=503,
+        content={
+            "status": "not ready",
+            "service": "Multi-Agent Project Room",
+            "database": "unavailable",
+            "reason": db_ready.get("reason"),
+        },
+    )
 
 
 @router.get("/health/details")

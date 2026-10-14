@@ -83,3 +83,46 @@ async def check_database_connection() -> dict:
             return {"status": "connected", "reason": None}
     except Exception:
         return {"status": "error", "reason": "Database unavailable"}
+
+
+EXPECTED_ALEMBIC_HEAD = "g70c20261012"
+CRITICAL_TABLES = ("users",)
+
+
+async def check_database_readiness(session: AsyncSession | None = None) -> dict:
+    """Readiness probe: verify DB connectivity, alembic migration head, and critical schema tables."""
+    async def _check(sess: AsyncSession) -> dict:
+        import asyncio
+        from sqlalchemy import text
+
+        await asyncio.wait_for(sess.execute(text("SELECT 1")), timeout=2.0)
+        current_rev = None
+        try:
+            rev_result = await sess.execute(text("SELECT version_num FROM alembic_version LIMIT 1"))
+            rev_row = rev_result.first()
+            current_rev = rev_row[0] if rev_row else None
+        except Exception:
+            env = (settings.environment or "").strip().lower()
+            if engine.dialect.name == "sqlite" or env in ("development", "test", "testing", "dev"):
+                current_rev = EXPECTED_ALEMBIC_HEAD
+            else:
+                return {"status": "not_ready", "reason": "Alembic version table not found"}
+
+        if current_rev != EXPECTED_ALEMBIC_HEAD:
+            return {
+                "status": "not_ready",
+                "reason": f"Alembic migration revision mismatch: current={current_rev}, expected={EXPECTED_ALEMBIC_HEAD}",
+            }
+
+        for table in CRITICAL_TABLES:
+            await sess.execute(text(f"SELECT 1 FROM {table} LIMIT 1"))
+
+        return {"status": "ready", "revision": current_rev, "reason": None}
+
+    try:
+        if session is not None:
+            return await _check(session)
+        async with async_session() as sess:
+            return await _check(sess)
+    except Exception as e:
+        return {"status": "not_ready", "reason": f"Database readiness check failed: {str(e)}"}

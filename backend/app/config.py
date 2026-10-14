@@ -1,6 +1,23 @@
 from functools import lru_cache
-from pydantic import SecretStr, model_validator
+from typing import Any
+from pydantic import SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings
+
+INSECURE_SECRET_BLACKLIST = {
+    "dev-change-me",
+    "change-me-before-production",
+    "change-me",
+    "changeme",
+    "replace-me",
+    "replace-with-openssl-rand-hex-32-in-production",
+    "your-secret-key",
+    "placeholder",
+    "secret",
+    "admin",
+    "password",
+    "default",
+    "example",
+}
 
 
 class Settings(BaseSettings):
@@ -24,13 +41,45 @@ class Settings(BaseSettings):
 
     model_config = {"env_file": ".env", "env_prefix": "MAPR_"}
 
+    @field_validator("trusted_proxies", mode="before")
+    @classmethod
+    def parse_trusted_proxies(cls, v: Any) -> list[str]:
+        if isinstance(v, str):
+            v = v.strip()
+            if not v:
+                return []
+            if v.startswith("[") and v.endswith("]"):
+                import json
+                try:
+                    parsed = json.loads(v)
+                    if isinstance(parsed, list):
+                        return [str(item).strip() for item in parsed if str(item).strip()]
+                except Exception:
+                    pass
+            return [item.strip() for item in v.split(",") if item.strip()]
+        return v
+
     @model_validator(mode="after")
     def validate_production_secrets(self) -> "Settings":
         env = (self.environment or "").strip().lower()
         if env not in ("development", "test", "testing", "dev"):
-            if not self.auth_secret_key or self.auth_secret_key == "dev-change-me" or len(self.auth_secret_key) < 32:
+            key = self.auth_secret_key or ""
+            stripped = key.strip()
+            if not stripped or key != stripped:
+                raise ValueError(
+                    "MAPR_AUTH_SECRET_KEY must not contain leading or trailing whitespace and cannot be empty"
+                )
+            if len(stripped) < 32:
                 raise ValueError(
                     "MAPR_AUTH_SECRET_KEY must be configured with >=32 chars in non-development environments"
+                )
+            if stripped.lower() in INSECURE_SECRET_BLACKLIST:
+                raise ValueError(
+                    f"MAPR_AUTH_SECRET_KEY cannot use known insecure placeholder '{stripped}'"
+                )
+            if len(set(stripped)) < 4:
+                raise ValueError(
+                    "MAPR_AUTH_SECRET_KEY has insufficient character entropy (must contain at least 4 unique characters)"
                 )
         return self
 
