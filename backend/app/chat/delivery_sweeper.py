@@ -5,6 +5,7 @@ from sqlalchemy import select
 from app.a2a.models import A2ATask
 from app.a2a.task_service import ACTIVE_STATUSES
 from app.chat.delivery_service import expire_delivery, now, slug
+from app.core.observability import metrics
 from app.models.agent_task_delivery import AgentTaskDelivery as Delivery
 from app.models.user import User
 from app.ws.connection_manager import connection_manager
@@ -50,6 +51,7 @@ class DeliverySweeper:
                         await connection_manager.broadcast(channel, frame)
                     except Exception:
                         logger.warning("Lease notification unavailable")
+        metrics.increment("delivery_sweeper.expired", value=changed)
         return changed
 
     def start(self):
@@ -65,6 +67,7 @@ class DeliverySweeper:
                 raise
             except Exception:
                 # Do not log DB exceptions, URLs, connection strings or task content.
+                metrics.increment("delivery_sweeper.failures")
                 logger.warning("Lease scan failed or timed out; will retry")
             await asyncio.sleep(self.interval)
 

@@ -55,6 +55,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.schema import CreateIndex, CreateTable
 
+from app.core.observability import metrics
+
 MAX_STREAMS = 64
 MAX_USER_STREAMS = 4
 LEASE_SECONDS = 30.0
@@ -153,7 +155,8 @@ class SSEGlobalQuota:
                         await db.execute(text("SELECT set_config('lock_timeout', :timeout, true), "
                                               "set_config('statement_timeout', :timeout, true)"),
                                          {"timeout": str(max(1, int(self.db_timeout * 1000)))})
-                        await db.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": ADVISORY_LOCK_KEY})
+                        with metrics.timed("sse_quota.lock_wait_seconds", dialect="postgresql"):
+                            await db.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": ADVISORY_LOCK_KEY})
                         now = (await db.execute(text("SELECT clock_timestamp()"))).scalar_one()
                     elif dialect == "sqlite":
                         # Bound the worker-thread's busy wait too: asyncio
@@ -171,7 +174,9 @@ class SSEGlobalQuota:
                         raise QuotaUnavailable()
                     yield now
         except (SQLAlchemyError, TimeoutError):
+            metrics.increment("sse_quota.tx_failures")
             raise QuotaUnavailable() from None
+        metrics.increment("sse_quota.tx_committed")
 
     async def acquire(self, db: AsyncSession, user_id: str, task_id: str, hub_id: str) -> Lease:
         _id(user_id), _id(task_id), _id(hub_id)

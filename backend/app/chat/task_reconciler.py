@@ -11,6 +11,7 @@ from app.a2a.models import A2ATask, TaskEvent
 from app.a2a.task_service import ACTIVE_STATUSES
 from app.chat import delivery_service as ds
 from app.chat.pg_wakeup import PgWakeup, CHANNEL
+from app.core.observability import metrics
 from app.models.agent_task_delivery import AgentTaskDelivery as Delivery
 
 logger = logging.getLogger(__name__)
@@ -85,6 +86,7 @@ class TaskReconciler:
                 raise
             except Exception:
                 failures += 1
+                metrics.increment("task_reconciler.failures")
                 logger.warning("Task reconciliation failed; bounded retry scheduled")
             # Coalesce bursts, cap scan rate and continue polling without notifications.
             await asyncio.sleep(.05)
@@ -105,9 +107,11 @@ class TaskReconciler:
             await db.refresh(row)
             if (row.state != "pending" or row.attempt != expected_attempt or
                     (row.delivered_at and ds.aware(row.delivered_at) + timedelta(seconds=ds.LEASE_SECONDS) > ds.now())):
+                metrics.increment("task_reconciler.repair_skipped")
                 return None
             frame = await ds.offer(db, row)
             await db.commit()
+            metrics.increment("task_reconciler.repair_offered")
             return frame
 
     async def run_once(self):
