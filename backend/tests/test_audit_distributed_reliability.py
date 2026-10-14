@@ -296,7 +296,7 @@ async def test_db_statement_timeout_boundary(pg_store):
     async with pg_store.sessions() as db:
         # Set short statement timeout for current session
         await db.execute(text("SET statement_timeout = 200"))  # 200ms
-        
+
         # Run a query designed to exceed 200ms
         with pytest.raises(Exception) as exc_info:
             await db.execute(text("SELECT pg_sleep(1.0)"))
@@ -383,7 +383,7 @@ async def test_lease_monotonic_clock_margin_evaluation(pg_store):
     async with pg_store.sessions() as db:
         t_start_mono = time.monotonic()
         lease = await policy.acquire(db, user_id, "task-mono", "hub-mono")
-        
+
         # Simulate background renewal loop interval
         await asyncio.sleep(0.5)
         t_renew_mono = time.monotonic()

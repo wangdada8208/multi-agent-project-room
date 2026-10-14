@@ -494,4 +494,3 @@ def test_script_constants_are_wellformed():
     assert "ZADD" in LUA_CHECK_AND_RESERVE
     assert "SETEX" in LUA_CHECK_AND_RESERVE
     assert "ZREM" in LUA_RELEASE_RESERVATION
-

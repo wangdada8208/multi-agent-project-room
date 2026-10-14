@@ -176,7 +176,7 @@ async def test_concurrent_send_same_key_creates_one_task(client, db, actors):
     for err in failures:
         assert err.get("code") != -32603, f"internal error leaked to caller: {err}"
 
-    
+
 
 
 async def _gather(*coros):
@@ -272,7 +272,7 @@ async def test_same_key_retry_returns_existing_task(client, db, actors):
     first = await send(client, actors.headers["owner"], data)
     first_id = first["task"]["id"]
 
-    
+
 
     all_ids = await list_task_ids(client, actors.headers["owner"], page_size=100)
     assert all_ids.count(first_id) == 1, "no duplicate task rows"
@@ -343,7 +343,7 @@ async def test_compensation_logs_no_payload_data(client, actors, caplog):
     data["message"]["metadata"]["clientMessageId"] = key("sse-log")
     data["message"]["parts"] = [{"text": "TOP-SECRET-PAYLOAD-TEXT"}]
 
-    
+
 
     blob = caplog.text
     assert "TOP-SECRET-PAYLOAD-TEXT" not in blob, "compensation log leaked payload text"
