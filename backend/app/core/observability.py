@@ -21,7 +21,7 @@ import logging
 import re
 import threading
 import time
-from collections import defaultdict
+from collections import OrderedDict, defaultdict, deque
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Any
@@ -51,12 +51,18 @@ SENSITIVE_KEY_PARTS: tuple[str, ...] = (
 )
 
 # ``scheme://user:password@host`` -> credentials replaced, host preserved.
-_DSN_CREDENTIALS = re.compile(r"(?P<scheme>[a-zA-Z][a-zA-Z0-9+.\-]*://)[^/@\s]+@")
-# Bare ``key=value`` pairs that frequently carry secrets inside free-form strings.
-_INLINE_SECRET = re.compile(
-    r"(?i)\b(token|secret|password|passwd|api[_-]?key)\b\s*[=:]\s*([^\s,;]+)"
+# Matches PEM / OpenSSH / RSA / EC private key blocks
+_PRIVATE_KEY_RE = re.compile(
+    r"-----BEGIN (?:[A-Z0-9_-]+ )?PRIVATE KEY-----[\s\S]*?-----END (?:[A-Z0-9_-]+ )?PRIVATE KEY-----",
+    re.IGNORECASE,
 )
-_BEARER_AUTH = re.compile(r"(?i)\b(bearer)\s+([^\s,;]+)")
+# scheme://user:password@host -> credentials replaced, host preserved.
+_DSN_CREDENTIALS = re.compile(r"(?P<scheme>[a-zA-Z][a-zA-Z0-9+.\-]*://)[^/@\s]+@")
+# Bare key=value pairs that frequently carry secrets inside free-form strings.
+_INLINE_SECRET = re.compile(
+    '(?i)\\b(token|secret|password|passwd|api[_-]?key)\\b\\s*[=:]\\s*(?:\\"[^\\"]*\\"|\'[^\']*\'|([^\\s,;]+))'
+)
+_BEARER_AUTH = re.compile('(?i)\\b(bearer)\\s+([^\\s,;\\"\']+)')
 
 _MAX_DEPTH = 6
 _MAX_ITEMS = 64
@@ -71,9 +77,10 @@ def is_sensitive_key(key: Any) -> bool:
 
 
 def scrub_text(value: str) -> str:
-    """Redact embedded DSN credentials, bearer tokens, and inline ``secret=...`` pairs."""
-    if not value:
+    """Redact embedded DSN credentials, bearer tokens, and inline secret=... pairs."""
+    if not value or not isinstance(value, str):
         return value
+    value = _PRIVATE_KEY_RE.sub(REDACTED, value)
     value = _DSN_CREDENTIALS.sub(lambda m: f"{m.group('scheme')}{REDACTED}@", value)
     value = _BEARER_AUTH.sub(lambda m: f"{m.group(1)} {REDACTED}", value)
     value = _INLINE_SECRET.sub(lambda m: f"{m.group(1)}={REDACTED}", value)
@@ -106,17 +113,33 @@ class RedactingFilter(logging.Filter):
     """Logging filter that structurally redacts a record before it is emitted."""
 
     def filter(self, record: logging.LogRecord) -> bool:  # noqa: D102 - stdlib API
+        if getattr(record, "_redacted", False):
+            return True
         if isinstance(record.msg, str):
             record.msg = scrub_text(record.msg)
+        elif isinstance(record.msg, (dict, list)):
+            record.msg = redact(record.msg)
         if isinstance(record.args, dict):
             record.args = redact(record.args)
         elif isinstance(record.args, tuple):
-            record.args = tuple(redact(item) for item in record.args)
+            record.args = tuple(
+                redact(item) if isinstance(item, (dict, list)) else (scrub_text(item) if isinstance(item, str) else item)
+                for item in record.args
+            )
         for key in list(record.__dict__):
             if key.startswith("_") or key in _STANDARD_RECORD_FIELDS:
                 continue
             if is_sensitive_key(key):
                 record.__dict__[key] = REDACTED
+            else:
+                record.__dict__[key] = redact(record.__dict__[key])
+        if record.exc_info and not record.exc_text:
+            formatted = logging.Formatter().formatException(record.exc_info)
+            record.exc_text = scrub_text(formatted)
+            record.exc_info = None
+        elif record.exc_text:
+            record.exc_text = scrub_text(record.exc_text)
+        record._redacted = True
         return True
 
 
@@ -124,31 +147,65 @@ _STANDARD_RECORD_FIELDS = frozenset(
     logging.LogRecord(name="", level=0, pathname="", lineno=0, msg="", args=(), exc_info=None).__dict__
 )
 
+_HOOK_INSTALLED: bool = False
+
 
 def install_redacting_filter(logger: logging.Logger | None = None) -> RedactingFilter:
-    """Attach a single ``RedactingFilter`` to ``logger`` (root by default).
+    """Attach RedactingFilter across root, loggers, and handlers.
 
-    Idempotent: calling twice never stacks a second filter.
+    Idempotent: calling twice never stacks duplicate filters. Automatically
+    patches logging.Logger.addHandler so dynamically added handlers
+    inherit redaction.
     """
-    target = logger or logging.getLogger()
-    for existing in target.filters:
-        if isinstance(existing, RedactingFilter):
-            return existing
+    global _HOOK_INSTALLED
     created = RedactingFilter()
-    target.addFilter(created)
+
+    if not _HOOK_INSTALLED:
+        orig_add_handler = logging.Logger.addHandler
+
+        def safe_add_handler(self: logging.Logger, hdlr: logging.Handler) -> None:
+            if not any(isinstance(f, RedactingFilter) for f in hdlr.filters):
+                hdlr.addFilter(RedactingFilter())
+            orig_add_handler(self, hdlr)
+
+        logging.Logger.addHandler = safe_add_handler
+        _HOOK_INSTALLED = True
+
+    targets: list[logging.Logger] = [logging.getLogger()]
+    if logger is not None:
+        targets.append(logger)
+
+    for name in ("fastapi", "uvicorn", "uvicorn.access", "uvicorn.error", "app"):
+        targets.append(logging.getLogger(name))
+
+    for item in list(logging.Logger.manager.loggerDict.values()):
+        if isinstance(item, logging.Logger):
+            targets.append(item)
+
+    for log in targets:
+        if not any(isinstance(f, RedactingFilter) for f in log.filters):
+            log.addFilter(RedactingFilter())
+        for handler in log.handlers:
+            if not any(isinstance(f, RedactingFilter) for f in handler.filters):
+                handler.addFilter(RedactingFilter())
+
     return created
 
 
 @dataclass
 class Metrics:
-    """Minimal counter/gauge/timing registry. Thread-safe and dependency-free."""
+    """Minimal counter/gauge/timing registry with bounded memory. Thread-safe and dependency-free."""
 
-    _counters: dict[tuple[str, tuple[tuple[str, str], ...]], float] = field(
-        default_factory=lambda: defaultdict(float)
+    max_samples_per_timing: int = 1000
+    max_series: int = 1000
+    _counters: OrderedDict[tuple[str, tuple[tuple[str, str], ...]], float] = field(
+        default_factory=OrderedDict
     )
-    _gauges: dict[tuple[str, tuple[tuple[str, str], ...]], float] = field(default_factory=dict)
-    _timings: dict[tuple[str, tuple[tuple[str, str], ...]], list[float]] = field(
-        default_factory=lambda: defaultdict(list)
+    _gauges: OrderedDict[tuple[str, tuple[tuple[str, str], ...]], float] = field(
+        default_factory=OrderedDict
+    )
+    _timings: OrderedDict[tuple[str, tuple[tuple[str, str], ...]], deque[float]] = field(
+        default_factory=OrderedDict
     )
     _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
@@ -157,16 +214,39 @@ class Metrics:
         return tuple(sorted((str(key), str(value)) for key, value in labels.items()))
 
     def increment(self, name: str, value: float = 1, **labels: Any) -> None:
+        key = (name, self._labels(labels))
         with self._lock:
-            self._counters[(name, self._labels(labels))] += value
+            if key in self._counters:
+                self._counters[key] += float(value)
+                self._counters.move_to_end(key)
+            else:
+                if len(self._counters) >= self.max_series:
+                    self._counters.popitem(last=False)
+                self._counters[key] = float(value)
 
     def gauge(self, name: str, value: float, **labels: Any) -> None:
+        key = (name, self._labels(labels))
         with self._lock:
-            self._gauges[(name, self._labels(labels))] = value
+            if key in self._gauges:
+                self._gauges[key] = float(value)
+                self._gauges.move_to_end(key)
+            else:
+                if len(self._gauges) >= self.max_series:
+                    self._gauges.popitem(last=False)
+                self._gauges[key] = float(value)
 
     def observe(self, name: str, seconds: float, **labels: Any) -> None:
+        key = (name, self._labels(labels))
         with self._lock:
-            self._timings[(name, self._labels(labels))].append(float(seconds))
+            if key in self._timings:
+                self._timings[key].append(float(seconds))
+                self._timings.move_to_end(key)
+            else:
+                if len(self._timings) >= self.max_series:
+                    self._timings.popitem(last=False)
+                dq: deque[float] = deque(maxlen=self.max_samples_per_timing)
+                dq.append(float(seconds))
+                self._timings[key] = dq
 
     @contextmanager
     def timed(self, name: str, **labels: Any):

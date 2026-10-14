@@ -73,9 +73,11 @@ def reset_limiter():
     rate_limit._redis_async_loop = None
     rate_limit._attempts.clear()
     rate_limit._blocked_until.clear()
+    rate_limit._flush_redis_state()
     yield
     rate_limit._attempts.clear()
     rate_limit._blocked_until.clear()
+    rate_limit._flush_redis_state()
 
 
 # ===========================================================================

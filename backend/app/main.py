@@ -38,9 +38,13 @@ from app.api.invites import router as invites_router
 from app.chat.ws_handler import handle_chat
 
 from app.a2a.sse_sweeper import SSEQuotaSweeper
+from app.core.observability import install_redacting_filter
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
+
+# Ensure logging filters are installed immediately upon module import
+install_redacting_filter()
 
 
 class SafeHTTPErrorBoundary:
@@ -73,6 +77,7 @@ class SafeHTTPErrorBoundary:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifecycle: create tables on startup."""
+    install_redacting_filter()
     await init_db()
     # Lifespan runs in each worker, including servers that preload before fork.
     from app.a2a import http_protocol

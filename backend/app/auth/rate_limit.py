@@ -20,7 +20,9 @@ import inspect
 import ipaddress
 import logging
 import os
+import sys
 import time
+import urllib.parse
 import uuid
 from collections import OrderedDict
 from typing import Any
@@ -123,19 +125,51 @@ return 0
 # ---------------------------------------------------------------------------
 
 
-def _flush_redis_state() -> None:
-    """Drop every Redis-backed limiter key.
+def _is_test_environment() -> bool:
+    if os.environ.get("MAPR_TESTING") or os.environ.get("MAPR_TEST_REDIS_URL") or os.environ.get("MAPR_TEST_DATABASE_URL"):
+        return True
+    if os.environ.get("PYTEST_CURRENT_TEST") is not None:
+        return True
+    if "pytest" in sys.modules:
+        return True
+    return False
 
-    Called from ``clear()`` so that resetting the limiter resets it completely,
-    whichever backend is currently serving traffic.  Tests rely on this to stay
-    isolated from each other through the shared Redis instance.
+
+def _get_effective_redis_url() -> str:
+    test_url = os.environ.get("MAPR_TEST_REDIS_URL")
+    if test_url:
+        return test_url
+    base_url = get_settings().redis_url
+    if _is_test_environment() and not os.environ.get("MAPR_REDIS_URL"):
+        test_db = os.environ.get("MAPR_TEST_REDIS_DB", "15")
+        parsed = urllib.parse.urlsplit(base_url)
+        return urllib.parse.urlunsplit(
+            (parsed.scheme, parsed.netloc, f"/{test_db}", parsed.query, parsed.fragment)
+        )
+    return base_url
+
+
+def _flush_redis_state() -> None:
+    """Drop test-scoped Redis-backed limiter keys.
+
+    Does NOT get called from ``_attempts.clear()`` to prevent accidental
+    wiping of shared or production Redis state.
     """
     client = _get_redis_sync()
     if client is None:
         return
     try:
-        for key in client.scan_iter(match=f"{_KEY_PREFIX}*", count=500):
-            client.delete(key)
+        # Refuse to flush in production unless explicitly forced
+        if not _is_test_environment() and not os.environ.get("MAPR_ALLOW_REDIS_FLUSH"):
+            return
+        prefix = _KEY_PREFIX
+        keys = []
+        for key in client.scan_iter(match=f"{prefix}*", count=500):
+            k_str = key.decode("utf-8", "replace") if isinstance(key, bytes) else str(key)
+            if k_str.startswith(prefix):
+                keys.append(key)
+        if keys:
+            client.delete(*keys)
     except Exception:
         _trip_breaker()
 
@@ -161,9 +195,8 @@ class _BoundedLRUDict(OrderedDict):
         while len(self) > self._max_keys:
             self.popitem(last=False)
 
-    def clear(self) -> None:  # noqa: D102 - documented on _flush_redis_state
+    def clear(self) -> None:
         super().clear()
-        _flush_redis_state()
 
 
 class BoundedFallbackAttempts(_BoundedLRUDict):
@@ -240,7 +273,7 @@ def _get_redis_sync() -> Any:
             import redis
 
             client = redis.Redis.from_url(
-                get_settings().redis_url,
+                _get_effective_redis_url(),
                 socket_timeout=_REDIS_TIMEOUT_SECONDS,
                 socket_connect_timeout=_REDIS_TIMEOUT_SECONDS,
                 decode_responses=True,
@@ -269,7 +302,7 @@ async def _get_redis_async() -> Any:
             import redis.asyncio as redis_asyncio
 
             client = redis_asyncio.Redis.from_url(
-                get_settings().redis_url,
+                _get_effective_redis_url(),
                 socket_timeout=_REDIS_TIMEOUT_SECONDS,
                 socket_connect_timeout=_REDIS_TIMEOUT_SECONDS,
                 decode_responses=True,

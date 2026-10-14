@@ -7,12 +7,16 @@ Usage:
         result = await session.execute(select(User))
 """
 
+import asyncio
+import logging
+
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 
 from app.config import get_settings  # type: ignore[import-unconf]
 
 settings = get_settings()
+logger = logging.getLogger(__name__)
 
 engine = create_async_engine(
     settings.database_url,
@@ -125,4 +129,29 @@ async def check_database_readiness(session: AsyncSession | None = None) -> dict:
         async with async_session() as sess:
             return await _check(sess)
     except Exception as e:
-        return {"status": "not_ready", "reason": f"Database readiness check failed: {str(e)}"}
+        from app.core.observability import scrub_text
+
+        # Sanitize exception for internal logging
+        diag_msg = scrub_text(f"{type(e).__name__}: {e}")
+        logger.warning("Database readiness probe failed: %s", diag_msg)
+
+        # Map to safe, stable error code and description
+        if isinstance(e, asyncio.TimeoutError):
+            code = "DATABASE_TIMEOUT"
+            desc = "Database query timed out"
+        elif "OperationalError" in type(e).__name__:
+            code = "DATABASE_CONNECTION_ERROR"
+            desc = "Database connection failed"
+        elif "ProgrammingError" in type(e).__name__:
+            code = "DATABASE_QUERY_ERROR"
+            desc = "Database query failed"
+        else:
+            code = "DATABASE_UNAVAILABLE"
+            desc = "Database service unavailable"
+
+        return {
+            "status": "not_ready",
+            "code": code,
+            "reason": f"Database readiness check failed: {desc}",
+            "diagnostic": diag_msg,
+        }

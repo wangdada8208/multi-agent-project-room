@@ -39,6 +39,7 @@ async def readiness(db: AsyncSession = Depends(get_db)) -> JSONResponse:
             "status": "not ready",
             "service": "Multi-Agent Project Room",
             "database": "unavailable",
+            "code": db_ready.get("code", "DATABASE_UNAVAILABLE"),
             "reason": db_ready.get("reason"),
         },
     )
