@@ -3,8 +3,9 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 from sqlalchemy import String, Boolean, DateTime, ForeignKey
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, validates
 from app.core.database import Base
+from app.agent.identity import normalize_unicode_casefold
 
 
 class User(Base):
@@ -14,6 +15,9 @@ class User(Base):
         String(36), primary_key=True, default=lambda: str(uuid.uuid4())
     )
     username: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    normalized_username: Mapped[str] = mapped_column(
+        String(64), nullable=False, index=True, default=""
+    )
     display_name: Mapped[str] = mapped_column(String(128), nullable=False)
     user_type: Mapped[str] = mapped_column(
         String(16), nullable=False, default="human"
@@ -30,6 +34,12 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
+
+    @validates("username")
+    def _sync_normalized_username(self, key: str, value: str) -> str:
+        if value:
+            self.normalized_username = normalize_unicode_casefold(value)
+        return value
 
     def to_dict(self) -> dict:
         return {

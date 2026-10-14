@@ -15,6 +15,7 @@ from app.agent.identity import (
     canonical_identity,
     canonical_slug,
     expand_casefold_candidates,
+    normalize_unicode_casefold,
 )
 from app.agent.service import (
     authorize_agent_registration,
@@ -336,3 +337,187 @@ async def test_authorize_agent_registration_edge_cases(db: AsyncSession):
         await authorize_agent_registration(db, agent_user, "agent_alice")
     assert exc3.value.status_code == 403
     assert exc3.value.detail == "Agent name must match authenticated username"
+
+
+# =====================================================================
+# 9. Full Unicode Casefold Equivalence & Collision Tests (Round 4)
+# =====================================================================
+
+
+def test_unicode_casefold_equivalence_classes():
+    """Verify complete coverage of Unicode casefold equivalence classes.
+
+    Tests:
+    - Greek theta vs script theta (θ vs ϑ)
+    - German sharp s vs SS vs uppercase ẞ (ß vs SS vs ẞ)
+    - Ligatures (ﬁ vs fi, ﬃ vs ffi)
+    - Greek sigma forms (Σ vs σ vs ς)
+    - Mixed case and whitespace
+    """
+    # θ vs ϑ
+    assert canonical_identity("agent-θ") == canonical_identity("agent-ϑ")
+    assert canonical_slug("Agent-θ") == canonical_slug("Agent-ϑ")
+    assert canonical_slug("Agent-θ") == "agent-θ"
+
+    # ß vs SS vs ẞ
+    assert canonical_identity("groß") == canonical_identity("GROSS")
+    assert canonical_identity("groß") == canonical_identity("GROẞ")
+    assert canonical_identity("groß") == "gross"
+    assert canonical_slug("Groß-Agent") == canonical_slug("GROSS-AGENT")
+    assert canonical_slug("Groß-Agent") == "gross-agent"
+
+    # Ligatures: ﬁ (U+FB01) vs fi, ﬃ (U+FB03) vs ffi
+    assert canonical_identity("oﬃce") == canonical_identity("office")
+    assert canonical_identity("ﬁle-agent") == canonical_identity("file-agent")
+    assert canonical_slug("Oﬃce-Bot") == canonical_slug("Office-Bot")
+    assert canonical_slug("Oﬃce-Bot") == "office-bot"
+
+    # Greek sigma forms: Σ vs σ vs ς
+    assert canonical_identity("Ὀδυσσεύς") == canonical_identity("ὀδυσσεύσ")
+    assert canonical_identity("Σ") == canonical_identity("σ")
+    assert canonical_identity("σ") == canonical_identity("ς")
+
+
+@pytest.mark.asyncio
+async def test_historical_collision_detection_theta(db: AsyncSession):
+    """Historical accounts with θ and ϑ must trigger 403 Ambiguous agent identity."""
+    user_theta = User(
+        username="agent-θ",
+        display_name="Agent Theta",
+        password_hash="hash1",
+        user_type="agent",
+    )
+    user_script_theta = User(
+        username="agent-ϑ",
+        display_name="Agent Script Theta",
+        password_hash="hash2",
+        user_type="agent",
+    )
+    db.add(user_theta)
+    db.add(user_script_theta)
+    await db.commit()
+
+    # Matching either variant returns both records
+    matches = await find_username_matches(db, "agent-θ")
+    assert len(matches) == 2
+
+    matches_script = await find_username_matches(db, "agent-ϑ")
+    assert len(matches_script) == 2
+
+    # authorize_agent_registration must NOT arbitrarily pick one, but raise 403
+    with pytest.raises(HTTPException) as exc_info:
+        await authorize_agent_registration(db, user_theta, "agent-θ")
+    assert exc_info.value.status_code == 403
+    assert exc_info.value.detail == "Ambiguous agent identity"
+
+    with pytest.raises(HTTPException) as exc_info_script:
+        await authorize_agent_registration(db, user_script_theta, "agent-ϑ")
+    assert exc_info_script.value.status_code == 403
+    assert exc_info_script.value.detail == "Ambiguous agent identity"
+
+
+@pytest.mark.asyncio
+async def test_historical_collision_detection_eszett(db: AsyncSession):
+    """Historical accounts with ß and SS must trigger 403 Ambiguous agent identity."""
+    user_beta = User(
+        username="agent-ß",
+        display_name="Agent Sharp S",
+        password_hash="hash1",
+        user_type="agent",
+    )
+    user_ss = User(
+        username="agent-SS",
+        display_name="Agent SS",
+        password_hash="hash2",
+        user_type="agent",
+    )
+    db.add(user_beta)
+    db.add(user_ss)
+    await db.commit()
+
+    matches = await find_username_matches(db, "agent-ß")
+    assert len(matches) == 2
+
+    with pytest.raises(HTTPException) as exc_info:
+        await authorize_agent_registration(db, user_beta, "agent-ß")
+    assert exc_info.value.status_code == 403
+    assert exc_info.value.detail == "Ambiguous agent identity"
+
+
+@pytest.mark.asyncio
+async def test_historical_collision_detection_ligature(db: AsyncSession):
+    """Historical accounts with ligature ﬃ and ffi must trigger 403."""
+    user_ligature = User(
+        username="agent-ﬃce",
+        display_name="Agent Ligature Office",
+        password_hash="hash1",
+        user_type="agent",
+    )
+    user_expanded = User(
+        username="agent-ffice",
+        display_name="Agent Expanded Office",
+        password_hash="hash2",
+        user_type="agent",
+    )
+    db.add(user_ligature)
+    db.add(user_expanded)
+    await db.commit()
+
+    matches = await find_username_matches(db, "agent-ffice")
+    assert len(matches) == 2
+
+    with pytest.raises(HTTPException) as exc_info:
+        await authorize_agent_registration(db, user_ligature, "agent-ﬃce")
+    assert exc_info.value.status_code == 403
+    assert exc_info.value.detail == "Ambiguous agent identity"
+
+
+@pytest.mark.asyncio
+async def test_registration_collision_unicode_theta(client: AsyncClient, db: AsyncSession):
+    """Registration of agent-ϑ must be rejected when agent-θ exists."""
+    resp1 = await client.post(
+        "/api/v1/auth/register",
+        json={
+            "username": "agent-θ",
+            "password": "Password123!",
+            "display_name": "Theta Agent",
+        },
+    )
+    assert resp1.status_code == 200
+
+    # Attempt to register script theta variant -> 409 Conflict
+    resp2 = await client.post(
+        "/api/v1/auth/register",
+        json={
+            "username": "agent-ϑ",
+            "password": "Password123!",
+            "display_name": "Script Theta Agent",
+        },
+    )
+    assert resp2.status_code == 409
+    assert "Username already exists" in resp2.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_registration_collision_ligatures(client: AsyncClient, db: AsyncSession):
+    """Registration of ligature ﬁ variant must be rejected when fi exists."""
+    resp1 = await client.post(
+        "/api/v1/auth/register",
+        json={
+            "username": "file-agent",
+            "password": "Password123!",
+            "display_name": "File Agent",
+        },
+    )
+    assert resp1.status_code == 200
+
+    resp2 = await client.post(
+        "/api/v1/auth/register",
+        json={
+            "username": "ﬁle-agent",
+            "password": "Password123!",
+            "display_name": "Ligature File Agent",
+        },
+    )
+    assert resp2.status_code == 409
+    assert "Username already exists" in resp2.json()["detail"]

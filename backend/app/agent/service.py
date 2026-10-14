@@ -21,17 +21,11 @@ logger = logging.getLogger(__name__)
 async def find_username_matches(db: AsyncSession, username: str) -> list[User]:
     """Find all existing user records matching the given username under Unicode casefold.
 
-    expand_casefold_candidates() narrows the search to a small candidate set served by
-    the unique B-Tree index on User.username, so the "username does not exist" case
-    stays free of full table scans.
-
-    That candidate set only contains the canonical, lower, upper and title shapes of
-    the input, so a row stored with an arbitrary mixed-case spelling (for example
-    "CoDeX" or "xXyZ", or a Unicode fold pair such as "ß"/"SS") would be invisible to
-    the candidate set alone. The lookup therefore OR-s in a case-insensitive
-    comparison in the same statement: one index probe resolves the addressable
-    spellings, and the case-insensitive arm keeps every other spelling of the same
-    identity reachable for collision and login detection.
+    Uses `User.normalized_username` to query directly via the indexed normalized key,
+    providing complete Unicode casefold equivalence class coverage (including θ/ϑ,
+    ß/ss/ẞ, ligatures, sigma variants, and arbitrary mixed casing) without full
+    table scans. Also includes expand_casefold_candidates(username) for backward
+    compatibility with unmigrated legacy rows.
 
     Never returns a row whose canonical identity differs from the input.
     """
@@ -49,8 +43,8 @@ async def find_username_matches(db: AsyncSession, username: str) -> list[User]:
 
     stmt = select(User).where(
         or_(
+            User.normalized_username == key,
             User.username.in_(candidates),
-            func.lower(User.username) == func.lower(stripped),
         )
     )
     result = await db.execute(stmt)

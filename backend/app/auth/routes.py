@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.config import get_settings
 from app.agent.service import find_username_matches
+from app.agent.identity import normalize_unicode_casefold
 from app.core.security import create_access_token, get_current_user, hash_password, verify_password
 from app.models.user import User
 from .rate_limit import check_rate_limit, clear_attempts
@@ -19,7 +20,7 @@ router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
 
 class RegisterRequest(BaseModel):
-    username: str = Field(min_length=3, max_length=64, pattern=r"^[a-zA-Z0-9_.-]+$")
+    username: str = Field(min_length=3, max_length=64, pattern=r"^[\w.-]+$")
     password: str = Field(min_length=8, max_length=128)
     display_name: str = Field(min_length=1, max_length=128)
     user_type: str = Field(default="human", pattern="^(human|agent)$")
@@ -40,7 +41,7 @@ def _auth_response(user: User) -> dict:
 
 @router.post("/register")
 async def register(request: Request, payload: RegisterRequest, db: AsyncSession = Depends(get_db)) -> dict:
-    canonical_username = payload.username.casefold()
+    canonical_username = normalize_unicode_casefold(payload.username)
     # Reserve the attempt up front: every registration try counts, successful or
     # not, and the reservation happens in the same atomic step as the threshold
     # check so concurrent requests cannot slip past the limit together.
@@ -80,7 +81,7 @@ async def register(request: Request, payload: RegisterRequest, db: AsyncSession 
 
 @router.post("/login")
 async def login(request: Request, payload: LoginRequest, db: AsyncSession = Depends(get_db)) -> dict:
-    canonical_username = payload.username.casefold()
+    canonical_username = normalize_unicode_casefold(payload.username)
     # Reserving the attempt here makes the check atomic with the count, so a
     # burst of concurrent guesses can no longer race past the threshold.
     reservation = await check_rate_limit(request, "login", identifier=canonical_username)

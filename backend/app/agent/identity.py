@@ -10,6 +10,7 @@ Provides centralized helpers for:
 from __future__ import annotations
 
 import re
+import unicodedata
 
 # Bidirectional mapping between folded substrings and their Unicode alternate spellings.
 # Sorted by length descending during substitution so compound ligatures (e.g. 'ffi')
@@ -31,14 +32,25 @@ FOLD_EXPANSIONS: dict[str, list[str]] = {
 }
 
 
-def canonical_identity(value: str) -> str:
-    """Return the canonical casefolded identity for an account or agent name.
+def normalize_unicode_casefold(value: str) -> str:
+    """Normalize text using Unicode NFKC followed by full casefold.
 
-    Performs full Unicode case folding (Standard Annex #44) and strips surrounding whitespace.
+    This provides complete Unicode casefold equivalence class coverage
+    (including Greek theta/script theta θ/ϑ, German eszett ß/ss/ẞ, ligatures
+    ﬁ/fi, ﬃ/ffi, Greek sigmas Σ/σ/ς, etc.) without relying on ad-hoc
+    replacement tables.
     """
     if not isinstance(value, str):
         return ""
-    return value.strip().casefold()
+    return unicodedata.normalize("NFKC", value.strip()).casefold()
+
+
+def canonical_identity(value: str) -> str:
+    """Return the canonical casefolded identity for an account or agent name.
+
+    Applies Unicode NFKC normalization followed by full Unicode case folding.
+    """
+    return normalize_unicode_casefold(value)
 
 
 def canonical_slug(value: str) -> str:
@@ -49,7 +61,7 @@ def canonical_slug(value: str) -> str:
     """
     if not isinstance(value, str):
         return ""
-    return re.sub(r"\s+", "_", value.strip().casefold())
+    return re.sub(r"\s+", "_", normalize_unicode_casefold(value))
 
 
 def expand_casefold_candidates(username: str, max_candidates: int = 64) -> set[str]:
