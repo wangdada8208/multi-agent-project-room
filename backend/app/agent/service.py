@@ -6,7 +6,7 @@ import logging
 from datetime import datetime, timezone
 
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agent.identity import canonical_identity, expand_casefold_candidates
@@ -21,8 +21,19 @@ logger = logging.getLogger(__name__)
 async def find_username_matches(db: AsyncSession, username: str) -> list[User]:
     """Find all existing user records matching the given username under Unicode casefold.
 
-    Uses expand_casefold_candidates() to query via the unique B-Tree index on User.username.
-    Eliminates full table scans on non-existent usernames and detects ambiguity symmetrically.
+    expand_casefold_candidates() narrows the search to a small candidate set served by
+    the unique B-Tree index on User.username, so the "username does not exist" case
+    stays free of full table scans.
+
+    That candidate set only contains the canonical, lower, upper and title shapes of
+    the input, so a row stored with an arbitrary mixed-case spelling (for example
+    "CoDeX" or "xXyZ", or a Unicode fold pair such as "ß"/"SS") would be invisible to
+    the candidate set alone. The lookup therefore OR-s in a case-insensitive
+    comparison in the same statement: one index probe resolves the addressable
+    spellings, and the case-insensitive arm keeps every other spelling of the same
+    identity reachable for collision and login detection.
+
+    Never returns a row whose canonical identity differs from the input.
     """
     key = canonical_identity(username)
     if not key:
@@ -32,9 +43,22 @@ async def find_username_matches(db: AsyncSession, username: str) -> list[User]:
     if not candidates:
         return []
 
-    stmt = select(User).where(User.username.in_(candidates))
+    stripped = username.strip()
+    if not stripped:
+        return []
+
+    stmt = select(User).where(
+        or_(
+            User.username.in_(candidates),
+            func.lower(User.username) == func.lower(stripped),
+        )
+    )
     result = await db.execute(stmt)
-    return [user for user in result.scalars().all() if canonical_identity(user.username) == key]
+    return [
+        user
+        for user in result.scalars().all()
+        if canonical_identity(user.username) == key
+    ]
 
 
 async def authorize_agent_registration(db: AsyncSession, user: User, name: str) -> str:
