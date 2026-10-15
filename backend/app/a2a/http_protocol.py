@@ -22,7 +22,7 @@ from fastapi import HTTPException
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 from sse_starlette.sse import EventSourceResponse
-from sqlalchemy import func, select
+from sqlalchemy import false, func, select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from functools import wraps
 from a2a.auth.user import User as SDKUser
@@ -374,6 +374,7 @@ class SQLRequestHandler(DefaultRequestHandler):
                         )).scalar_one_or_none()
                         if existing_msg is None:
                             await db.rollback()
+                            await asyncio.sleep(0.05 * (_attempt + 1))
                             continue
                         if existing_msg.content != text:
                             raise HTTPException(409, 'Idempotency conflict: payload mismatch')
@@ -398,6 +399,7 @@ class SQLRequestHandler(DefaultRequestHandler):
                             await db.commit()
                         except IntegrityError:
                             await db.rollback()
+                            await asyncio.sleep(0.05 * (_attempt + 1))
                             continue
                         result = self.task_store._to_sdk_task(task)
                         is_new_task = True
@@ -494,7 +496,7 @@ class SQLRequestHandler(DefaultRequestHandler):
                     OwnerPermission = aliased(RoomPermission)
                     stmt = stmt.join(OwnerPermission, (OwnerPermission.room_id == A2ATask.room_id) & (OwnerPermission.user_id == user.owner_user_id)).where(OwnerPermission.role.in_(('owner', 'member')))
                 else:
-                    stmt = stmt.where(A2ATask.id == -1)
+                    stmt = stmt.where(false())
             if params.context_id:
                 stmt = stmt.where(A2ATask.context_id == params.context_id)
             if params.status:
@@ -542,9 +544,10 @@ class SQLRequestHandler(DefaultRequestHandler):
                     response.tasks.append(task)
             if next_offset is not None:
                 response.next_page_token = str(next_offset)
-            elif scanned >= LIST_TASKS_SCAN_LIMIT and len(response.tasks) == size:
-                # Scan budget exhausted with a full page: more rows may exist.
-                response.next_page_token = str(cursor)
+            elif scanned >= LIST_TASKS_SCAN_LIMIT:
+                has_more = (await db.execute(ordered.offset(cursor).limit(1))).scalars().first()
+                if has_more is not None:
+                    response.next_page_token = str(cursor)
             return response
 
 
