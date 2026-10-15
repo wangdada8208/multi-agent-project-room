@@ -263,8 +263,12 @@ def test_postgresql_offline_ddl_and_revision_head():
     assert revisions["e50c20261011"] == "d40c20261010"
     assert revisions["f60c20261011"] == "e50c20261011"
     assert revisions["g70c20261012"] == "f60c20261011"
-    assert set(revisions) - set(revisions.values()) == {"g70c20261012"}
-    old = {r: parent for r, parent in revisions.items() if r not in (new, "b20c20261010", "c30c20261010", "d40c20261010", "e50c20261011", "f60c20261011", "g70c20261012")}
+    if "h80c20261015" in revisions:
+        assert revisions["h80c20261015"] == "g70c20261012"
+        assert set(revisions) - set(revisions.values()) == {"h80c20261015"}
+    else:
+        assert set(revisions) - set(revisions.values()) == {"g70c20261012"}
+    old = {r: parent for r, parent in revisions.items() if r not in (new, "b20c20261010", "c30c20261010", "d40c20261010", "e50c20261011", "f60c20261011", "g70c20261012", "h80c20261015")}
     assert len(old) == 11 and set(old) - set(old.values()) == {"f9a1c2d3e4b5"}
     spec = importlib.util.spec_from_file_location("binding_offline_migration", versions / "a10c20261010_agent_owner_binding.py")
     migration = importlib.util.module_from_spec(spec)
