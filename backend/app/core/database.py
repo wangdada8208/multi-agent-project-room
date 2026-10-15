@@ -89,7 +89,7 @@ async def check_database_connection() -> dict:
         return {"status": "error", "reason": "Database unavailable"}
 
 
-EXPECTED_ALEMBIC_HEAD = "g70c20261012"
+EXPECTED_ALEMBIC_HEAD = "h80c20261015"
 CRITICAL_TABLES = ("users",)
 
 
