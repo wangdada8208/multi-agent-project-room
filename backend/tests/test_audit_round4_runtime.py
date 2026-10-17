@@ -272,6 +272,15 @@ class TestLogRedaction:
         assert "benh" not in search and "Lan" not in search
         assert search.strip(), "record must still reach the sink"
 
+    def test_share_token_resolved_by_token_is_redacted(self):
+        """Revoking a share link puts its token in the path: mask it too."""
+        revoked = scrub_text("/api/v1/rooms/room-abc/share/sh_revokeSECRET7")
+        assert "sh_revokeSECRET7" not in revoked
+        assert "/api/v1/rooms/room-abc/share/" in revoked
+        # Unrelated room sub-routes keep their identifiers.
+        assert scrub_text("/api/v1/rooms/room-abc/xmtp-binding") == "/api/v1/rooms/room-abc/xmtp-binding"
+        assert scrub_text("/api/v1/rooms/room-abc-123/share-list") == "/api/v1/rooms/room-abc-123/share-list"
+
     def test_unter_redacted_arg_does_not_mask_whole_record(self, log_capture):
         """A non-secret arg that merely differs by identity must not blank the record.
 

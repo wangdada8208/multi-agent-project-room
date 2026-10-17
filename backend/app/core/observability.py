@@ -63,11 +63,14 @@ _INLINE_SECRET = re.compile(
     '(?i)\\b(token|secret|password|passwd|api[_-]?key)\\b\\s*[=:]\\s*(?:\\"[^\\"]*\\"|\'[^\']*\'|([^\\s,;]+))'
 )
 _BEARER_AUTH = re.compile('(?i)\\b(bearer)\\s+([^\\s,;\\"\']+)')
-# Invite and share tokens live in the URL *path*: /api/v1/invites/<token>,
-# /api/v1/shared/<token>/messages. Anchored to known routes, so ordinary path
-# segments (room ids etc.) survive.
+# Invite and share tokens live in the URL *path*:
+#   /api/v1/invites/<token>[/redeem]
+#   /api/v1/shared/<token>/messages
+#   /api/v1/rooms/<room_id>/share/<token>   (revoke)
+# Anchored to known routes, so ordinary path segments (room ids etc.) survive.
 _PATH_SECRET_SEGMENT = re.compile(
-    r"(?i)(/api/v1/(?:invites|shared)/)[^/\s?#\"']+"
+    r"(?i)(?P<prefix>/api/v1/(?:invites|shared)/)[^/\s?#\"']+"
+    r"|(?P<share>/api/v1/rooms/[^/\s?#\"']+/share/)[^/\s?#\"']+"
 )
 # Credentials smuggled into a query string: ?token= / &access_token= / ...
 _QUERY_SECRET = re.compile(
@@ -117,7 +120,9 @@ def _scrub_text_ex(value: str) -> tuple[str, bool]:
     value = _PRIVATE_KEY_RE.sub(REDACTED, value)
     value = _DSN_CREDENTIALS.sub(lambda m: f"{m.group('scheme')}{REDACTED}@", value)
     value = _BEARER_AUTH.sub(lambda m: f"{m.group(1)} {REDACTED}", value)
-    value = _PATH_SECRET_SEGMENT.sub(lambda m: f"{m.group(1)}{REDACTED}", value)
+    value = _PATH_SECRET_SEGMENT.sub(
+        lambda m: f"{m.group('prefix') or m.group('share')}{REDACTED}", value
+    )
     value = _QUERY_SECRET.sub(lambda m: f"{m.group(1)}{REDACTED}", value)
     value = _QUERY_FREETEXT.sub(lambda m: f"{m.group(1)}{REDACTED}", value)
     value = _INLINE_SECRET.sub(lambda m: f"{m.group(1)}={REDACTED}", value)

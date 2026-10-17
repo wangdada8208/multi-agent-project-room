@@ -131,6 +131,16 @@ async def create_share_link(
     if room is None:
         raise HTTPException(status_code=404, detail="Room not found")
 
+    # End-to-end encrypted rooms have no body on the Hub, so a read-only share
+    # link is meaningless there. Refuse it outright instead of handing out a
+    # token that only ever resolves to an empty list: an entry point that must
+    # never exist should not be creatable at all.
+    if room.transport == "xmtp":
+        raise HTTPException(
+            status_code=409,
+            detail="Encrypted rooms cannot be shared through a read-only link",
+        )
+
     # Generate a unique share token
     token = _secrets.token_urlsafe(32)
     from datetime import datetime, timedelta, timezone as tz
