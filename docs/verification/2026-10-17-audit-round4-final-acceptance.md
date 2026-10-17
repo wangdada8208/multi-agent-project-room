@@ -2,7 +2,7 @@
 
 > 执行时间：2026-10-17
 > 分支：`integration/audit-round4`
-> 最终 commit：`f8496d5a59a84112be6e02c00942299c5c234826`
+> 最终 commit：`f64e439`（含本报告）/ 产品与 CI 代码末端 `f8496d5a59a84112be6e02c00942299c5c234826`
 > 基线：`integration/audit-round3` @ `5f261b4`
 > Pull Request：[#5](https://github.com/wangdada8208/multi-agent-project-room/pull/5)（**OPEN，未合并**）
 
@@ -415,7 +415,7 @@ pytest tests backend/tests/test_pg_room_hubs_linux.py   # → 17 failed, 41 pass
 | 项目 | 值 |
 |---|---|
 | 分支 | `integration/audit-round4` |
-| **最终 commit** | **`f8496d5a59a84112be6e02c00942299c5c234826`** |
+| **最终 commit** | **`f64e439`**（报告提交）；产品/CI 代码末端 `f8496d5` |
 | 基线 commit | `5f261b4`（`integration/audit-round3`） |
 | `main` | `c720474`（未改动） |
 | PR | [#5](https://github.com/wangdada8208/multi-agent-project-room/pull/5) — OPEN / MERGEABLE / **未合并** |
@@ -427,3 +427,23 @@ pytest tests backend/tests/test_pg_room_hubs_linux.py   # → 17 failed, 41 pass
 - ❌ 「后端 pytest 全量回归 0 failed」—— 实际 30 failed（见 §3）
 - ❌ 「真实 CI 核对成功记录」—— backend 作业 6 次运行均失败（见 §9）
 - ⚠️ 「日志脱敏」—— 存在 High 级泄露（见 §11-H1）
+
+---
+
+## 17. 最终 CI 记录（commit `f64e439`，run `39028768688`）
+
+| 作业 | 结果 | 耗时 |
+|---|---|---|
+| Safety guard (no main push / no deploy) | ✅ pass | 4s |
+| Frontend (vitest + build) | ✅ pass | 37s |
+| Repository hygiene (`git diff --check` + 密钥扫描) | ✅ pass | 4s |
+| Backend (real PostgreSQL + real Redis + Alembic) | ❌ fail | 32m54s |
+
+后端：`55 failed, 711 passed, 30 skipped`
+- 30 × `test_pg_*_hub*` —— 与 §3 测试隔离缺陷同源
+- 24 × SSRF 类 —— runner 上 asyncpg 建连超时（本地 70/70 通过）
+- 1 × `test_client_server_standard_interoperation_without_network` —— 前序失败连带
+
+**与上一次运行（commit `f8496d5`）的失败集合完全一致，可稳定复现。**
+
+**真实 CI 未能核对到"成功记录"，此项验收未通过。**
