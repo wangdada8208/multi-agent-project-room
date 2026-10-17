@@ -168,16 +168,25 @@ jobs:
     name: Repository hygiene
     runs-on: ubuntu-latest
     steps:
+      # Full history is required: the whitespace gate compares against the
+      # merge base with the PR base branch, which a shallow clone lacks.
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
       - name: git diff --check on the merged range
         run: |
-          BASE=$(git rev-parse origin/${{ github.base_ref || 'main' }} 2>/dev/null || echo "")
-          if [ -n "$BASE" ]; then
-            git diff --check "$BASE...HEAD"
+          BASE_REF="${{ github.base_ref }}"
+          if [ -n "$BASE_REF" ]; then
+            git fetch --no-tags --quiet origin "$BASE_REF"
+            git merge-base "origin/$BASE_REF" HEAD >/dev/null 2>&1 || { echo "::error::no merge base with origin/$BASE_REF"; exit 1; }
+            echo "Range: origin/$BASE_REF...HEAD"
+            git diff --check "origin/$BASE_REF...HEAD"
           else
-            git diff --check HEAD~1
+            echo "Range: HEAD~1...HEAD"
+            git diff --check HEAD~1 HEAD
           fi
+          echo "OK: no whitespace errors."
 
       - name: No committed secrets in the tracked tree
         run: |
