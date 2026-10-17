@@ -69,6 +69,11 @@ jobs:
       MAPR_DATABASE_URL: postgresql+asyncpg://postgres:test_password@localhost:5432/mapr_audit_round4_test
       MAPR_TEST_DATABASE_URL: postgresql+asyncpg://postgres:test_password@localhost:5432/mapr_audit_round4_test
       MAPR_ENVIRONMENT: development
+      # Enables the gated PG17 suites instead of letting them skip.
+      MAPR_SSE_QUOTA_PG_ROOT: /tmp/mapr-sse-quota-bin-round4
+      MAPR_ISOLATED_PG_ROOT: /tmp/mapr-sse-quota-bin-round4
+      # Room-sync migration gate requires the owned cluster on this exact port.
+      MAPR_ISOLATED_PG_PORT: "5432"
 
     steps:
       - uses: actions/checkout@v6
@@ -85,8 +90,12 @@ jobs:
 
       - name: Wait for PostgreSQL and Redis
         run: |
-          for i in $(seq 1 20); do pg_isready -h localhost -U postgres && break; sleep 2; done
-          for i in $(seq 1 20); do redis-cli -h localhost ping && break; sleep 2; done
+          # Always pass -d so the readiness probe never falls back to the
+          # runner's OS user as a PostgreSQL role ("FATAL: role root does not exist").
+          for i in $(seq 1 30); do pg_isready -h localhost -p 5432 -U postgres -d mapr_audit_round4_test && break; sleep 2; done
+          pg_isready -h localhost -p 5432 -U postgres -d mapr_audit_round4_test
+          for i in $(seq 1 30); do redis-cli -h localhost ping && break; sleep 2; done
+          redis-cli -h localhost ping
 
       - name: Alembic single-head check
         run: |
@@ -102,6 +111,21 @@ jobs:
           python -m alembic downgrade g70c20261012
           python -m alembic upgrade head
           python -m alembic current | grep 'h80c20261015'
+
+      - name: Stage an isolated PostgreSQL 17 binary tree
+        run: |
+          # Several gate suites (SSE quota, distributed reliability, room-sync
+          # migration) only run when an independently owned PG17 package tree
+          # exists under /tmp. Building it here means those gates EXECUTE
+          # instead of silently skipping.
+          ROOT=/tmp/mapr-sse-quota-bin-round4
+          mkdir -p "$ROOT/usr/lib" "$ROOT/usr/share"
+          cp -a /usr/lib/postgresql/17 "$ROOT/usr/lib/postgresql/17"
+          cp -a /usr/share/postgresql/17 "$ROOT/usr/share/postgresql/17"
+          test -x "$ROOT/usr/lib/postgresql/17/bin/initdb"
+          test -x "$ROOT/usr/lib/postgresql/17/bin/pg_dump"
+          test -f "$ROOT/usr/share/postgresql/17/postgres.bki"
+          echo "isolated PG17 tree ready at $ROOT"
 
       - name: Prove real PostgreSQL and real Redis are wired (no silent skip)
         run: |
@@ -121,15 +145,21 @@ jobs:
           PY
 
       - name: Full backend + integration test suite
-        run: python -m pytest backend/tests tests -q -ra
-
-      - name: Fail if any test was silently skipped
         run: |
-          python -m pytest backend/tests tests -q -ra | tee /tmp/pytest-summary.txt >/dev/null || true
+          set -o pipefail
+          python -m pytest backend/tests tests -q -ra | tee /tmp/pytest-summary.txt
+
+      - name: Report every skipped test (gates that did not execute)
+        run: |
+          echo "### Skipped tests in this run" >> "$GITHUB_STEP_SUMMARY"
           if grep -qE '^SKIPPED' /tmp/pytest-summary.txt; then
-            echo "::warning::Skipped tests detected — review each reason before accepting:"
-            grep -E '^SKIPPED' /tmp/pytest-summary.txt
+            echo "::warning::Some gated suites did not execute. Each reason is listed below." \
+              >> "$GITHUB_STEP_SUMMARY"
+            grep -E '^SKIPPED' /tmp/pytest-summary.txt | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            echo "No skipped tests: every gate executed for real." >> "$GITHUB_STEP_SUMMARY"
           fi
+          tail -1 /tmp/pytest-summary.txt >> "$GITHUB_STEP_SUMMARY"
 
   frontend:
     name: Frontend (vitest + build)
