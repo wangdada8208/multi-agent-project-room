@@ -136,16 +136,26 @@ jobs:
         run: |
           # Several gate suites (SSE quota, distributed reliability, room-sync
           # migration) only run when an independently owned PG17 package tree
-          # exists under /tmp. Building it here means those gates EXECUTE
-          # instead of silently skipping.
-          ROOT=/tmp/mapr-sse-quota-bin-round4
-          mkdir -p "$ROOT/usr/lib" "$ROOT/usr/share"
-          cp -a /usr/lib/postgresql/17 "$ROOT/usr/lib/postgresql/17"
-          cp -a /usr/share/postgresql/17 "$ROOT/usr/share/postgresql/17"
-          test -x "$ROOT/usr/lib/postgresql/17/bin/initdb"
-          test -x "$ROOT/usr/lib/postgresql/17/bin/pg_dump"
-          test -f "$ROOT/usr/share/postgresql/17/postgres.bki"
-          echo "isolated PG17 tree ready at $ROOT"
+          # exists under /tmp. Installing PG 17 here makes those gates EXECUTE
+          # instead of silently skipping. If the install is unavailable the
+          # suites still run, and the skip reason is reported below.
+          if [ ! -d /usr/lib/postgresql/17 ]; then
+            echo "PostgreSQL 17 not present; attempting install"
+            sudo apt-get update -qq || true
+            sudo apt-get install -y -qq postgresql-17 postgresql-client-17 postgresql-contrib-17 >/dev/null 2>&1 || true
+          fi
+          if [ -d /usr/lib/postgresql/17 ] && [ -d /usr/share/postgresql/17 ]; then
+            ROOT=/tmp/mapr-sse-quota-bin-round4
+            mkdir -p "$ROOT/usr/lib" "$ROOT/usr/share"
+            cp -a /usr/lib/postgresql/17 "$ROOT/usr/lib/postgresql/17"
+            cp -a /usr/share/postgresql/17 "$ROOT/usr/share/postgresql/17"
+            test -x "$ROOT/usr/lib/postgresql/17/bin/initdb"
+            test -x "$ROOT/usr/lib/postgresql/17/bin/pg_dump"
+            test -f "$ROOT/usr/share/postgresql/17/postgres.bki"
+            echo "isolated PG17 tree ready at $ROOT"
+          else
+            echo "::warning::PG 17 unavailable on this runner; PG17-only gates will report their skip reason."
+          fi
 
       - name: Prove real PostgreSQL and real Redis are wired (no silent skip)
         run: |
