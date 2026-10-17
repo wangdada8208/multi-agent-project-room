@@ -32,18 +32,48 @@ def mask(username: str) -> str:
 
 
 def comparison_key(username: str) -> str:
-    """与 backend/app/agent/identity.py 的 comparison_identity 保持一致。
+    """直接调用迁移里的那一份比较函数，不在这里另写一遍。
 
-    刻意在这里重写一遍而不从应用导入：查重脚本要能独立跑，不依赖应用能启动。
-    两处必须同步；执行手册里写了如何核对一致性。
+    以前这里重写过一份，结果和迁移、应用的口径各自漂移：
+    全角 `Ａlice`、末尾带制表符这类名字，两边判定不一样。
+    查重说"没事"、迁移却撞上重复，是会真实发生的。
+
+    所以现在只有一个来源：`i90c20261017_add_unique_comparison_username.comparison_key`。
+    迁移文件找不到时直接报错，不退回自己猜一份——宁可跑不起来，也不要给出错误的"0 组"。
     """
-    import unicodedata
+    global _MIGRATION_KEY_FN
+    if _MIGRATION_KEY_FN is None:
+        _MIGRATION_KEY_FN = _load_migration_key_fn()
+    return _MIGRATION_KEY_FN(username)
 
-    if not isinstance(username, str):
-        return ""
-    folded = unicodedata.normalize("NFKC", username.strip()).casefold()
-    table = str.maketrans({"_": "-", ".": "-", "·": "-", "・": "-"})
-    return folded.translate(table)
+
+_MIGRATION_KEY_FN = None
+
+_MIGRATION_RELPATH = (
+    "backend/alembic/versions/i90c20261017_add_unique_comparison_username.py"
+)
+
+
+def _load_migration_key_fn():
+    import importlib.util
+    from pathlib import Path
+
+    repo_root = Path(__file__).resolve().parents[2]
+    migration_path = repo_root / _MIGRATION_RELPATH
+    if not migration_path.is_file():
+        raise FileNotFoundError(
+            "找不到迁移文件，无法确定查重口径：" + str(migration_path)
+        )
+    spec = importlib.util.spec_from_file_location(
+        "_h3_migration_comparison_key", migration_path
+    )
+    if spec is None or spec.loader is None:
+        raise ImportError("无法载入迁移文件：" + str(migration_path))
+    module = importlib.util.module_from_spec(spec)
+    # 迁移文件顶层 import 了 alembic；只取比较函数时不应因为它而失败，
+    # 所以先注册成已加载模块，避免重复执行。
+    spec.loader.exec_module(module)
+    return module.comparison_key
 
 
 def _fetch_rows(dsn: str) -> list[tuple[str, object]]:
