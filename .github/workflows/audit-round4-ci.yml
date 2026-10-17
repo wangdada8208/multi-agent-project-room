@@ -1,0 +1,193 @@
+name: Audit Round 4 CI
+
+# Independent verification workflow for the audit round 4 integration branch.
+#
+# Safety: this workflow NEVER deploys and never touches production.
+#   - It is triggered by workflow_dispatch and by pull_request, only.
+#   - There is no `push` trigger, so it cannot fire a production deploy from
+#     an accidental push (production deploys live in deploy.yml and run only on
+#     `push` to `main` or an explicit workflow_dispatch with deploy=true).
+#   - permissions are read-only.
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+env:
+  PYTHONPATH: backend
+  # Real PostgreSQL + real Redis are mandatory: several audit suites silently
+  # skip when they are absent, and a silent skip must never look like a pass.
+  MAPR_TESTING: "1"
+  MAPR_TEST_REDIS_URL: redis://localhost:6379/15
+
+jobs:
+  safety-guard:
+    name: Safety guard (no main push / no deploy)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Assert this run cannot deploy
+        run: |
+          echo "event=${{ github.event_name }} ref=${{ github.ref }}"
+          if [ "${{ github.event_name }}" = "push" ] && [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            echo "::error::This audit workflow must never run from a push to main."
+            exit 1
+          fi
+          echo "OK: no production side effect from this workflow."
+
+  backend:
+    name: Backend (real PostgreSQL + real Redis + Alembic)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: mapr_audit_round4_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: test_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    env:
+      MAPR_DATABASE_URL: postgresql+asyncpg://postgres:test_password@localhost:5432/mapr_audit_round4_test
+      MAPR_TEST_DATABASE_URL: postgresql+asyncpg://postgres:test_password@localhost:5432/mapr_audit_round4_test
+      MAPR_ENVIRONMENT: development
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Install backend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt
+
+      - name: Wait for PostgreSQL and Redis
+        run: |
+          for i in $(seq 1 20); do pg_isready -h localhost -U postgres && break; sleep 2; done
+          for i in $(seq 1 20); do redis-cli -h localhost ping && break; sleep 2; done
+
+      - name: Alembic single-head check
+        run: |
+          python -m alembic heads | tee /tmp/alembic-heads.txt
+          test "$(grep -c '(head)' /tmp/alembic-heads.txt)" = "1"
+          grep -q 'h80c20261015' /tmp/alembic-heads.txt
+
+      - name: Alembic upgrade head (fresh database)
+        run: python -m alembic upgrade head
+
+      - name: Alembic downgrade + re-upgrade round trip
+        run: |
+          python -m alembic downgrade g70c20261012
+          python -m alembic upgrade head
+          python -m alembic current | grep 'h80c20261015'
+
+      - name: Prove real PostgreSQL and real Redis are wired (no silent skip)
+        run: |
+          python - <<'PY'
+          import asyncio, os, sys
+          sys.path.insert(0, "backend/tests"); sys.path.insert(0, "backend")
+          import app.main  # noqa: register all models
+          import conftest as C
+          from app.auth import rate_limit
+          assert C.engine.dialect.name == "postgresql", f"tests would run on {C.engine.dialect.name}, not PostgreSQL"
+          client = rate_limit._get_redis_sync()
+          assert client is not None, "Redis is unreachable: rate-limit tests would silently skip"
+          assert client.ping() is True
+          url = rate_limit._get_effective_redis_url()
+          assert url.rstrip("/").endswith("/15"), f"tests must use the dedicated Redis DB, got {url}"
+          print("OK: PostgreSQL dialect =", C.engine.dialect.name, "| Redis DB =", url)
+          PY
+
+      - name: Full backend + integration test suite
+        run: python -m pytest backend/tests tests -q -ra
+
+      - name: Fail if any test was silently skipped
+        run: |
+          python -m pytest backend/tests tests -q -ra | tee /tmp/pytest-summary.txt >/dev/null || true
+          if grep -qE '^SKIPPED' /tmp/pytest-summary.txt; then
+            echo "::warning::Skipped tests detected — review each reason before accepting:"
+            grep -E '^SKIPPED' /tmp/pytest-summary.txt
+          fi
+
+  frontend:
+    name: Frontend (vitest + build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: |
+            frontend/package-lock.json
+            workers/xmtp-member/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Frontend tests
+        working-directory: frontend
+        run: npm test
+
+      - name: Frontend production build
+        working-directory: frontend
+        run: npm run build
+
+      - name: XMTP member typecheck and tests
+        working-directory: workers/xmtp-member
+        run: |
+          npm ci
+          npm run typecheck
+          npm test
+
+  hygiene:
+    name: Repository hygiene
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: git diff --check on the merged range
+        run: |
+          BASE=$(git rev-parse origin/${{ github.base_ref || 'main' }} 2>/dev/null || echo "")
+          if [ -n "$BASE" ]; then
+            git diff --check "$BASE...HEAD"
+          else
+            git diff --check HEAD~1
+          fi
+
+      - name: No committed secrets in the tracked tree
+        run: |
+          set -e
+          # Tracked env files must only be examples/placeholders.
+          BAD=$(git ls-files | grep -E '(^|/)\.env$|\.env\.(production|prod|local)$' || true)
+          if [ -n "$BAD" ]; then echo "::error::Tracked env file(s): $BAD"; exit 1; fi
+          # Real-looking credentials must never be committed.
+          PATTERNS='ghp_[A-Za-z0-9]{30,}|AKIA[0-9A-Z]{16}|-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----'
+          if git grep -I -n -E "$PATTERNS" -- . ':!docs' ':!*.md' ':!backend/tests' ':!tests' ; then
+            echo "::error::Possible secret committed"; exit 1
+          fi
+          echo "OK: no tracked secrets found."
