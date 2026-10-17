@@ -436,7 +436,11 @@ class TrustedRunner:
         peer_content = msg.get("content", "")
         current_turn = dialogue.get("current_turn", 1)
         max_turns = dialogue.get("max_turns", 6)
-        logger.info("Handling dialogue message from [%s] (turn %s/%s): %s", sender_name, current_turn, max_turns, peer_content[:60])
+        # 对话正文属于加密房间内容，不得写入日志：只记录发送者、轮次与长度。
+        logger.info(
+            "Handling dialogue message from [%s] (turn %s/%s): content_len=%d",
+            sender_name, current_turn, max_turns, len(peer_content or ""),
+        )
 
         client = self._get_client()
         headers = {"Authorization": f"Bearer {self.token}"} if self.token else {}
@@ -523,7 +527,8 @@ class TrustedRunner:
         if not self.is_mentioned(content) and msg.get("msg_type") != "task":
             return None
 
-        logger.info("Agent [%s] received mention from [%s]: %s", self.agent_name, sender_name, content)
+        # 房间消息正文不得写入日志：只记录身份与长度，不记录内容。
+        logger.info("Agent [%s] received mention from [%s]: content_len=%d", self.agent_name, sender_name, len(content))
 
         # 1. 检查是否要求停止对话
         if self.is_dialogue_stop(content):
@@ -550,7 +555,11 @@ class TrustedRunner:
         # 2. 检查是否要求发起 A2A 协同讨论
         target_agent, topic = self.detect_dialogue_request(content)
         if target_agent and topic:
-            logger.info("Starting A2A dialogue from room mention: target=%s, topic=%s", target_agent, topic)
+            # 讨论主题取自正文，同样不得写入日志。
+            logger.info(
+                "Starting A2A dialogue from room mention: target=%s, topic_len=%d",
+                target_agent, len(topic or ""),
+            )
             did = await self.start_dialogue(target_agent=target_agent, topic=topic, ws=ws)
             return did
 
