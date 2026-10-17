@@ -35,6 +35,7 @@ from app.core.database import check_database_readiness
 from app.core.observability import (
     Metrics,
     RedactingFilter,
+    _deep_scrub,
     install_redacting_filter,
     metrics,
     redact,
@@ -363,8 +364,84 @@ class TestLogRedaction:
         assert "HTTP Request" in output, "record must still be emitted"
         assert "404" in output, "status must survive for diagnostics"
 
+    def test_nested_args_are_scrubbed_recursively(self):
+        """SQLAlchemy logs bound params as a nested tuple: scrub every level."""
+        import secrets
+
+        token = secrets.token_urlsafe(32)
+        scrubbed = _deep_scrub(("generated in 0.0004s", (token,)))
+        assert token not in repr(scrubbed)
+        assert "generated in 0.0004s" in repr(scrubbed), "timing must survive"
+
+    def test_partial_args_are_scrubbed(self):
+        """aiosqlite logs a functools.partial whose bound args hold the params."""
+        import functools
+        import secrets
+
+        token = secrets.token_urlsafe(32)
+
+        def fake_execute(sql, params):
+            return None
+
+        value = functools.partial(fake_execute, "select * from t where token=?", (token,))
+        rendered = repr(_deep_scrub(value))
+        assert token not in rendered
+        assert "functools.partial(" in rendered
+
+    def test_opaque_param_wrapper_is_scrubbed(self):
+        """SQLAlchemy passes ``_repr_params``, not a tuple: unwrap its payload.
+
+        This is the exact shape the real service leaked: a wrapper object whose
+        ``repr`` prints the values, so an ``isinstance(tuple)`` check misses it.
+        """
+        import secrets
+
+        token = secrets.token_urlsafe(32)
+
+        class ReprParams:
+            """Stand-in with the same shape as sqlalchemy.sql.util._repr_params."""
+
+            def __init__(self, params):
+                self.params = params
+
+            def __repr__(self):
+                return repr(self.params)
+
+        scrubbed = repr(_deep_scrub(ReprParams((token,))))
+        assert token not in scrubbed
+        assert "ReprParams(" in scrubbed, "wrapper must stay recognisable in logs"
+
+    def test_real_sqlalchemy_params_do_not_leak_into_log(self):
+        """End-to-end: a real SQLAlchemy engine's DEBUG log must not print the token."""
+        import io
+        import secrets
+
+        token = secrets.token_urlsafe(32)
+        stream = io.StringIO()
+        handler = logging.StreamHandler(stream)
+        handler.setFormatter(logging.Formatter("%(message)s"))
+        engine_logger = logging.getLogger("sqlalchemy.engine.Engine")
+        old_level = engine_logger.level
+        engine_logger.addHandler(handler)
+        engine_logger.setLevel(logging.DEBUG)
+        engine_logger.propagate = False
+        install_redacting_filter()
+        try:
+            from sqlalchemy import create_engine, text
+
+            engine = create_engine("sqlite://")
+            with engine.begin() as conn:
+                conn.execute(text("select 1 where :t = :t"), {"t": token})
+            engine.dispose()
+        finally:
+            engine_logger.removeHandler(handler)
+            engine_logger.setLevel(old_level)
+
+        output = stream.getvalue()
+        assert output.strip(), "no SQLAlchemy log captured: the test would pass vacuously"
+        assert token not in output, "bound parameter leaked into the SQLAlchemy log"
+
     def test_eager_logger_names_are_covered(self):
-        """Libraries that log before install() are attached eagerly."""
         install_redacting_filter()
         for name in (
             "httpx", "httpcore", "sqlalchemy", "sqlalchemy.engine",

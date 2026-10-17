@@ -17,10 +17,12 @@ clock steps — see the E-group report section on monotonic margins.
 """
 from __future__ import annotations
 
+import functools
 import logging
 import re
 import threading
 import time
+import types
 from collections import OrderedDict, defaultdict, deque
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -78,6 +80,14 @@ _PATH_SECRET_SEGMENT = re.compile(
 _QUERY_SECRET = re.compile(
     r"(?i)([?&](?:token|access_token|refresh_token|invite_token|invite|key|api_key|secret)=)[^&\s\"']+"
 )
+# A bare capability token: no scheme, no ``key=`` context, just the value. It
+# shows up as a bound SQL parameter (``('generated in 0.0004s', ('<token>',))``),
+# where every syntax-based rule above has nothing to anchor on. Invite tokens are
+# ``secrets.token_urlsafe(32)`` (~43 URL-safe chars) and share tokens are the
+# same shape, so the value itself is the only usable signal.
+# Deliberately requires a long, mixed, unbroken URL-safe run so ordinary words,
+# ids and short codes are never touched.
+_BARE_CAPABILITY_TOKEN = re.compile(r"\b[A-Za-z0-9_-]{40,128}\b")
 # Placeholder run emitted by Python's logging for one or more ``%s``-style args.
 # Deliberately not ``%d``/``%f``: digits may legitimately survive a scrub.
 _ARG_SLOT = re.compile(
@@ -97,13 +107,31 @@ def is_sensitive_key(key: Any) -> bool:
 
 
 def scrub_text(value: str) -> str:
-    """Redact embedded DSN credentials, bearer tokens, and inline secret=... pairs.
+    """Redact embedded credentials from free-form text.
 
-    Also removes credentials that travel inside a URL: the invite token path
-    segment and ``?token=``-style query strings. Without this, uvicorn's access
-    log records the invite token verbatim (audit round 4, finding H1).
+    Handles DSNs, bearer headers, ``key=value`` pairs, the invite/share URL path
+    segments and query strings, and bare high-entropy capability tokens such as
+    the ones SQLAlchemy prints when it logs bound parameters.
     """
     return _scrub_text_ex(value)[0]
+
+
+def _looks_like_capability_token(candidate: str) -> bool:
+    """True for a long, mixed-charset, unbroken URL-safe run.
+
+    Lowercases-only, digits-only or hex-only runs are excluded: they are far more
+    likely to be ids, hashes of public data or UUID-ish keys than a capability.
+    """
+    if not (40 <= len(candidate) <= 128):
+        return False
+    if not re.fullmatch(r"[A-Za-z0-9_-]+", candidate):
+        return False
+    has_upper = any(c.isupper() for c in candidate)
+    has_lower = any(c.islower() for c in candidate)
+    has_digit = any(c.isdigit() for c in candidate)
+    # Real token_urlsafe output is mixed; require at least two of the three to
+    # avoid masking plain words and pure-hex digests.
+    return sum((has_upper, has_lower, has_digit)) >= 2
 
 
 def _scrub_text_ex(value: str) -> tuple[str, bool]:
@@ -125,7 +153,104 @@ def _scrub_text_ex(value: str) -> tuple[str, bool]:
     )
     value = _QUERY_SECRET.sub(lambda m: f"{m.group(1)}{REDACTED}", value)
     value = _INLINE_SECRET.sub(lambda m: f"{m.group(1)}={REDACTED}", value)
+    value = _BARE_CAPABILITY_TOKEN.sub(
+        lambda m: REDACTED if _looks_like_capability_token(m.group(0)) else m.group(0),
+        value,
+    )
     return value, value != original
+
+
+def _deep_scrub(value: Any, *, _depth: int = 0) -> Any:
+    """Recursively scrub every secret reachable from a log argument.
+
+    Log args are not always plain strings: SQLAlchemy logs bound parameters as a
+    nested tuple (``('generated in 0.0004s', ('inv_S3CRET',))``) and the aiosqlite
+    driver logs a ``functools.partial`` whose bound args hold the literal
+    parameter tuple. A one-level scrub leaves both intact, so the token came out
+    verbatim even though the record did go through redaction (audit round 4, H1
+    database half).
+    """
+    if _depth >= _MAX_DEPTH:
+        return REDACTED if isinstance(value, (str, bytes, tuple, list, dict, set)) else value
+    if isinstance(value, str):
+        return scrub_text(value)
+    if isinstance(value, (bytes, bytearray)):
+        return scrub_text(value.decode("utf-8", "replace"))
+    if isinstance(value, dict):
+        return {
+            key: (REDACTED if is_sensitive_key(key) else _deep_scrub(item, _depth=_depth + 1))
+            for key, item in list(value.items())[:_MAX_ITEMS]
+        }
+    if isinstance(value, tuple):
+        return tuple(_deep_scrub(item, _depth=_depth + 1) for item in value[:_MAX_ITEMS])
+    if isinstance(value, list):
+        return [_deep_scrub(item, _depth=_depth + 1) for item in value[:_MAX_ITEMS]]
+    if isinstance(value, (set, frozenset)):
+        return [_deep_scrub(item, _depth=_depth + 1) for item in list(value)[:_MAX_ITEMS]]
+    partial_render = _render_partial(value)
+    if partial_render is not None:
+        return partial_render
+    opaque = _render_opaque_container(value, _depth=_depth)
+    if opaque is not None:
+        return opaque
+    return value
+
+
+# Attributes that hold the *data* of a wrapper object, as opposed to internal
+# bookkeeping. SQLAlchemy's ``_repr_params`` keeps the bound parameters in
+# ``params``; a naive "unknown type: pass through" would let the token through.
+_CONTAINER_DATA_ATTRS = ("params", "parameters", "args", "kwargs", "items", "values")
+
+
+def _render_opaque_container(value: Any, *, _depth: int = 0) -> str | None:
+    """Render an unknown wrapper object with its payload scrubbed.
+
+    A subtlety that a plain ``isinstance(tuple)`` check misses: SQLAlchemy does
+    not log the bound parameters as a tuple, it logs a ``_repr_params`` wrapper
+    whose ``repr`` prints the values. Anything with a ``params``/``args`` style
+    attribute is therefore rebuilt from its scrubbed payload; anything else is
+    left alone so ordinary objects are not mangled.
+    """
+    if value is None or isinstance(value, (int, float, bool, complex, type)):
+        return None
+    payloads = {}
+    for attr in _CONTAINER_DATA_ATTRS:
+        try:
+            candidate = getattr(value, attr, None)
+        except Exception:  # pragma: no cover - properties may raise
+            continue
+        if isinstance(candidate, (tuple, list, dict)) and candidate:
+            payloads[attr] = candidate
+    if not payloads:
+        return None
+    parts = [
+        f"{attr}={_deep_scrub(payload, _depth=_depth + 1)!r}"
+        for attr, payload in payloads.items()
+    ]
+    return f"{type(value).__name__}({', '.join(parts)})"
+
+
+def _render_partial(value: Any) -> str | None:
+    """Render a ``functools.partial`` with its bound args scrubbed.
+
+    ``repr(partial)`` is what ends up in the log line, so rebuilding the repr
+    from scrubbed parts is the only way to mask the SQL parameters it carries.
+    Returns ``None`` for anything else, so the caller falls through.
+    """
+    if not isinstance(value, functools.partial):
+        return None
+    func = value.func
+    if isinstance(func, types.MethodType):
+        target = f"<bound method {type(func.__self__).__name__}.{func.__name__}>"
+    else:
+        target = getattr(func, "__name__", repr(func))
+    safe_args = ", ".join(repr(_deep_scrub(a))[:200] for a in value.args)
+    parts = [target] + ([safe_args] if safe_args else [])
+    if value.keywords:
+        parts.append(", ".join(
+            f"{k}={_deep_scrub(v)!r}"[:200] for k, v in value.keywords.items()
+        ))
+    return f"functools.partial({', '.join(parts)})"
 
 
 def _scrub_record_args(msg: Any, args: Any, *, template_masked: bool) -> Any:
@@ -147,14 +272,10 @@ def _scrub_record_args(msg: Any, args: Any, *, template_masked: bool) -> Any:
     ``args`` is emptied, so nothing can be re-injected.
     """
     if isinstance(args, dict):
-        return (msg, ()) if template_masked else (msg, redact(args))
+        return (msg, ()) if template_masked else (msg, _deep_scrub(args))
     if not isinstance(args, tuple):
         return msg, args
-    scrubbed = tuple(
-        redact(item) if isinstance(item, (dict, list))
-        else (scrub_text(item) if isinstance(item, str) else item)
-        for item in args
-    )
+    scrubbed = tuple(_deep_scrub(item) for item in args)
     if not template_masked:
         # Per-arg redaction is complete and the template is intact, so the record
         # formats exactly as before, with every secret already masked.
