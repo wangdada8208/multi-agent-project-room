@@ -121,7 +121,7 @@ jobs:
         run: |
           python -m alembic heads | tee /tmp/alembic-heads.txt
           test "$(grep -c '(head)' /tmp/alembic-heads.txt)" = "1"
-          grep -q 'h80c20261015' /tmp/alembic-heads.txt
+          grep -q 'i90c20261017' /tmp/alembic-heads.txt
 
       - name: Alembic upgrade head (fresh database)
         run: python -m alembic upgrade head
@@ -130,7 +130,7 @@ jobs:
         run: |
           python -m alembic downgrade g70c20261012
           python -m alembic upgrade head
-          python -m alembic current | grep 'h80c20261015'
+          python -m alembic current | grep 'i90c20261017'
 
       - name: Stage an isolated PostgreSQL 17 binary tree
         run: |
