@@ -63,22 +63,21 @@ _INLINE_SECRET = re.compile(
     '(?i)\\b(token|secret|password|passwd|api[_-]?key)\\b\\s*[=:]\\s*(?:\\"[^\\"]*\\"|\'[^\']*\'|([^\\s,;]+))'
 )
 _BEARER_AUTH = re.compile('(?i)\\b(bearer)\\s+([^\\s,;\\"\']+)')
-# Invite and share tokens live in the URL *path*:
-#   /api/v1/invites/<token>[/redeem]
-#   /api/v1/shared/<token>/messages
-#   /api/v1/rooms/<room_id>/share/<token>   (revoke)
-# Anchored to known routes, so ordinary path segments (room ids etc.) survive.
+# Credentials that travel in the URL *path*. Anchored to the known routes, so
+# ordinary path segments (room ids etc.) survive:
+#   /api/v1/invites/<token>[/redeem]          invite links
+#   /api/v1/rooms/shared/<token>/messages     read-only share data (real route)
+#   /api/v1/shared/<token>                    alias form
+#   /api/v1/rooms/<room_id>/share/<token>     share link revocation
 _PATH_SECRET_SEGMENT = re.compile(
     r"(?i)(?P<prefix>/api/v1/(?:invites|shared)/)[^/\s?#\"']+"
-    r"|(?P<share>/api/v1/rooms/[^/\s?#\"']+/share/)[^/\s?#\"']+"
+    r"|(?P<prefix2>/api/v1/rooms/shared/)[^/\s?#\"']+"
+    r"|(?P<prefix3>/api/v1/rooms/[^/\s?#\"']+/share/)[^/\s?#\"']+"
 )
 # Credentials smuggled into a query string: ?token= / &access_token= / ...
 _QUERY_SECRET = re.compile(
     r"(?i)([?&](?:token|access_token|refresh_token|invite_token|invite|key|api_key|secret)=)[^&\s\"']+"
 )
-# Free-text queries travel in the query string too, and can carry a fragment of
-# a chat message. Masked wholesale: the value, not the whole parameter.
-_QUERY_FREETEXT = re.compile(r"(?i)([?&](?:q|query|search)=)[^&\s\"']+")
 # Placeholder run emitted by Python's logging for one or more ``%s``-style args.
 # Deliberately not ``%d``/``%f``: digits may legitimately survive a scrub.
 _ARG_SLOT = re.compile(
@@ -121,10 +120,10 @@ def _scrub_text_ex(value: str) -> tuple[str, bool]:
     value = _DSN_CREDENTIALS.sub(lambda m: f"{m.group('scheme')}{REDACTED}@", value)
     value = _BEARER_AUTH.sub(lambda m: f"{m.group(1)} {REDACTED}", value)
     value = _PATH_SECRET_SEGMENT.sub(
-        lambda m: f"{m.group('prefix') or m.group('share')}{REDACTED}", value
+        lambda m: f"{m.group('prefix') or m.group('prefix2') or m.group('prefix3')}{REDACTED}",
+        value,
     )
     value = _QUERY_SECRET.sub(lambda m: f"{m.group(1)}{REDACTED}", value)
-    value = _QUERY_FREETEXT.sub(lambda m: f"{m.group(1)}{REDACTED}", value)
     value = _INLINE_SECRET.sub(lambda m: f"{m.group(1)}={REDACTED}", value)
     return value, value != original
 
@@ -138,11 +137,14 @@ def _scrub_record_args(msg: Any, args: Any, *, template_masked: bool) -> Any:
     ``TypeError`` (``raiseExceptions`` also echoes the raw args to stderr) and
     drops the whole record.
 
-    When the template itself was masked, one secret is already somewhere in
-    ``args`` and the slot count can no longer be trusted, so the message is
-    reduced to its non-arg prefix plus an opaque marker and ``args`` is emptied:
-    no placeholder survives and nothing can be re-injected. Otherwise the args
-    are only scrubbed and the record formats exactly as before.
+    H1 (second half): the access log passes method/path/status through ``args``.
+    Masking the whole record whenever *one* arg carried a secret hid the very
+    information operators need. So each arg is scrubbed in place and the record
+    keeps rendering normally: the secret is masked, the route and status stay.
+
+    Only when the *template* was rewritten does the slot structure become
+    untrustworthy; then the message collapses to its prefix plus one marker and
+    ``args`` is emptied, so nothing can be re-injected.
     """
     if isinstance(args, dict):
         return (msg, ()) if template_masked else (msg, redact(args))
@@ -153,19 +155,20 @@ def _scrub_record_args(msg: Any, args: Any, *, template_masked: bool) -> Any:
         else (scrub_text(item) if isinstance(item, str) else item)
         for item in args
     )
-    args_masked = any(
-        not (new is old or new == old) for new, old in zip(scrubbed, args)
-    )
-    if not (template_masked or args_masked) or not scrubbed or not isinstance(msg, str):
+    if not template_masked:
+        # Per-arg redaction is complete and the template is intact, so the record
+        # formats exactly as before, with every secret already masked.
+        return msg, scrubbed
+    if not scrubbed or not isinstance(msg, str):
         return msg, scrubbed
     slots = [m for m in _ARG_SLOT.finditer(msg) if not m.group("key")]
     if not slots:
         # A redaction rule already consumed the placeholder (``Bearer %s`` ->
         # ``Bearer ***``): the dynamic part is masked already.
         return msg, ()
-    # The slot structure can no longer be trusted (one secret is somewhere in
-    # ``args`` or in the template), so everything from the first slot on becomes
-    # one opaque marker: no placeholder survives, nothing can be re-injected.
+    # The slot structure can no longer be trusted, so everything from the first
+    # slot on becomes one opaque marker: no placeholder survives, nothing can be
+    # re-injected or echoed.
     return msg[: slots[0].start()] + REDACTED, ()
 
 

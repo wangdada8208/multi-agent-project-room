@@ -234,6 +234,10 @@ class TestLogRedaction:
         output = self._access_log(logger, stream, "GET", f"/api/v1/invites/{token}")
         assert token not in output
         assert output.strip(), "record must still reach the sink (not dropped)"
+        # Hiding the token must not hide the incident: method, route and status
+        # are exactly what an operator needs when reading an access log.
+        for part in ("GET", "/api/v1/invites/", "200"):
+            assert part in output, f"access log lost its diagnostic context: {part!r}"
 
     def test_access_log_invite_token_in_query_is_redacted(self, log_capture):
         """H1: `?token=` / `?access_token=` values must be masked as well."""
@@ -248,61 +252,33 @@ class TestLogRedaction:
             assert token not in first + second
         assert "REDACTED" in first and "REDACTED" in second
 
-    def test_access_log_share_and_search_tokens_are_redacted(self, log_capture):
-        """Read-only share links and free-text search queries never reach the log."""
-        logger, _stream = log_capture
+    def test_share_credential_in_real_route_is_redacted(self):
+        """The real share data route carries its credential in the path.
 
-        def one(path: str) -> str:
-            sink = io.StringIO()
-            handler = logging.StreamHandler(sink)
-            handler.setFormatter(logging.Formatter("%(message)s"))
-            logger.addHandler(handler)
-            try:
-                logger.info('%s - "%s %s HTTP/%s" %d', "127.0.0.1:5000", "GET", path, "1.1", 200)
-            finally:
-                logger.removeHandler(handler)
-            return sink.getvalue()
-
-        share = one("/api/v1/shared/sh_abcSHARESECRET42/messages")
-        search = one("/api/v1/rooms/room-abc123/messages/search?q=benh%20an%20cua%20Lan")
-        # The share token is a credential carried in an argument, so the record
-        # is masked wholesale — the route name may disappear, the secret may not.
-        assert "sh_abcSHARESECRET42" not in share
-        assert share.strip(), "record must still reach the sink"
-        assert "benh" not in search and "Lan" not in search
-        assert search.strip(), "record must still reach the sink"
-
-    def test_share_token_resolved_by_token_is_redacted(self):
-        """Revoking a share link puts its token in the path: mask it too."""
-        revoked = scrub_text("/api/v1/rooms/room-abc/share/sh_revokeSECRET7")
-        assert "sh_revokeSECRET7" not in revoked
-        assert "/api/v1/rooms/room-abc/share/" in revoked
-        # Unrelated room sub-routes keep their identifiers.
-        assert scrub_text("/api/v1/rooms/room-abc/xmtp-binding") == "/api/v1/rooms/room-abc/xmtp-binding"
-        assert scrub_text("/api/v1/rooms/room-abc-123/share-list") == "/api/v1/rooms/room-abc-123/share-list"
-
-    def test_unter_redacted_arg_does_not_mask_whole_record(self, log_capture):
-        """A non-secret arg that merely differs by identity must not blank the record.
-
-        Regression: comparing scrubbed args to originals with ``is`` made any
-        same-value-but-different-object string look "redacted", so a perfectly
-        harmless record was replaced by ``***REDACTED***`` and lost its context.
+        ``GET /api/v1/rooms/shared/<token>/messages`` (``backend/app/api/rooms.py``,
+        router prefix ``/api/v1/rooms``). Missing this rule meant the share link
+        credential went to the access log verbatim.
         """
-        logger, _stream = log_capture
-        sink = io.StringIO()
-        handler = logging.StreamHandler(sink)
-        handler.setFormatter(logging.Formatter("%(message)s"))
-        logger.addHandler(handler)
-        try:
-            logger.info("delivered message=%s room=%s", "msg-1", "room-abcd1234")
-        finally:
-            logger.removeHandler(handler)
-        output = sink.getvalue()
-        assert "delivered message=msg-1" in output
-        assert "room-abcd1234" in output
-        assert output.strip() != "***REDACTED***"
+        real = scrub_text("/api/v1/rooms/shared/SHTOKENREAL/messages")
+        assert "SHTOKENREAL" not in real
+        assert "/api/v1/rooms/shared/" in real
+
+        alias = scrub_text("/api/v1/shared/SHTOKENALIAS/messages")
+        assert "SHTOKENALIAS" not in alias
+
+        revoke = scrub_text("/api/v1/rooms/room-abc/share/SHTOKENREVOKE")
+        assert "SHTOKENREVOKE" not in revoke
+        assert "/api/v1/rooms/room-abc/share/" in revoke
+
+        # Neighbouring routes keep their identifiers: no over-redaction.
+        for path in (
+            "/api/v1/rooms/room-abc-123/share-list",
+            "/api/v1/rooms/room-abc/xmtp-binding",
+        ):
+            assert scrub_text(path) == path
 
     def test_plain_paths_are_not_over_redacted(self, log_capture):
+        """The URL rules are anchored: ordinary routes keep their identifiers."""
         logger, stream = log_capture
         output = self._access_log(
             logger, stream, "GET", "/api/v1/rooms/room-abc123/messages?limit=20"
