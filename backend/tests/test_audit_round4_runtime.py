@@ -335,6 +335,45 @@ class TestLogRedaction:
         assert "ws connected room=abcd1234" in output
         assert "delivered message=msg-1" in output
 
+    def test_third_party_logger_with_own_handler_is_redacted(self):
+        """A library that assigns its own handler must not bypass redaction.
+
+        Regression for the probe the tester ran: ``log.handlers = [h]`` never
+        touches ``Logger.addHandler``, so a handler-level filter is skipped and
+        the invite token reached the sink verbatim.
+        """
+        install_redacting_filter()
+        token = "inv_LEAKCHECK777"
+        stream = io.StringIO()
+        handler = logging.StreamHandler(stream)
+        handler.setFormatter(logging.Formatter("%(message)s"))
+
+        logger = logging.getLogger(f"httpx_test_{os.urandom(4).hex()}")
+        logger.setLevel(logging.DEBUG)
+        logger.propagate = False
+        # Direct assignment: deliberately skips the addHandler hook.
+        logger.handlers = [handler]
+
+        logger.info(
+            'HTTP Request: %s %s "%s %d %s"',
+            "GET", f"http://127.0.0.1:8913/api/v1/invites/{token}", "HTTP/1.1", 404, "Not Found",
+        )
+        output = stream.getvalue()
+        assert token not in output, "token leaked through a third-party logger handler"
+        assert "HTTP Request" in output, "record must still be emitted"
+        assert "404" in output, "status must survive for diagnostics"
+
+    def test_eager_logger_names_are_covered(self):
+        """Libraries that log before install() are attached eagerly."""
+        install_redacting_filter()
+        for name in (
+            "httpx", "httpcore", "sqlalchemy", "sqlalchemy.engine",
+            "sqlalchemy.engine.Engine", "sqlalchemy.pool",
+            "websockets", "websockets.client", "websockets.server",
+        ):
+            log = logging.getLogger(name)
+            assert any(isinstance(f, RedactingFilter) for f in log.filters), name
+
     def test_m1_format_args_never_reinject_secret(self, log_capture):
         """M1: scrubbing the template must not drop the record or echo raw args."""
         logger, _stream = log_capture
