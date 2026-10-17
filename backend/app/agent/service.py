@@ -9,13 +9,37 @@ from fastapi import HTTPException
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agent.identity import canonical_identity, expand_casefold_candidates
+from app.agent.identity import (
+    canonical_identity,
+    comparison_identity,
+    expand_casefold_candidates,
+)
 
 from app.models.agent_card import AgentCardRecord
 from app.models.user import User
 from app.a2a.url_policy import validate_agent_card_url
 
 logger = logging.getLogger(__name__)
+
+# Punctuation that comparison_identity folds to a single separator, and the
+# characters a pre-filter variant may use in its place.
+_SEPARATOR_CHARS = ("_", "-", ".", "·", "・")
+_MAX_VARIANT_POSITIONS = 6
+_MAX_VARIANT_GROUPS = 32
+
+
+def _enum_punctuation_variants(name: str) -> set[str]:
+    """Enumerate spellings that differ only by which separators are used.
+
+    Every separator position is rewritten to the same character, so all
+    combinations (`a_b-c`, `a-b_c`, `a-b-c`, `a_b_c`, ...) are covered with at
+    most one candidate per separator character. This is only a SQL pre-filter;
+    the authoritative comparison is `comparison_identity`.
+    """
+    folded = name.casefold()
+    if not any(ch in _SEPARATOR_CHARS for ch in folded):
+        return set()
+    return {folded.translate({ord(ch): repl for ch in _SEPARATOR_CHARS}) for repl in _SEPARATOR_CHARS}
 
 
 async def find_username_matches(db: AsyncSession, username: str) -> list[User]:
@@ -28,8 +52,15 @@ async def find_username_matches(db: AsyncSession, username: str) -> list[User]:
     compatibility with unmigrated legacy rows.
 
     Never returns a row whose canonical identity differs from the input.
+
+    Identity is decided by `comparison_identity`, which treats the punctuation
+    account names may contain (`_`, `-`, `.`) as one separator, so
+    `race_x_bot` and `race_x-bot` are the same person. The stricter SQL filter
+    below is only a pre-filter; the final verdict is made in Python and can
+    never be looser than the pre-filter, because the substitute separator is
+    itself allowed by the username charset.
     """
-    key = canonical_identity(username)
+    key = comparison_identity(username)
     if not key:
         return []
 
@@ -41,17 +72,25 @@ async def find_username_matches(db: AsyncSession, username: str) -> list[User]:
     if not stripped:
         return []
 
+    # Pre-filter: punctuation variants are enumerated in Python so the query
+    # stays index-backed. One representative normalization per punctuation form
+    # is enough; the exact verdict is the Python check below.
+    prefilter: set[str] = set(candidates)
+    for variant in _enum_punctuation_variants(stripped):
+        prefilter.add(variant)
+        prefilter.update(expand_casefold_candidates(variant))
+
     stmt = select(User).where(
         or_(
-            User.normalized_username == key,
-            User.username.in_(candidates),
+            User.normalized_username == canonical_identity(username),
+            User.username.in_(prefilter),
         )
     )
     result = await db.execute(stmt)
     return [
         user
         for user in result.scalars().all()
-        if canonical_identity(user.username) == key
+        if comparison_identity(user.username) == key
     ]
 
 
@@ -63,7 +102,10 @@ async def authorize_agent_registration(db: AsyncSession, user: User, name: str) 
     if stored_user.user_type != "agent":
         raise HTTPException(status_code=403, detail="Agent account required")
     canonical = canonical_identity(stored_user.username)
-    if not isinstance(name, str) or canonical_identity(name) != canonical:
+    # The claimed name must be the account itself under the same comparison
+    # identity used for registration, so `race_x-bot` cannot impersonate the
+    # account registered as `race_x_bot`.
+    if not isinstance(name, str) or comparison_identity(name) != comparison_identity(stored_user.username):
         raise HTTPException(status_code=403, detail="Agent name must match authenticated username")
     matches = await find_username_matches(db, stored_user.username)
     if len(matches) != 1 or matches[0].id != stored_user.id:

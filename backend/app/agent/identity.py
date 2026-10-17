@@ -53,6 +53,25 @@ def canonical_identity(value: str) -> str:
     return normalize_unicode_casefold(value)
 
 
+# 判重专用：用户名允许的字符集（见 RegisterRequest 的 pattern `^[\w.-]+$`）里，
+# 下划线、连字符、点号在口语上都是"同一个名字的不同写法"。
+# 例如 `race_x_bot` 与 `race_x-bot` 在视觉和朗读上无法区分，必须算同一个人。
+_NAME_PUNCTUATION_SUBSTITUTES = str.maketrans({"_": "-", ".": "-", "·": "-", "・": "-"})
+
+
+def comparison_identity(value: str) -> str:
+    """Return the key used to decide whether two account names are the same person.
+
+    Stricter than `canonical_identity`: after the ordinary casefold it also folds
+    the punctuation that account names may contain (`_`, `-`, `.`, `·`, `・`) to a
+    single separator, so `race_x_bot`, `race_x-bot` and `race.x.bot` compare equal.
+
+    This is a *comparison* helper only. It must never be used to rewrite a stored
+    username: we must refuse the second registration, not silently rename it.
+    """
+    return normalize_unicode_casefold(value).translate(_NAME_PUNCTUATION_SUBSTITUTES)
+
+
 def canonical_slug(value: str) -> str:
     """Return the canonical slug identifier with whitespace collapsed to underscores.
 
