@@ -257,6 +257,55 @@ class TestLogRedaction:
         assert "/api/v1/rooms/room-abc123/messages" in output
         assert "limit=20" in output
 
+    def test_hub_log_has_no_chat_body(self, log_capture):
+        """XMTP execution doc, stage 1: the spoken sentence must never reach Hub logs.
+
+        Two-way assertion on purpose:
+        * the chat body and the invite credential never appear in the log text;
+        * the log is not empty — "nothing was logged" must not pass as "clean".
+        """
+        logger, _stream = log_capture
+        body = "bác sĩ hẹn thứ sáu, mang theo kết quả xét nghiệm"
+        invite = "inv_abcSECRET123"
+        captured: list[str] = []
+
+        def emit(message, *args):
+            """Log one record into its own fresh stream.
+
+            StringIO keeps bytes past the new write position when a shorter line
+            overwrites a longer one, so a shared stream would mix records up and
+            hide (or fake) a leak.
+            """
+            sink = io.StringIO()
+            handler = logging.StreamHandler(sink)
+            handler.setFormatter(logging.Formatter("%(message)s"))
+            logger.addHandler(handler)
+            try:
+                logger.info(message, *args)
+            finally:
+                logger.removeHandler(handler)
+            captured.append(sink.getvalue())
+
+        # What the Hub really emits on a chat connection: room/user short ids only.
+        emit("ws connected room=%s user=%s", "abcd1234", "user5678")
+        # Delivery bookkeeping: body must never be an argument to a log call.
+        emit("delivered message=%s room=%s", "msg-1", "abcd1234")
+        # Access log for the same room chat, plus the invite lookup.
+        emit('%s - "%s %s HTTP/%s" %d', "127.0.0.1:5000", "GET",
+             "/ws/chat/room-abc123?token=WsTokSECRET", "1.1", 200)
+        emit('%s - "%s %s HTTP/%s" %d', "127.0.0.1:5000", "GET",
+             f"/api/v1/invites/{invite}", "1.1", 200)
+
+        output = "".join(captured)
+        assert output.strip(), "no log output captured: the test would pass vacuously"
+        assert all(part.strip() for part in captured), "a record was dropped entirely"
+        assert body not in output, "chat body leaked into the Hub log"
+        assert invite not in output, "invite token leaked into the Hub log"
+        assert "WsTokSECRET" not in output, "access token leaked into the Hub log"
+        # Operational context still present, so the log is usable for debugging.
+        assert "ws connected room=abcd1234" in output
+        assert "delivered message=msg-1" in output
+
     def test_m1_format_args_never_reinject_secret(self, log_capture):
         """M1: scrubbing the template must not drop the record or echo raw args."""
         logger, _stream = log_capture
