@@ -17,13 +17,22 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 BACKEND_DIR = PROJECT_ROOT / "backend"
 sys.path.insert(0, str(BACKEND_DIR))
 
-os.environ["MAPR_DATABASE_URL"] = f"sqlite+aiosqlite:///{PROJECT_ROOT}/e2e_cli_test.db"
-os.environ["MAPR_AUTH_SECRET_KEY"] = "e2e-cli-test"
 
 import httpx
 import uvicorn
 
 BASE = "http://127.0.0.1:8765"
+
+
+def _configure_isolated_database() -> None:
+    """只在本脚本真正运行时改数据库地址。
+
+    这两行以前写在模块级：pytest 只要"收集"到这个文件（它没有任何用例）就会执行，
+    把 MAPR_DATABASE_URL 改写成 sqlite；随后 hub 子进程用 os.environ.copy() 继承，
+    真实 PostgreSQL 上的 gate 全部 403。见 docs/verification/2026-10-17-全量失败清单.md。
+    """
+    os.environ["MAPR_DATABASE_URL"] = f"sqlite+aiosqlite:///{PROJECT_ROOT}/e2e_cli_test.db"
+    os.environ["MAPR_AUTH_SECRET_KEY"] = "e2e-cli-test"
 
 
 async def wait_for_server(client, timeout=10):
@@ -39,6 +48,7 @@ async def wait_for_server(client, timeout=10):
 
 
 async def main():
+    _configure_isolated_database()
     passed = failed = 0
 
     def check(name, cond, detail=""):

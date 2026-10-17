@@ -12,14 +12,16 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 BACKEND_DIR = PROJECT_ROOT / "backend"
 sys.path.insert(0, str(BACKEND_DIR))
 
-os.environ["MAPR_DATABASE_URL"] = f"sqlite+aiosqlite:///{PROJECT_ROOT}/e2e_test.db"
-os.environ["MAPR_AUTH_SECRET_KEY"] = "e2e-test-secret"
 
 import httpx
 import uvicorn
 
 
 async def main():
+    # 模块级改环境变量会污染同一进程里的 pytest 会话（见全量失败清单），挪进函数。
+    os.environ["MAPR_DATABASE_URL"] = f"sqlite+aiosqlite:///{PROJECT_ROOT}/e2e_test.db"
+    os.environ["MAPR_AUTH_SECRET_KEY"] = "e2e-test-secret"
+
     from app.main import app as fastapi_app
 
     config = uvicorn.Config(fastapi_app, host="127.0.0.1", port=8765, log_level="warning")

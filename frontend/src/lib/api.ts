@@ -78,6 +78,32 @@ export interface Approval {
   created_at: string;
 }
 
+/**
+ * 请求编号头。H4 要求：服务端排查问题时只看编号，不看网址。
+ * 编号由浏览器生成，只放请求头，绝不写进网址或请求体。
+ */
+export const API_REQUEST_ID_HEADER = "X-Request-ID";
+
+/** 生成一个只含十六进制和短横线的编号，服务端可以直接记进日志。 */
+export function newRequestId(): string {
+  const cryptoApi = globalThis.crypto;
+  if (cryptoApi && typeof cryptoApi.randomUUID === "function") {
+    return cryptoApi.randomUUID();
+  }
+  // 老浏览器没有 randomUUID 时的退路。
+  const random = () => Math.random().toString(16).slice(2, 10).padEnd(8, "0");
+  return `${random()}-${random()}-${random()}-${random()}`;
+}
+
+/** 调用方没带编号时补一个；带了就不动，保证同一次操作可追踪。 */
+export function withRequestId(init: RequestInit = {}): RequestInit {
+  const headers = new Headers(init.headers);
+  if (!headers.has(API_REQUEST_ID_HEADER)) {
+    headers.set(API_REQUEST_ID_HEADER, newRequestId());
+  }
+  return { ...init, headers };
+}
+
 export async function apiFetch(input: RequestInfo | URL, init: RequestInit = {}) {
   const token = useAuthStore.getState().token;
   const headers = new Headers(init.headers);
@@ -86,6 +112,9 @@ export async function apiFetch(input: RequestInfo | URL, init: RequestInit = {})
   }
   if (token) {
     headers.set("Authorization", `Bearer ${token}`);
+  }
+  if (!headers.has(API_REQUEST_ID_HEADER)) {
+    headers.set(API_REQUEST_ID_HEADER, newRequestId());
   }
   const request = typeof input === "string" ? apiUrl(input) : input;
   const response = await fetch(request, { ...init, headers });
@@ -306,4 +335,43 @@ export async function searchMessages(roomId: string, query: string): Promise<Cha
   if (!response.ok) throw new Error("Failed to search messages");
   const payload = (await response.json()) as { results?: ChatMessage[] };
   return payload.results ?? [];
+}
+
+/**
+ * 只读分享的数据接口。
+ * 地址以后端 `backend/app/api/rooms.py` 的路由为准：前缀 `/api/v1/rooms` 加 `/shared/{凭据}/messages`。
+ * 注意：地址栏上的 `/shared/{凭据}` 是前端页面路由，不是数据接口，两者不要混用。
+ */
+export function sharedMessagesPath(token: string): string {
+  return `/api/v1/rooms/shared/${encodeURIComponent(token)}/messages`;
+}
+
+export class SharedLinkError extends Error {
+  status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "SharedLinkError";
+    this.status = status;
+  }
+}
+
+export interface SharedRoomView {
+  roomName: string;
+  messages: ChatMessage[];
+}
+
+export async function fetchSharedRoomMessages(token: string): Promise<SharedRoomView> {
+  const response = await apiFetch(sharedMessagesPath(token));
+  if (response.status === 404) {
+    throw new SharedLinkError("链接已过期或不存在", 404);
+  }
+  if (!response.ok) {
+    throw new SharedLinkError("加载失败", response.status);
+  }
+  const payload = (await response.json()) as { room_name?: string; messages?: ChatMessage[] };
+  return {
+    roomName: payload.room_name ?? "只读分享",
+    messages: payload.messages ?? [],
+  };
 }

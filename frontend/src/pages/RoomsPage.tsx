@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createRoom, fetchRooms, fetchTemplates } from "../lib/api";
@@ -27,10 +27,17 @@ export function RoomsPage() {
 
   const rooms: Room[] = roomsQuery.data ?? [];
 
-  useState(() => {
-    fetchTemplates().then(setTemplates).catch(() => {});
-    return null;
-  });
+  useEffect(() => {
+    let cancelled = false;
+    fetchTemplates()
+      .then((list) => {
+        if (!cancelled) setTemplates(list);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   async function handleCreate() {
     if (!roomName.trim()) return;

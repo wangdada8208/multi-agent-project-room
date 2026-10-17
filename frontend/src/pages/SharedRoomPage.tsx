@@ -1,39 +1,51 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
+import { SharedLinkError, fetchSharedRoomMessages } from "../lib/api";
 import type { ChatMessage } from "../types/chat";
 
 export function SharedRoomPage() {
   const { token } = useParams<{ token: string }>();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [roomName, setRoomName] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  useState(() => {
+  useEffect(() => {
+    // 分享凭据在网址里，只按当前网址取一次；换链接时重新取。
+    let cancelled = false;
+
     async function fetchShared() {
+      setLoading(true);
+      setError("");
       try {
-        const res = await fetch(`/api/v1/shared/${token}`);
-        if (res.ok) {
-          const data = await res.json();
-          setMessages(data.messages ?? []);
-        } else if (res.status === 404) {
-          setError("链接已过期或不存在");
+        const view = await fetchSharedRoomMessages(token ?? "");
+        if (cancelled) return;
+        setMessages(view.messages);
+        setRoomName(view.roomName);
+      } catch (err) {
+        if (cancelled) return;
+        // 404 是链接失效；其余（含网络错误）统一提示加载失败，避免把“过期”错报给用户。
+        if (err instanceof SharedLinkError) {
+          setError(err.message);
         } else {
-          setError("加载失败");
+          setError("网络错误");
         }
-      } catch {
-        setError("网络错误");
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     }
-    fetchShared();
-    return null;
-  });
+
+    void fetchShared();
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
 
   return (
     <div className="shared-room-page">
       <header className="shared-room-header">
         <span className="brand-mini">🤖 Multi-Agent Project Room</span>
+        {roomName && <span className="shared-room-name">{roomName}</span>}
         <span className="shared-badge">只读分享</span>
         <Link to="/login" className="btn-ghost" style={{ padding: "6px 14px", marginLeft: "auto" }}>
           登录参与
