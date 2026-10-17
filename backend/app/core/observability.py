@@ -63,6 +63,18 @@ _INLINE_SECRET = re.compile(
     '(?i)\\b(token|secret|password|passwd|api[_-]?key)\\b\\s*[=:]\\s*(?:\\"[^\\"]*\\"|\'[^\']*\'|([^\\s,;]+))'
 )
 _BEARER_AUTH = re.compile('(?i)\\b(bearer)\\s+([^\\s,;\\"\']+)')
+# Invite tokens live in the URL *path*: /api/v1/invites/<token>[/redeem].
+# Anchored to the known route, so ordinary path segments (room ids etc.) survive.
+_PATH_SECRET_SEGMENT = re.compile(r"(?i)(/api/v1/invites/)[^/\s?#\"']+")
+# Credentials smuggled into a query string: ?token= / &access_token= / ...
+_QUERY_SECRET = re.compile(
+    r"(?i)([?&](?:token|access_token|refresh_token|invite_token|invite|key|api_key|secret)=)[^&\s\"']+"
+)
+# Placeholder run emitted by Python's logging for one or more ``%s``-style args.
+# Deliberately not ``%d``/``%f``: digits may legitimately survive a scrub.
+_ARG_SLOT = re.compile(
+    r"%(?:\((?P<key>[^)]*)\))?[#0\- +]*(?:\d+|\*)?(?:\.(?:\d+|\*))?[s]"
+)
 
 _MAX_DEPTH = 6
 _MAX_ITEMS = 64
@@ -77,14 +89,70 @@ def is_sensitive_key(key: Any) -> bool:
 
 
 def scrub_text(value: str) -> str:
-    """Redact embedded DSN credentials, bearer tokens, and inline secret=... pairs."""
+    """Redact embedded DSN credentials, bearer tokens, and inline secret=... pairs.
+
+    Also removes credentials that travel inside a URL: the invite token path
+    segment and ``?token=``-style query strings. Without this, uvicorn's access
+    log records the invite token verbatim (audit round 4, finding H1).
+    """
+    return _scrub_text_ex(value)[0]
+
+
+def _scrub_text_ex(value: str) -> tuple[str, bool]:
+    """``scrub_text`` plus a "did anything get masked" flag.
+
+    The flag drives M1 handling: only a record whose template actually carried a
+    secret needs its args neutralised. A plain access-log record keeps rendering
+    normally, so operators keep seeing method/path/status.
+    """
     if not value or not isinstance(value, str):
-        return value
+        return value, False
+    original = value
     value = _PRIVATE_KEY_RE.sub(REDACTED, value)
     value = _DSN_CREDENTIALS.sub(lambda m: f"{m.group('scheme')}{REDACTED}@", value)
     value = _BEARER_AUTH.sub(lambda m: f"{m.group(1)} {REDACTED}", value)
+    value = _PATH_SECRET_SEGMENT.sub(lambda m: f"{m.group(1)}{REDACTED}", value)
+    value = _QUERY_SECRET.sub(lambda m: f"{m.group(1)}{REDACTED}", value)
     value = _INLINE_SECRET.sub(lambda m: f"{m.group(1)}={REDACTED}", value)
-    return value
+    return value, value != original
+
+
+def _scrub_record_args(msg: Any, args: Any, *, template_masked: bool) -> Any:
+    """Redact log args and make the record impossible to un-redact at format time.
+
+    M1: scrubbing ``msg`` alone changes the template while ``args`` keeps the
+    original secrets. Python's ``LogRecord.getMessage()`` then does
+    ``msg % args`` again, which either re-injects the secret or raises
+    ``TypeError`` (``raiseExceptions`` also echoes the raw args to stderr) and
+    drops the whole record.
+
+    When the template itself was masked, one secret is already somewhere in
+    ``args`` and the slot count can no longer be trusted, so the message is
+    reduced to its non-arg prefix plus an opaque marker and ``args`` is emptied:
+    no placeholder survives and nothing can be re-injected. Otherwise the args
+    are only scrubbed and the record formats exactly as before.
+    """
+    if isinstance(args, dict):
+        return (msg, ()) if template_masked else (msg, redact(args))
+    if not isinstance(args, tuple):
+        return msg, args
+    scrubbed = tuple(
+        redact(item) if isinstance(item, (dict, list))
+        else (scrub_text(item) if isinstance(item, str) else item)
+        for item in args
+    )
+    args_masked = any(n is not o for n, o in zip(scrubbed, args))
+    if not (template_masked or args_masked) or not scrubbed or not isinstance(msg, str):
+        return msg, scrubbed
+    slots = [m for m in _ARG_SLOT.finditer(msg) if not m.group("key")]
+    if not slots:
+        # A redaction rule already consumed the placeholder (``Bearer %s`` ->
+        # ``Bearer ***``): the dynamic part is masked already.
+        return msg, ()
+    # The slot structure can no longer be trusted (one secret is somewhere in
+    # ``args`` or in the template), so everything from the first slot on becomes
+    # one opaque marker: no placeholder survives, nothing can be re-injected.
+    return msg[: slots[0].start()] + REDACTED, ()
 
 
 def redact(value: Any, *, _depth: int = 0) -> Any:
@@ -115,16 +183,16 @@ class RedactingFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:  # noqa: D102 - stdlib API
         if getattr(record, "_redacted", False):
             return True
+        template_masked = False
         if isinstance(record.msg, str):
-            record.msg = scrub_text(record.msg)
+            record.msg, template_masked = _scrub_text_ex(record.msg)
         elif isinstance(record.msg, (dict, list)):
             record.msg = redact(record.msg)
-        if isinstance(record.args, dict):
-            record.args = redact(record.args)
-        elif isinstance(record.args, tuple):
-            record.args = tuple(
-                redact(item) if isinstance(item, (dict, list)) else (scrub_text(item) if isinstance(item, str) else item)
-                for item in record.args
+        if isinstance(record.args, tuple) or isinstance(record.args, dict):
+            # M1: the template may have been rewritten above; realign the args
+            # with it so a secret can never be re-injected at formatting time.
+            record.msg, record.args = _scrub_record_args(
+                record.msg, record.args, template_masked=template_masked
             )
         for key in list(record.__dict__):
             if key.startswith("_") or key in _STANDARD_RECORD_FIELDS:
@@ -160,6 +228,19 @@ def install_redacting_filter(logger: logging.Logger | None = None) -> RedactingF
     global _HOOK_INSTALLED
     created = RedactingFilter()
 
+    def _attach(target: logging.Logger | logging.Handler) -> None:
+        """Keep exactly one filter on ``target``, replacing any stale instance.
+
+        ``install_redacting_filter`` is idempotent, but "idempotent" must mean
+        "the current class", not "the first instance ever created": a name that
+        was set up by an older module object (test reloads, plugin reloads)
+        would otherwise keep an outdated filter alive forever.
+        """
+        stale = [f for f in target.filters if isinstance(f, RedactingFilter)]
+        for old in stale:
+            target.removeFilter(old)
+        target.addFilter(created)
+
     if not _HOOK_INSTALLED:
         orig_add_handler = logging.Logger.addHandler
 
@@ -183,11 +264,9 @@ def install_redacting_filter(logger: logging.Logger | None = None) -> RedactingF
             targets.append(item)
 
     for log in targets:
-        if not any(isinstance(f, RedactingFilter) for f in log.filters):
-            log.addFilter(RedactingFilter())
+        _attach(log)
         for handler in log.handlers:
-            if not any(isinstance(f, RedactingFilter) for f in handler.filters):
-                handler.addFilter(RedactingFilter())
+            _attach(handler)
 
     return created
 

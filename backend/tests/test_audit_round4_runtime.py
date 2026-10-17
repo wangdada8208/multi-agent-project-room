@@ -214,6 +214,83 @@ class TestLogRedaction:
         assert "leak_password_here" not in output
         assert "postgresql://***REDACTED***@db:5432/mapr" in output
 
+    # -- Audit round 4, H1: bare tokens in URLs reach uvicorn's access log -----
+
+    @staticmethod
+    def _access_log(logger, stream, method, path, status=200):
+        """Emit one uvicorn.access-shaped record and return just its rendered text."""
+        stream.seek(0)
+        stream.truncate()
+        logger.info(
+            '%s - "%s %s HTTP/%s" %d',
+            "127.0.0.1:5000", method, path, "1.1", status,
+        )
+        return stream.getvalue()
+
+    def test_access_log_invite_token_in_path_is_redacted(self, log_capture):
+        """H1: `GET /api/v1/invites/<token>` must never appear verbatim in a log."""
+        logger, stream = log_capture
+        token = "inv_abcSECRET123"
+        output = self._access_log(logger, stream, "GET", f"/api/v1/invites/{token}")
+        assert token not in output
+        assert output.strip(), "record must still reach the sink (not dropped)"
+
+    def test_access_log_invite_token_in_query_is_redacted(self, log_capture):
+        """H1: `?token=` / `?access_token=` values must be masked as well."""
+        logger, stream = log_capture
+        first = self._access_log(
+            logger, stream, "GET", "/api/v1/invites/detail?token=inv_QWSECRET&x=1"
+        )
+        second = self._access_log(
+            logger, stream, "POST", "/api/v1/invites/redeem?access_token=QW7SECRET"
+        )
+        for token in ("inv_QWSECRET", "QW7SECRET"):
+            assert token not in first + second
+        assert "REDACTED" in first and "REDACTED" in second
+
+    def test_plain_paths_are_not_over_redacted(self, log_capture):
+        """The URL rules are anchored: ordinary routes keep their identifiers."""
+        logger, stream = log_capture
+        output = self._access_log(
+            logger, stream, "GET", "/api/v1/rooms/room-abc123/messages?limit=20"
+        )
+        assert "/api/v1/rooms/room-abc123/messages" in output
+        assert "limit=20" in output
+
+    def test_m1_format_args_never_reinject_secret(self, log_capture):
+        """M1: scrubbing the template must not drop the record or echo raw args."""
+        logger, _stream = log_capture
+        token = "eyJhbGciOiJIUzI1NiI.secret_token_12345"
+        outputs = []
+        for message, args in (
+            ("Authorization: Bearer %s", (token,)),
+            ("ws connected room=%s user=%s", ("room-a1b2c3d4", "user-uuid-5678")),
+            ("invite ?token=%s verified", ("inv_SECRET9",)),
+        ):
+            # A fresh stream per record: StringIO keeps stale bytes past the new
+            # write position when a shorter line overwrites a longer one.
+            extra = io.StringIO()
+            handler = logging.StreamHandler(extra)
+            handler.setFormatter(logging.Formatter("%(message)s"))
+            logger.addHandler(handler)
+            try:
+                logger.info(message, *args)
+            finally:
+                logger.removeHandler(handler)
+            outputs.append(extra.getvalue())
+        combined = "".join(outputs)
+        assert token not in combined
+        # Secrets that reached the log through args or through the template must
+        # never come back out: not re-injected, not echoed by an exception.
+        assert "inv_SECRET9" not in combined
+        # A template that carries no secret keeps rendering normally: room and
+        # user short ids are operational context, not credentials.
+        assert "ws connected room=room-a1b2c3d4" in combined
+        # All three records reached the sink: none was dropped by a TypeError.
+        assert all(line.strip() for line in outputs)
+        # All three records reached the sink: none was dropped by a TypeError.
+        assert all(line.strip() for line in outputs)
+
 
 # ---------------------------------------------------------------------------
 # 3. Database Readiness Probe Tests
