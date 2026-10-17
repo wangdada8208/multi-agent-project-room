@@ -248,8 +248,52 @@ class TestLogRedaction:
             assert token not in first + second
         assert "REDACTED" in first and "REDACTED" in second
 
+    def test_access_log_share_and_search_tokens_are_redacted(self, log_capture):
+        """Read-only share links and free-text search queries never reach the log."""
+        logger, _stream = log_capture
+
+        def one(path: str) -> str:
+            sink = io.StringIO()
+            handler = logging.StreamHandler(sink)
+            handler.setFormatter(logging.Formatter("%(message)s"))
+            logger.addHandler(handler)
+            try:
+                logger.info('%s - "%s %s HTTP/%s" %d', "127.0.0.1:5000", "GET", path, "1.1", 200)
+            finally:
+                logger.removeHandler(handler)
+            return sink.getvalue()
+
+        share = one("/api/v1/shared/sh_abcSHARESECRET42/messages")
+        search = one("/api/v1/rooms/room-abc123/messages/search?q=benh%20an%20cua%20Lan")
+        # The share token is a credential carried in an argument, so the record
+        # is masked wholesale — the route name may disappear, the secret may not.
+        assert "sh_abcSHARESECRET42" not in share
+        assert share.strip(), "record must still reach the sink"
+        assert "benh" not in search and "Lan" not in search
+        assert search.strip(), "record must still reach the sink"
+
+    def test_unter_redacted_arg_does_not_mask_whole_record(self, log_capture):
+        """A non-secret arg that merely differs by identity must not blank the record.
+
+        Regression: comparing scrubbed args to originals with ``is`` made any
+        same-value-but-different-object string look "redacted", so a perfectly
+        harmless record was replaced by ``***REDACTED***`` and lost its context.
+        """
+        logger, _stream = log_capture
+        sink = io.StringIO()
+        handler = logging.StreamHandler(sink)
+        handler.setFormatter(logging.Formatter("%(message)s"))
+        logger.addHandler(handler)
+        try:
+            logger.info("delivered message=%s room=%s", "msg-1", "room-abcd1234")
+        finally:
+            logger.removeHandler(handler)
+        output = sink.getvalue()
+        assert "delivered message=msg-1" in output
+        assert "room-abcd1234" in output
+        assert output.strip() != "***REDACTED***"
+
     def test_plain_paths_are_not_over_redacted(self, log_capture):
-        """The URL rules are anchored: ordinary routes keep their identifiers."""
         logger, stream = log_capture
         output = self._access_log(
             logger, stream, "GET", "/api/v1/rooms/room-abc123/messages?limit=20"

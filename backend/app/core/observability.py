@@ -63,13 +63,19 @@ _INLINE_SECRET = re.compile(
     '(?i)\\b(token|secret|password|passwd|api[_-]?key)\\b\\s*[=:]\\s*(?:\\"[^\\"]*\\"|\'[^\']*\'|([^\\s,;]+))'
 )
 _BEARER_AUTH = re.compile('(?i)\\b(bearer)\\s+([^\\s,;\\"\']+)')
-# Invite tokens live in the URL *path*: /api/v1/invites/<token>[/redeem].
-# Anchored to the known route, so ordinary path segments (room ids etc.) survive.
-_PATH_SECRET_SEGMENT = re.compile(r"(?i)(/api/v1/invites/)[^/\s?#\"']+")
+# Invite and share tokens live in the URL *path*: /api/v1/invites/<token>,
+# /api/v1/shared/<token>/messages. Anchored to known routes, so ordinary path
+# segments (room ids etc.) survive.
+_PATH_SECRET_SEGMENT = re.compile(
+    r"(?i)(/api/v1/(?:invites|shared)/)[^/\s?#\"']+"
+)
 # Credentials smuggled into a query string: ?token= / &access_token= / ...
 _QUERY_SECRET = re.compile(
     r"(?i)([?&](?:token|access_token|refresh_token|invite_token|invite|key|api_key|secret)=)[^&\s\"']+"
 )
+# Free-text queries travel in the query string too, and can carry a fragment of
+# a chat message. Masked wholesale: the value, not the whole parameter.
+_QUERY_FREETEXT = re.compile(r"(?i)([?&](?:q|query|search)=)[^&\s\"']+")
 # Placeholder run emitted by Python's logging for one or more ``%s``-style args.
 # Deliberately not ``%d``/``%f``: digits may legitimately survive a scrub.
 _ARG_SLOT = re.compile(
@@ -113,6 +119,7 @@ def _scrub_text_ex(value: str) -> tuple[str, bool]:
     value = _BEARER_AUTH.sub(lambda m: f"{m.group(1)} {REDACTED}", value)
     value = _PATH_SECRET_SEGMENT.sub(lambda m: f"{m.group(1)}{REDACTED}", value)
     value = _QUERY_SECRET.sub(lambda m: f"{m.group(1)}{REDACTED}", value)
+    value = _QUERY_FREETEXT.sub(lambda m: f"{m.group(1)}{REDACTED}", value)
     value = _INLINE_SECRET.sub(lambda m: f"{m.group(1)}={REDACTED}", value)
     return value, value != original
 
@@ -141,7 +148,9 @@ def _scrub_record_args(msg: Any, args: Any, *, template_masked: bool) -> Any:
         else (scrub_text(item) if isinstance(item, str) else item)
         for item in args
     )
-    args_masked = any(n is not o for n, o in zip(scrubbed, args))
+    args_masked = any(
+        not (new is old or new == old) for new, old in zip(scrubbed, args)
+    )
     if not (template_masked or args_masked) or not scrubbed or not isinstance(msg, str):
         return msg, scrubbed
     slots = [m for m in _ARG_SLOT.finditer(msg) if not m.group("key")]
