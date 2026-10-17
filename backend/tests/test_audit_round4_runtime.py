@@ -411,6 +411,49 @@ class TestLogRedaction:
         assert token not in scrubbed
         assert "ReprParams(" in scrubbed, "wrapper must stay recognisable in logs"
 
+    def test_m1_not_regressed_by_recursive_scrubbing(self):
+        """Recursive arg scrubbing must not break placeholder alignment (M1).
+
+        Every call below must produce exactly one record and raise nothing: a
+        mangled ``%s`` run would make ``getMessage()`` raise ``TypeError`` and
+        drop the whole line, which is the failure M1 fixed in the first place.
+        """
+        stream = io.StringIO()
+        handler = logging.StreamHandler(stream)
+        handler.setFormatter(logging.Formatter("%(message)s"))
+        logger = logging.getLogger(f"m1_check_{os.urandom(4).hex()}")
+        logger.handlers = [handler]
+        logger.setLevel(logging.INFO)
+        logger.propagate = False
+        install_redacting_filter(logger)
+
+        # Real shapes: access tokens are ``b64(payload).b64(hmac)`` (~147 chars),
+        # invite tokens are ``token_urlsafe(32)`` (~43 chars).
+        import secrets
+
+        token = secrets.token_urlsafe(32)
+        access = f"{secrets.token_urlsafe(32)}.{secrets.token_urlsafe(32)}"
+        calls = (
+            ("plain %s %s", ("a", "b")),
+            ("token=%s", (token,)),
+            ("Authorization: Bearer %s", (access,)),
+            ('%s - "%s %s HTTP/%s" %d', ("ip", "GET", f"/api/v1/invites/{token}", "1.1", 200)),
+            ("room=%s user=%s", ("abcd1234", "user5678")),
+            ("nested %s", (("generated in 0.1s", (token,)),)),
+        )
+        for message, args in calls:
+            logger.info(message, *args)  # must not raise
+
+        output = stream.getvalue()
+        assert len([ln for ln in output.splitlines() if ln.strip()]) == len(calls), (
+            f"a record was dropped by a formatting error:\n{output}"
+        )
+        assert token not in output
+        assert access not in output
+        # Untouched values keep rendering, so the line stays useful.
+        assert "plain a b" in output
+        assert "room=abcd1234 user=user5678" in output
+
     def test_real_sqlalchemy_params_do_not_leak_into_log(self):
         """End-to-end: a real SQLAlchemy engine's DEBUG log must not print the token."""
         import io
