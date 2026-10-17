@@ -134,11 +134,11 @@ FROM users
 ORDER BY created_at ASC
 """
 
-SQL_TEXT = """
--- H3 生产库只读查重（只读，不改数据）
+SQL_TEXT = """-- H3 生产库只读查重（只读，不改数据）
 -- 说明：应用层的「判为同一个人」= 大小写折叠 + 把 _ - . · ・ 视为同一个分隔符。
--- 纯 SQL 表达这个等价关系需要 large object / regexp_replace，下面给的是等价写法。
-
+-- 纯 SQL 表达这个等价关系需要 large object / regexp_replace，下面是等价写法。
+-- 用法：从这一行往下整段复制，粘贴到数据库管理界面执行。
+--       结果里 n > 1 的行就是重复组；一行都没有表示没有重复。
 WITH keys AS (
     SELECT
         username,
@@ -151,11 +151,6 @@ FROM keys
 GROUP BY comparison_key
 HAVING count(*) > 1
 ORDER BY n DESC, comparison_key;
-
--- 若要看某一组的成员（名字会被打码前先自己确认有权限）：
--- SELECT comparison_key, username, created_at
--- FROM keys
--- WHERE comparison_key IN ( <上一条查询里的 comparison_key> );
 """
 
 
