@@ -139,27 +139,36 @@ jobs:
 
       - name: Stage an isolated PostgreSQL 17 binary tree
         run: |
+          set -euo pipefail
           # Several gate suites (SSE quota, distributed reliability, room-sync
           # migration) only run when an independently owned PG17 package tree
-          # exists under /tmp. Installing PG 17 here makes those gates EXECUTE
-          # instead of silently skipping. If the install is unavailable the
-          # suites still run, and the skip reason is reported below.
-          if [ ! -d /usr/lib/postgresql/17 ]; then
-            echo "PostgreSQL 17 not present; attempting install"
+          # exists under /tmp. Deleting any stale tree first matters: an earlier
+          # failed attempt can leave /tmp/... without pg_dump, which then makes
+          # the room-sync gate fail its is_file() assertion instead of skipping.
+          BIN_DIR=/usr/lib/postgresql/17/bin
+          ROOT=/tmp/mapr-sse-quota-bin-round4
+          rm -rf "$ROOT"
+          # install the server, the client tools AND the shared data files; the
+          # gates need initdb + pg_dump + pg_restore + postgres.bki
+          if [ ! -x "$BIN_DIR/initdb" ] || [ ! -x "$BIN_DIR/pg_dump" ] || [ ! -f /usr/share/postgresql/17/postgres.bki ]; then
+            echo "PostgreSQL 17 incomplete ($BIN_DIR); attempting install"
             sudo apt-get update -qq || true
             sudo apt-get install -y -qq postgresql-17 postgresql-client-17 postgresql-contrib-17 >/dev/null 2>&1 || true
           fi
           if [ -d /usr/lib/postgresql/17 ] && [ -d /usr/share/postgresql/17 ]; then
-            ROOT=/tmp/mapr-sse-quota-bin-round4
-            mkdir -p "$ROOT/usr/lib" "$ROOT/usr/share"
+            # mkdir the PARENT only: if the destination exists, cp -a nests the
+            # tree one level deeper and the gate's is_file() check fails.
+            mkdir -p "$ROOT/usr/lib/postgresql" "$ROOT/usr/share/postgresql"
             cp -a /usr/lib/postgresql/17 "$ROOT/usr/lib/postgresql/17"
             cp -a /usr/share/postgresql/17 "$ROOT/usr/share/postgresql/17"
             test -x "$ROOT/usr/lib/postgresql/17/bin/initdb"
             test -x "$ROOT/usr/lib/postgresql/17/bin/pg_dump"
+            test -x "$ROOT/usr/lib/postgresql/17/bin/pg_restore"
             test -f "$ROOT/usr/share/postgresql/17/postgres.bki"
             echo "isolated PG17 tree ready at $ROOT"
           else
-            echo "::warning::PG 17 unavailable on this runner; PG17-only gates will report their skip reason."
+            echo "::error::PG 17 unavailable on this runner after install; the PG17 gates would skip and a silent skip must never look like a pass."
+            exit 1
           fi
 
       - name: Prove real PostgreSQL and real Redis are wired (no silent skip)
