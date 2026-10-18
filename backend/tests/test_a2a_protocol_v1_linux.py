@@ -25,6 +25,7 @@ from app.a2a import http_protocol as protocol
 from app.core.security import create_access_token
 from app.a2a.client import A2AClient
 from app.a2a import url_policy
+from conftest import fake_agent_dns
 
 @pytest_asyncio.fixture
 async def actors(db):
@@ -192,7 +193,7 @@ async def test_client_legacy_signatures_standard_requests(monkeypatch):
 @pytest.mark.asyncio
 async def test_safe_outbound_sse_pinned_and_private_fail_closed(monkeypatch):
     requests=[]
-    monkeypatch.setattr(socket,'getaddrinfo',lambda *a,**kw:[(socket.AF_INET,socket.SOCK_STREAM,6,'',('93.184.215.14',443))])
+    monkeypatch.setattr(socket,'getaddrinfo',fake_agent_dns('93.184.215.14', default_port=443))
     def handle(request):
         requests.append(request)
         return httpx.Response(200,headers={'content-type':'text/event-stream'},content=b'id: 2\ndata: {"statusUpdate":{}}\n\n')
@@ -279,7 +280,7 @@ async def test_removed_account_and_wrong_type_rejected(client,db,actors):
 
 @pytest.mark.asyncio
 async def test_outbound_stream_redirect_and_oversize_fail_closed(monkeypatch):
-    monkeypatch.setattr(socket,'getaddrinfo',lambda *a,**kw:[(socket.AF_INET,socket.SOCK_STREAM,6,'',('93.184.215.14',443))])
+    monkeypatch.setattr(socket,'getaddrinfo',fake_agent_dns('93.184.215.14', default_port=443))
     mode=['redirect']; requests=[]
     def handle(request):
         requests.append(request)
@@ -352,7 +353,7 @@ async def test_stream_real_httpcore_pin_tls_no_proxy(monkeypatch):
         connects.append((host,port,timeout));return Stream()
     for name in ['HTTP_PROXY','HTTPS_PROXY','ALL_PROXY']:
         monkeypatch.setenv(name,'http://127.0.0.1:8888')
-    monkeypatch.setattr(socket,'getaddrinfo',lambda *a,**kw:[(socket.AF_INET,socket.SOCK_STREAM,6,'',('93.184.215.14',8443))])
+    monkeypatch.setattr(socket,'getaddrinfo',fake_agent_dns('93.184.215.14', default_port=8443))
     monkeypatch.setattr(AutoBackend,'connect_tcp',connect)
     frames=[frame async for frame in A2AClient('https://agent.example:8443').subscribe_task('t')]
     assert frames[0]['id']=='7'
@@ -384,7 +385,7 @@ async def test_persistent_sdk_artifact_update_and_restart_replay(client,actors):
 @pytest.mark.asyncio
 async def test_client_server_standard_interoperation_without_network(actors,monkeypatch):
     from app.main import app
-    monkeypatch.setattr(socket,'getaddrinfo',lambda *a,**kw:[(socket.AF_INET,socket.SOCK_STREAM,6,'',('93.184.215.14',443))])
+    monkeypatch.setattr(socket,'getaddrinfo',fake_agent_dns('93.184.215.14', default_port=443))
     monkeypatch.setattr(url_policy,'create_pinned_transport',lambda *a:httpx.ASGITransport(app=app))
     c=A2AClient('https://agent.example',token=actors.headers['owner']['Authorization'][7:],room_id=actors.room.id,target_agent=actors.users['agent'].id)
     task=await c.send_task('contract over pinned helper','legacy-message-id')

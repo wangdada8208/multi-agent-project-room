@@ -4,14 +4,14 @@ from datetime import datetime, timezone
 import hmac
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.config import get_settings
 from app.agent.service import find_username_matches
-from app.agent.identity import normalize_unicode_casefold
+from app.agent.identity import comparison_identity, normalize_unicode_casefold
 from app.core.security import create_access_token, get_current_user, hash_password, verify_password
 from app.models.user import User
 from .rate_limit import check_rate_limit, clear_attempts
@@ -19,11 +19,31 @@ from .rate_limit import check_rate_limit, clear_attempts
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
 
+# users.username, users.normalized_username and users.comparison_username are all
+# String(64). Casefolding can make a name LONGER than the input (`ß` -> `ss`), so a
+# 64-character username can normalise to a 128-character key. The INSERT then blew
+# up with a data-truncation error and the endpoint answered 500. Rejecting the
+# input as a validation error keeps an unrepresentable name out of the database
+# without widening any column (a schema change would need its own migration).
+_NAME_KEY_MAX_LENGTH = 64
+
+
 class RegisterRequest(BaseModel):
     username: str = Field(min_length=3, max_length=64, pattern=r"^[\w.-]+$")
     password: str = Field(min_length=8, max_length=128)
     display_name: str = Field(min_length=1, max_length=128)
     user_type: str = Field(default="human", pattern="^(human|agent)$")
+
+    @field_validator("username")
+    @classmethod
+    def _reject_unstorable_normalized_length(cls, value: str) -> str:
+        for key in (normalize_unicode_casefold(value), comparison_identity(value)):
+            if len(key) > _NAME_KEY_MAX_LENGTH:
+                raise ValueError(
+                    "username normalizes to a comparison key longer than "
+                    f"{_NAME_KEY_MAX_LENGTH} characters; please choose a shorter name"
+                )
+        return value
 
 
 class LoginRequest(BaseModel):
@@ -61,6 +81,11 @@ async def register(request: Request, payload: RegisterRequest, db: AsyncSession 
 
     user = User(
         username=username,
+        # Written explicitly rather than relying on the model validator: the
+        # value is *stored*, never applied back to `username`. The UNIQUE index
+        # on this column is what closes the check-then-insert race between two
+        # concurrent registrations (audit H3).
+        comparison_username=comparison_identity(username),
         display_name=payload.display_name,
         user_type=payload.user_type,
         password_hash=hash_password(payload.password),

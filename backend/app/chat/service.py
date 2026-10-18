@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 from app.chat.models import Message
 from app.chat.plaintext_guard import PlaintextStorageForbidden
 from app.config import get_settings
+from app.agent.identity import comparison_identity
 from app.models.room import Room
 from app.models.user import User
 
@@ -99,10 +100,15 @@ async def save_message(
     user = await db.get(User, sender_id)
     if user is None:
         display_name = sender_name or sender_id[:128]
+        # Only other place besides registration that constructs a User row.
+        # comparison_username is written here too so the UNIQUE index added by
+        # migration i90c20261017 stays consistent with the registration path.
+        legacy_username = sender_id[:64]
         db.add(
             User(
                 id=sender_id,
-                username=sender_id[:64],
+                username=legacy_username,
+                comparison_username=comparison_identity(legacy_username),
                 display_name=display_name[:128],
                 user_type=sender_type if sender_type in {"human", "agent"} else "human",
             )

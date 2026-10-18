@@ -31,10 +31,18 @@ _MAX_VARIANT_GROUPS = 32
 def _enum_punctuation_variants(name: str) -> set[str]:
     """Enumerate spellings that differ only by which separators are used.
 
-    Every separator position is rewritten to the same character, so all
-    combinations (`a_b-c`, `a-b_c`, `a-b-c`, `a_b_c`, ...) are covered with at
-    most one candidate per separator character. This is only a SQL pre-filter;
-    the authoritative comparison is `comparison_identity`.
+    Every separator position is rewritten to the **same** character, so this
+    yields at most one candidate per separator character
+    (`a_b-c` -> `a-b-c`, `a.b.c`, `a_b_c`, ...). It deliberately does NOT
+    enumerate mixed arrangements such as `a_b-c`: that set grows
+    exponentially with the number of separators.
+
+    This is therefore a compatibility fallback, not the primary pre-filter.
+    Mixed arrangements are covered exactly by the indexed equality test on
+    `User.comparison_username` inside `find_username_matches`; this helper only
+    adds candidates for historical rows whose `comparison_username` is still
+    the empty string (an un-backfilled database). The authoritative comparison
+    remains `comparison_identity` in Python.
     """
     folded = name.casefold()
     if not any(ch in _SEPARATOR_CHARS for ch in folded):
@@ -45,20 +53,25 @@ def _enum_punctuation_variants(name: str) -> set[str]:
 async def find_username_matches(db: AsyncSession, username: str) -> list[User]:
     """Find all existing user records matching the given username under Unicode casefold.
 
-    Uses `User.normalized_username` to query directly via the indexed normalized key,
-    providing complete Unicode casefold equivalence class coverage (including θ/ϑ,
-    ß/ss/ẞ, ligatures, sigma variants, and arbitrary mixed casing) without full
-    table scans. Also includes expand_casefold_candidates(username) for backward
-    compatibility with unmigrated legacy rows.
+    Three index-backed predicates are OR-ed together (no expression, no
+    `func.lower`/`translate`, so every branch stays index-usable and the query
+    never degrades into a full table scan):
 
-    Never returns a row whose canonical identity differs from the input.
+    1. `User.comparison_username == comparison_identity(username)` -- an exact
+       equality on the unique-indexed comparison key. This covers **every**
+       case and punctuation arrangement, including mixed ones such as the old
+       account `a_b-c` being queried as `a-b_c`, which the uniform-substitution
+       enumerator below cannot produce.
+    2. `User.normalized_username == canonical_identity(username)` -- the login
+       key, kept for compatibility.
+    3. `User.username IN expand_casefold_candidates(...)` plus the uniform
+       punctuation variants -- a fallback for historical rows whose
+       `comparison_username` is still `""` (a database that was not migrated or
+       not back-filled).
 
-    Identity is decided by `comparison_identity`, which treats the punctuation
-    account names may contain (`_`, `-`, `.`) as one separator, so
-    `race_x_bot` and `race_x-bot` are the same person. The stricter SQL filter
-    below is only a pre-filter; the final verdict is made in Python and can
-    never be looser than the pre-filter, because the substitute separator is
-    itself allowed by the username charset.
+    Never returns a row whose `comparison_identity` differs from the input: the
+    final verdict is always made in Python, so the SQL pre-filter can only ever
+    be too narrow, never too loose.
     """
     key = comparison_identity(username)
     if not key:
@@ -72,16 +85,20 @@ async def find_username_matches(db: AsyncSession, username: str) -> list[User]:
     if not stripped:
         return []
 
-    # Pre-filter: punctuation variants are enumerated in Python so the query
-    # stays index-backed. One representative normalization per punctuation form
-    # is enough; the exact verdict is the Python check below.
+    # 兼容兜底：为 comparison_username 仍为空串的历史行准备候选（它们在
+    # 迁移/回填之前写入）。候选在 Python 侧枚举，查询仍走索引。
     prefilter: set[str] = set(candidates)
     for variant in _enum_punctuation_variants(stripped):
         prefilter.add(variant)
         prefilter.update(expand_casefold_candidates(variant))
 
+    # 精确判据放第一位：comparison_username 带唯一索引
+    # (ux_users_comparison_username)，等值查询即可覆盖全部标点/大小写排列
+    # （含 _enum_punctuation_variants 生成不出来的混合排列 a_b-c vs a-b_c）。
+    # 这里刻意不写 func.lower / translate 之类的表达式，否则索引失效。
     stmt = select(User).where(
         or_(
+            User.comparison_username == key,
             User.normalized_username == canonical_identity(username),
             User.username.in_(prefilter),
         )

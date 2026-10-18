@@ -22,7 +22,7 @@ env:
   # Real PostgreSQL + real Redis are mandatory: several audit suites silently
   # skip when they are absent, and a silent skip must never look like a pass.
   MAPR_TESTING: "1"
-  MAPR_TEST_REDIS_URL: redis://localhost:6379/15
+  MAPR_TEST_REDIS_URL: redis://127.0.0.1:6379/15
 
 jobs:
   safety-guard:
@@ -66,8 +66,13 @@ jobs:
           --health-retries 10
 
     env:
-      MAPR_DATABASE_URL: postgresql+asyncpg://postgres:test_password@localhost:5432/mapr_audit_round4_test
-      MAPR_TEST_DATABASE_URL: postgresql+asyncpg://postgres:test_password@localhost:5432/mapr_audit_round4_test
+      # Numeric hosts, not "localhost": several SSRF/interop suites patch
+      # socket.getaddrinfo to answer for every hostname, which would hijack the
+      # PostgreSQL lookup and time out the DB connection (60s TimeoutError). A
+      # literal IP takes asyncio's _ipaddr_info fast path and never consults the
+      # stub. Keep this numeric even after the stubs are scoped.
+      MAPR_DATABASE_URL: postgresql+asyncpg://postgres:test_password@127.0.0.1:5432/mapr_audit_round4_test
+      MAPR_TEST_DATABASE_URL: postgresql+asyncpg://postgres:test_password@127.0.0.1:5432/mapr_audit_round4_test
       MAPR_ENVIRONMENT: development
       # Enables the gated PG17 suites instead of letting them skip.
       MAPR_SSE_QUOTA_PG_ROOT: /tmp/mapr-sse-quota-bin-round4

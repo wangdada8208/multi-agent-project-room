@@ -5,6 +5,8 @@ from datetime import datetime, timedelta, timezone
 import pytest
 import pytest_asyncio
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
+from app.agent import service
 from app.core.security import create_access_token
 from app.models.user import User
 from app.models.agent_card import AgentCardRecord
@@ -147,16 +149,35 @@ async def test_storage_and_error_responses_do_not_disclose_code(client, db, iden
                               headers=headers(owner))).status_code == 409
 
 @pytest.mark.asyncio
-async def test_db_role_collision_and_no_request_owner_override(client, db, identities):
+async def test_db_role_collision_and_no_request_owner_override(client, db, identities, monkeypatch):
     owner, other, agent, _ = identities
     forged_type = {"Authorization": "Bearer " + create_access_token(agent.id, "human")}
     assert (await client.post(BASE + "/invitations", headers=forged_type, json={})).status_code in (401, 403)
     invitation = (await issue(client, owner)).json()
     assert (await client.post(BASE + "/claim", headers=headers(agent),
                               json={"code": invitation["code"], "owner_user_id": other.id})).status_code == 422
-    collision = User(username=agent.username.upper(), display_name="collision", user_type="agent")
-    db.add(collision)
-    await db.commit()
+
+    # 迁移 i90 之后，「同一个库里两行同比较键」这个数据状态不可能存在：唯一索引
+    # 会拒绝第二行。先显式断言这条数据库不变量，再把「两条匹配记录」直接交给
+    # 授权层，覆盖 authorize_agent_registration 的判歧义分支（纵深防御）。
+    # 改用例是语义正确的，不是为了让 CI 变绿。
+    # 名字在回滚之前取出：回滚会让会话里的实例过期，之后再读属性会触发懒加载。
+    agent_id = agent.id
+    collision_name = agent.username.upper()
+    db.add(User(username=collision_name, display_name="collision", user_type="agent"))
+    with pytest.raises(IntegrityError):
+        await db.commit()
+    await db.rollback()
+    # 回滚把 agent 置为过期；重新加载一份，供后面的 claim 请求构造 token。
+    agent = await db.get(User, agent_id, populate_existing=True)
+
+    duplicate = User(id="phantom-collision", username=collision_name,
+                     display_name="phantom collision", user_type="agent")
+
+    async def two_matches(_db, _username):
+        return [duplicate, duplicate]
+
+    monkeypatch.setattr(service, "find_username_matches", two_matches)
     assert (await claim(client, agent, invitation["code"])).status_code == 403
 
 @pytest.mark.asyncio

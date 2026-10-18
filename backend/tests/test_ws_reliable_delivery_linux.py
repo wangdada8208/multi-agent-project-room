@@ -335,7 +335,21 @@ async def test_slow_broadcast_client_is_bounded_and_other_client_receives(monkey
 async def test_casefold_duplicate_agent_identity_is_fail_closed(db):
     from starlette.websockets import WebSocketDisconnect
     _, _, agent, token, _, _, _, raw = await setup_delivery(db)
-    await _create_test_user(db, "DELIVERY_BOT", "human")
+    # 这条用例验证的是：给定数据库里存在两条 **slug 相同但比较键不同** 的行，
+    # 投递层必须 fail-closed（命中 2 行 -> 拒绝，绝不静默选一个）。数据由测试
+    # 直接播种，不是注册路径产生的。
+    #
+    # 为什么用空格变体 "DELIVERY BOT"：用户名只有注册路径禁止空格
+    # (RegisterRequest 的 pattern 为 ^[\w.-]+$)，直连数据库的写入不受它约束。
+    # 关键是两者的等价关系不同 —— comparison_identity 只折叠 `_ - . · ・`
+    # **保留空格**，而 canonical_slug 把 `\s+` 折成 `_`。因此
+    # comparison_identity("DELIVERY BOT") = "delivery bot"
+    # != comparison_identity("delivery_bot") = "delivery-bot"（比较键不同，可以共存），
+    # 但 slug 两者都是 "delivery_bot"（slug 歧义照旧成立）。
+    # 原来的 "DELIVERY_BOT" 与 "delivery_bot" 连比较键都相同，迁移 i90 之后
+    # 数据库唯一索引不再允许两行共存；那种"比较键相同的重复身份"已由
+    # test_audit_agent_identity.py 的数据库不变量用例覆盖。
+    await _create_test_user(db, "DELIVERY BOT", "human")
     with pytest.raises(ds.DeliveryDenied): await ds.control(db, agent.id, "executor", raw)
     await rollback_restore(db)
     ws = FakeWebSocket()

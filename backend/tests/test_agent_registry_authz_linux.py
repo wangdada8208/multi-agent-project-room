@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
 from app.agent import service
 from app.a2a.server import AgentDiscovery
@@ -36,7 +37,28 @@ async def test_registry_rejects_before_write_or_network(client, db, monkeypatch,
         user, headers = await identity(db, "codex" if kind in ("human", "collision", "agent_collision", "deleted") else "other_agent",
                                        "human" if kind == "human" else "agent", display="Codex")
         if kind in ("collision", "agent_collision"):
-            await identity(db, "CoDeX", "human" if kind == "collision" else "agent")
+            # 迁移 i90 之后，「同一个库里两行同比较键」这个数据状态不可能存在：
+            # 唯一索引会拒绝第二行。这里先显式断言这条数据库不变量，再用
+            # monkeypatch 把「两条匹配记录」直接交给授权层，覆盖
+            # authorize_agent_registration 的判歧义分支（纵深防御）。
+            # 改用例是语义正确的，不是为了让 CI 变绿。
+            collision_role = "human" if kind == "collision" else "agent"
+            db.add(User(username="CoDeX", display_name="collision", user_type=collision_role))
+            with pytest.raises(IntegrityError):
+                await db.commit()
+            await db.rollback()
+
+            duplicate = User(
+                id="phantom-collision",
+                username="CoDeX",
+                display_name="phantom collision",
+                user_type=collision_role,
+            )
+
+            async def two_matches(_db, _username):
+                return [duplicate, duplicate]
+
+            monkeypatch.setattr(service, "find_username_matches", two_matches)
         if kind == "deleted":
             await db.delete(user)
             await db.commit()
