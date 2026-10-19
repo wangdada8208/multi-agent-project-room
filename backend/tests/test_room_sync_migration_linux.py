@@ -139,7 +139,12 @@ async def test_pg17_synthetic_pre_migration_backup_restored_to_separate_shadow(t
     archive=tmp_path/'pre_e50.dump'
     url=test_engine.url.set(drivername='postgresql').render_as_string(hide_password=False)
     env=os.environ.copy(); env['LD_LIBRARY_PATH']=str(Path(root)/'usr/lib/x86_64-linux-gnu')
-    admin=await asyncpg.connect(host='127.0.0.1',port=port,user=test_engine.url.username,database='postgres')
+    # Pass the password too: the CI service database authenticates with scram/md5, and
+    # asyncpg.connect() without a password fails with InvalidPasswordError even though
+    # the DSN (used by pg_dump/pg_restore via --dbname) carries one. Harmless on a
+    # trust-authenticated cluster.
+    db_password=test_engine.url.password
+    admin=await asyncpg.connect(host='127.0.0.1',port=port,user=test_engine.url.username,password=db_password,database='postgres')
     recovered=None
     try:
         async with test_engine.begin() as c:
@@ -161,7 +166,7 @@ async def test_pg17_synthetic_pre_migration_backup_restored_to_separate_shadow(t
         result=await asyncio.to_thread(subprocess.run,[str(binary/'pg_restore'),'--no-owner','--no-acl',
             '--dbname='+restore_url,str(archive)],env=env,capture_output=True,timeout=20)
         assert result.returncode==0,result.stderr.decode()
-        recovered=await asyncpg.connect(host='127.0.0.1',port=port,user=test_engine.url.username,database=shadow)
+        recovered=await asyncpg.connect(host='127.0.0.1',port=port,user=test_engine.url.username,password=db_password,database=shadow)
         await recovered.execute('SET search_path TO '+schema)
         assert await recovered.fetchval('SELECT COUNT(*) FROM messages')==4
         assert not await recovered.fetchval("SELECT 1 FROM information_schema.columns WHERE table_schema=$1 AND table_name='messages' AND column_name='room_seq'",schema)
