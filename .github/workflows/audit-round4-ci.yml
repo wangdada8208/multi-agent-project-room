@@ -151,9 +151,18 @@ jobs:
           # install the server, the client tools AND the shared data files; the
           # gates need initdb + pg_dump + pg_restore + postgres.bki
           if [ ! -x "$BIN_DIR/initdb" ] || [ ! -x "$BIN_DIR/pg_dump" ] || [ ! -f /usr/share/postgresql/17/postgres.bki ]; then
-            echo "PostgreSQL 17 incomplete ($BIN_DIR); attempting install"
-            sudo apt-get update -qq || true
-            sudo apt-get install -y -qq postgresql-17 postgresql-client-17 postgresql-contrib-17 >/dev/null 2>&1 || true
+            echo "PostgreSQL 17 incomplete ($BIN_DIR); installing from the PGDG repository"
+            # ubuntu-latest (24.04) ships PostgreSQL 16 only, so the distribution
+            # archive has no postgresql-17 package. The official PGDG archive
+            # provides it. Errors are deliberately NOT swallowed: a silent
+            # failure here is exactly what made the gates skip while looking fine.
+            sudo install -d /usr/share/postgresql-common/pgdg
+            sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+              https://www.postgresql.org/media/keys/ACCC4CF8.asc
+            echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+              | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq postgresql-17 postgresql-client-17 postgresql-contrib-17
           fi
           if [ -d /usr/lib/postgresql/17 ] && [ -d /usr/share/postgresql/17 ]; then
             # mkdir the PARENT only: if the destination exists, cp -a nests the
