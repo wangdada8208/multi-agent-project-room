@@ -43,7 +43,11 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:16-alpine
+        # PG 17 on purpose: the isolated-PG17 gates below run a PG17 pg_dump
+        # against this server, and a PG17 dump emits `SET transaction_timeout = 0`,
+        # which a PG16 server rejects (pg_restore would fail). Client and server
+        # must be the same major version for a faithful backup/restore drill.
+        image: postgres:17-alpine
         env:
           POSTGRES_DB: mapr_audit_round4_test
           POSTGRES_USER: postgres
