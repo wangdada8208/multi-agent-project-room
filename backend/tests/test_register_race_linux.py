@@ -3,8 +3,16 @@
 ``race_x_bot`` and ``race_x-bot`` normalise to different keys, yet they are the
 same person spelled two ways. Before the fix, the only defence was an
 application-level check-then-insert, so two simultaneous requests both saw "no
-match" and both inserted. The durable fix is a UNIQUE index on
-``users.normalized_username`` (see docs/verification/2026-10-17-高危修复单.md).
+match" and both inserted. The durable fix is the UNIQUE index
+``ux_users_comparison_username`` on ``users.comparison_username``
+(see docs/verification/2026-10-17-高危修复单.md).
+
+Note on the column name: the unique constraint is deliberately *not* on
+``users.normalized_username``. That column keeps the old comparison rule (case
+folding only, punctuation preserved), so a UNIQUE index there would still allow
+``race_x_bot`` and ``race_x-bot`` to coexist. The comparison key lives in
+``users.comparison_username``, which folds the separators as well; the model
+keeps both columns in sync from ``username``.
 
 This gate is deliberately PostgreSQL-only: it needs a real unique constraint and
 real concurrent sessions. On SQLite (the default fast test path) it is skipped
@@ -19,7 +27,7 @@ import pytest
 from sqlalchemy import select
 
 from conftest import engine as isolated_engine, test_session as sessions
-from app.models.user import User
+from app.models.user import COMPARISON_USERNAME_INDEX, User
 
 pytestmark = [
     pytest.mark.asyncio,
@@ -83,20 +91,38 @@ async def test_concurrent_identical_username_creates_one_account(client):
     assert len(await _count_accounts(prefix)) == 1
 
 
-async def test_normalized_username_has_unique_index():
-    """The database itself — not only the application — must enforce uniqueness."""
+async def test_comparison_username_has_unique_index():
+    """The database itself — not only the application — must enforce uniqueness.
+
+    Guards the *shape* of the constraint: a UNIQUE index must exist on
+    ``users.comparison_username``, and it must be the one named
+    ``ux_users_comparison_username`` (the same name migration i90c20261017
+    creates in production).
+    """
     async with isolated_engine.connect() as conn:
         from sqlalchemy import text
 
         result = await conn.execute(
             text(
-                "SELECT indexdef FROM pg_indexes "
-                "WHERE tablename = 'users' AND indexdef ILIKE 'CREATE UNIQUE INDEX%' "
-                "AND indexdef ILIKE '%normalized_username%'"
+                "SELECT indexname, indexdef FROM pg_indexes "
+                "WHERE tablename = 'users'"
             )
         )
-        unique_indexes = [row[0] for row in result.all()]
-    assert unique_indexes, (
-        "users.normalized_username has no UNIQUE index; concurrent registration "
-        "can still create duplicate identities (audit H3)"
+        rows = {row[0]: row[1] for row in result.all()}
+
+    unique_comparison_indexes = {
+        name: definition
+        for name, definition in rows.items()
+        if definition.upper().startswith("CREATE UNIQUE INDEX")
+        and "comparison_username" in definition
+    }
+    assert unique_comparison_indexes, (
+        "users.comparison_username has no UNIQUE index; concurrent registration "
+        "can still create duplicate identities (audit H3). "
+        f"indexes on users: {sorted(rows)}"
+    )
+    assert COMPARISON_USERNAME_INDEX in unique_comparison_indexes, (
+        f"expected the unique index to be named {COMPARISON_USERNAME_INDEX!r} "
+        f"(the name migration i90c20261017 creates), found "
+        f"{sorted(unique_comparison_indexes)}"
     )

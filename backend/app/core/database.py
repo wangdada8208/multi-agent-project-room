@@ -106,6 +106,16 @@ async def check_database_readiness(session: AsyncSession | None = None) -> dict:
             rev_row = rev_result.first()
             current_rev = rev_row[0] if rev_row else None
         except Exception:
+            # A failed statement leaves a real PostgreSQL transaction in the
+            # aborted state: every later statement on this session keeps failing
+            # with "current transaction is aborted, commands ignored until end
+            # of transaction block" until it is rolled back. Without this
+            # rollback the probe returned a misleading DATABASE_UNAVAILABLE
+            # instead of the intended "Alembic version table not found", and the
+            # critical-table check below could never run on the dev/test path.
+            # SQLite does not abort the transaction on a failed statement, which
+            # is why the default create_all() test path hid this for so long.
+            await sess.rollback()
             env = (settings.environment or "").strip().lower()
             if engine.dialect.name == "sqlite" or env in ("development", "test", "testing", "dev"):
                 current_rev = EXPECTED_ALEMBIC_HEAD

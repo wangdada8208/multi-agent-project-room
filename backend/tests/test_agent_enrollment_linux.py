@@ -109,15 +109,48 @@ async def test_enrollment_uses_constant_time_comparison(client, monkeypatch):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("collision", [False, True])
-async def test_legacy_agent_login_casefold_and_collision(client, db, collision):
+async def test_legacy_agent_login_casefold_variants_resolve_to_one_account(client, db):
+    """单行场景：大小写变体都能登录到同一个旧账号。"""
     db.add(User(username="CoDeX", display_name="Legacy", user_type="agent", password_hash=hash_password("secret123")))
-    if collision:
-        db.add(User(username="codex", display_name="Other owner", user_type="human", password_hash=hash_password("different123")))
     await db.commit()
     for name in ("codex", "CoDeX", "CODEX"):
         response = await client.post("/api/v1/auth/login", json=dict(username=name, password="secret123"))
-        assert response.status_code == (401 if collision else 200)
+        assert response.status_code == 200, response.text
+
+
+@pytest.mark.asyncio
+async def test_duplicate_comparison_identity_is_refused_by_db_and_login(client, db, monkeypatch):
+    """迁移 i90 之前 `CoDeX` 与 `codex` 能在同一个库里共存，之后不可能。
+
+    所以分两层验证，而不是继续制造一个迁移后不可能出现的数据状态：
+    1. 数据库不变量：第二行同比较键的账号必须被唯一约束拒绝；
+    2. 登录路径的歧义处理：万一匹配到两条（历史库 / 恢复的备份），
+       登录必须 401，绝不能任选一个账号放行。
+    改用例是语义正确的，不是为了让 CI 变绿。
+    """
+    db.add(User(username="CoDeX", display_name="Legacy", user_type="agent", password_hash=hash_password("secret123")))
+    await db.commit()
+
+    # 1) 数据库不变量：第二行落不下去
+    db.add(User(username="codex", display_name="Other owner", user_type="human",
+                password_hash=hash_password("different123")))
+    with pytest.raises(IntegrityError):
+        await db.commit()
+    await db.rollback()
+
+    # 2) 歧义分支：把两条匹配记录直接交给登录路径
+    stored = (await db.execute(select(User))).scalars().one()
+
+    async def two_matches(_db, _username):
+        return [stored, stored]
+
+    # app.auth.routes 在导入时把 find_username_matches 绑进了自己的命名空间，
+    # 因此要 patch routes 上的那一个。
+    monkeypatch.setattr(routes, "find_username_matches", two_matches)
+
+    for name in ("codex", "CoDeX", "CODEX"):
+        response = await client.post("/api/v1/auth/login", json=dict(username=name, password="secret123"))
+        assert response.status_code == 401, f"{name!r} 命中两条匹配时必须 401，实际 {response.status_code}"
 
 
 @pytest.mark.asyncio

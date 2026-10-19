@@ -24,3 +24,17 @@ test_verify.db
 workers/xmtp-member/node_modules/
 workers/xmtp-member/.state/
 
+
+# 本地工具产物：不进入版本库
+# .worktrees/  本地 git worktree 检出（可达数十 MB，绝不提交）
+# .ghcache/    gh CLI 的 API/run-log 缓存（含 CI 日志 zip）
+# .ghhome/     gh CLI 的本地 config 目录（可能含凭据）
+.worktrees/
+.ghcache/
+.ghhome/
+# 验收过程文档/脚本：属于单次验收的临时产物，待用户确认后再决定是否入库
+docs/audit-round3-acceptance-report.md
+scripts/prepare-verify.sh
+scripts/run-acceptance.sh
+scripts/run-backend-shards.sh
+scripts/setup-isolated-pg17.sh

@@ -4,16 +4,20 @@ Unicode casefold normalization, and index-backed candidate queries (Audit Group 
 
 from __future__ import annotations
 
+import uuid
 from unittest.mock import patch
 import pytest
 from fastapi import HTTPException
 from httpx import AsyncClient
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.agent import service
 from app.agent.identity import (
     canonical_identity,
     canonical_slug,
+    comparison_identity,
     expand_casefold_candidates,
     normalize_unicode_casefold,
 )
@@ -108,54 +112,82 @@ def test_expand_casefold_candidates_coverage_and_bounds():
 # =====================================================================
 
 
+# 比较键相同的「同一个人」的多种写法。迁移 i90 之前它们能在同一个库里共存，
+# 迁移之后不可能：users.comparison_username 上的唯一索引会拒绝第二行，而迁移
+# 脚本自己遇到重复数据也会直接报错退出（不删号、不合并）。
+COLLIDING_IDENTITY_PAIRS = [
+    ("gross", "groß"),              # 大小写折叠：ß -> ss
+    ("agent-θ", "agent-ϑ"),          # θ / ϑ 同属一个 casefold 等价类
+    ("agent-ß", "agent-SS"),         # ß / SS / ẞ
+    ("agent-ﬃce", "agent-ffice"),    # 连字 ﬃ -> ffi
+    ("race_x_bot", "race_x-bot"),    # 标点折叠：审计 H3 的原始复现
+]
+
+
+@pytest.mark.parametrize("first,second", COLLIDING_IDENTITY_PAIRS)
+def test_colliding_pairs_share_one_comparison_identity(first, second):
+    """先钉住口径：这几种写法确实被判为同一个人。"""
+    assert comparison_identity(first) == comparison_identity(second)
+
+
 @pytest.mark.asyncio
-async def test_symmetric_ambiguity_detection_for_coexisting_gross_and_eszett(db: AsyncSession):
-    # Seed historical coexisting accounts
-    user_ascii = User(
-        username="gross",
-        display_name="ASCII Gross",
-        password_hash="hash1",
-        user_type="agent",
-    )
-    user_unicode = User(
-        username="groß",
-        display_name="Unicode Groß",
-        password_hash="hash2",
-        user_type="agent",
-    )
-    db.add(user_ascii)
-    db.add(user_unicode)
+@pytest.mark.parametrize("first,second", COLLIDING_IDENTITY_PAIRS)
+async def test_database_refuses_two_accounts_with_the_same_comparison_identity(
+    db: AsyncSession, first, second
+):
+    """迁移后世界的权威断言：数据库自己拒绝第二个同比较键的账号。
+
+    本章原先靠「先往库里塞两行重复身份，再看应用层怎么处理」来测歧义检测。
+    i90 之后那个数据状态不可能再产生（迁移遇到重复会报错退出），所以数据层的
+    不变量在这里被显式断言；应用层的判歧义分支由
+    ``test_ambiguous_identity_is_refused_when_two_matches_exist`` 覆盖。
+    改用例是语义正确的，不是为了让 CI 变绿。
+    """
+    db.add(User(username=first, display_name=f"first {first}", user_type="agent"))
     await db.commit()
 
-    # Querying with 'gross' must find BOTH accounts symmetrically
-    matches_from_ascii = await find_username_matches(db, "gross")
-    assert len(matches_from_ascii) == 2
-    matched_names_ascii = {u.username for u in matches_from_ascii}
-    assert matched_names_ascii == {"gross", "groß"}
+    db.add(User(username=second, display_name=f"second {second}", user_type="agent"))
+    with pytest.raises(IntegrityError):
+        await db.commit()
+    await db.rollback()
 
-    # Querying with 'groß' must find BOTH accounts symmetrically
-    matches_from_unicode = await find_username_matches(db, "groß")
-    assert len(matches_from_unicode) == 2
-    matched_names_unicode = {u.username for u in matches_from_unicode}
-    assert matched_names_unicode == {"gross", "groß"}
+    usernames = [row.username for row in (await db.execute(select(User))).scalars().all()]
+    assert usernames == [first], f"同比较键的第二行不该落库，实际：{usernames}"
 
-    # Uppercase variations must also find both
-    matches_upper_ascii = await find_username_matches(db, "GROSS")
-    assert len(matches_upper_ascii) == 2
 
-    matches_upper_unicode = await find_username_matches(db, "GROẞ")
-    assert len(matches_upper_unicode) == 2
+@pytest.mark.asyncio
+@pytest.mark.parametrize("first,second", COLLIDING_IDENTITY_PAIRS)
+async def test_ambiguous_identity_is_refused_when_two_matches_exist(
+    db: AsyncSession, monkeypatch, first, second
+):
+    """纵深防御：只要匹配到两条，就必须 403，绝不任选一个。
 
-    # authorize_agent_registration must reject BOTH as ambiguous
-    with pytest.raises(HTTPException) as exc_info_ascii:
-        await authorize_agent_registration(db, user_ascii, "gross")
-    assert exc_info_ascii.value.status_code == 403
-    assert exc_info_ascii.value.detail == "Ambiguous agent identity"
+    迁移后无法再制造「两行同比较键」的数据状态，所以直接把两条匹配记录交给
+    ``authorize_agent_registration``。这样判歧义那条业务分支依然被测试证明过，
+    而不是退化成死代码。
+    """
+    stored = User(username=first, display_name="stored agent", user_type="agent")
+    db.add(stored)
+    await db.commit()
 
-    with pytest.raises(HTTPException) as exc_info_unicode:
-        await authorize_agent_registration(db, user_unicode, "groß")
-    assert exc_info_unicode.value.status_code == 403
-    assert exc_info_unicode.value.detail == "Ambiguous agent identity"
+    phantom = User(
+        id=f"phantom-{uuid.uuid4().hex[:12]}",
+        username=second,
+        display_name="phantom duplicate",
+        user_type="agent",
+    )
+
+    async def two_matches(_db, _username):
+        return [stored, phantom]
+
+    # authorize_agent_registration 在 app.agent.service 内按模块全局名查找，
+    # 因此 patch 模块属性即可生效。
+    monkeypatch.setattr(service, "find_username_matches", two_matches)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await authorize_agent_registration(db, stored, first)
+    assert exc_info.value.status_code == 403
+    assert exc_info.value.detail == "Ambiguous agent identity"
 
 
 # =====================================================================
@@ -376,100 +408,6 @@ def test_unicode_casefold_equivalence_classes():
     assert canonical_identity("Ὀδυσσεύς") == canonical_identity("ὀδυσσεύσ")
     assert canonical_identity("Σ") == canonical_identity("σ")
     assert canonical_identity("σ") == canonical_identity("ς")
-
-
-@pytest.mark.asyncio
-async def test_historical_collision_detection_theta(db: AsyncSession):
-    """Historical accounts with θ and ϑ must trigger 403 Ambiguous agent identity."""
-    user_theta = User(
-        username="agent-θ",
-        display_name="Agent Theta",
-        password_hash="hash1",
-        user_type="agent",
-    )
-    user_script_theta = User(
-        username="agent-ϑ",
-        display_name="Agent Script Theta",
-        password_hash="hash2",
-        user_type="agent",
-    )
-    db.add(user_theta)
-    db.add(user_script_theta)
-    await db.commit()
-
-    # Matching either variant returns both records
-    matches = await find_username_matches(db, "agent-θ")
-    assert len(matches) == 2
-
-    matches_script = await find_username_matches(db, "agent-ϑ")
-    assert len(matches_script) == 2
-
-    # authorize_agent_registration must NOT arbitrarily pick one, but raise 403
-    with pytest.raises(HTTPException) as exc_info:
-        await authorize_agent_registration(db, user_theta, "agent-θ")
-    assert exc_info.value.status_code == 403
-    assert exc_info.value.detail == "Ambiguous agent identity"
-
-    with pytest.raises(HTTPException) as exc_info_script:
-        await authorize_agent_registration(db, user_script_theta, "agent-ϑ")
-    assert exc_info_script.value.status_code == 403
-    assert exc_info_script.value.detail == "Ambiguous agent identity"
-
-
-@pytest.mark.asyncio
-async def test_historical_collision_detection_eszett(db: AsyncSession):
-    """Historical accounts with ß and SS must trigger 403 Ambiguous agent identity."""
-    user_beta = User(
-        username="agent-ß",
-        display_name="Agent Sharp S",
-        password_hash="hash1",
-        user_type="agent",
-    )
-    user_ss = User(
-        username="agent-SS",
-        display_name="Agent SS",
-        password_hash="hash2",
-        user_type="agent",
-    )
-    db.add(user_beta)
-    db.add(user_ss)
-    await db.commit()
-
-    matches = await find_username_matches(db, "agent-ß")
-    assert len(matches) == 2
-
-    with pytest.raises(HTTPException) as exc_info:
-        await authorize_agent_registration(db, user_beta, "agent-ß")
-    assert exc_info.value.status_code == 403
-    assert exc_info.value.detail == "Ambiguous agent identity"
-
-
-@pytest.mark.asyncio
-async def test_historical_collision_detection_ligature(db: AsyncSession):
-    """Historical accounts with ligature ﬃ and ffi must trigger 403."""
-    user_ligature = User(
-        username="agent-ﬃce",
-        display_name="Agent Ligature Office",
-        password_hash="hash1",
-        user_type="agent",
-    )
-    user_expanded = User(
-        username="agent-ffice",
-        display_name="Agent Expanded Office",
-        password_hash="hash2",
-        user_type="agent",
-    )
-    db.add(user_ligature)
-    db.add(user_expanded)
-    await db.commit()
-
-    matches = await find_username_matches(db, "agent-ffice")
-    assert len(matches) == 2
-
-    with pytest.raises(HTTPException) as exc_info:
-        await authorize_agent_registration(db, user_ligature, "agent-ﬃce")
-    assert exc_info.value.status_code == 403
-    assert exc_info.value.detail == "Ambiguous agent identity"
 
 
 @pytest.mark.asyncio

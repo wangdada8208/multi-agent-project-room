@@ -14,6 +14,7 @@ from app.a2a.client import A2AClient, A2AClientPool
 from app.core.security import create_access_token
 from app.models.agent_card import AgentCardRecord
 from app.models.user import User
+from conftest import fake_agent_dns
 
 
 OPERATIONS = ["dialogue", "card", "send", "status"]
@@ -33,9 +34,11 @@ def network(monkeypatch):
     monkeypatch.delenv("MAPR_SSRF_ALLOWLIST", raising=False)
     state = SimpleNamespace(requests=[], clients=[], dns=[], ip="93.184.215.14", redirect=False)
 
-    def dns(host, port, *args, **kwargs):
-        state.dns.append(host)
-        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", (state.ip, port))]
+    # Only the synthetic agent hostnames are faked; the test database and Redis
+    # resolve through the real resolver. Faking every host hijacked the
+    # PostgreSQL lookup in CI (where the DSN host is "localhost") and killed the
+    # SSRF gates with a 60s asyncpg TimeoutError.
+    dns = fake_agent_dns(lambda: state.ip, record=state.dns.append)
 
     async def send(transport, request):
         state.requests.append(request)
@@ -265,9 +268,8 @@ async def test_default_http_transport_connects_to_pin_with_verified_tls(operatio
         connections.append((host, port, timeout))
         return Stream()
 
-    def dns(host, port, *args, **kwargs):
-        dns_calls.append(host)
-        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.215.14", port))]
+    # Same scoping rule: agent.example is faked, infrastructure hosts are real.
+    dns = fake_agent_dns("93.184.215.14", record=dns_calls.append)
 
     monkeypatch.setattr(socket, "getaddrinfo", dns)
     monkeypatch.setattr(AutoBackend, "connect_tcp", connect)

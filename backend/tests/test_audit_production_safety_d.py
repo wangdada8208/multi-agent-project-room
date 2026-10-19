@@ -190,6 +190,67 @@ async def test_readiness_probe_success(client: AsyncClient):
 
 
 @pytest.mark.asyncio
+async def test_readiness_probe_missing_alembic_version_does_not_abort_transaction():
+    """A missing ``alembic_version`` on PostgreSQL must not leave the session's
+    transaction aborted, so the probe still reaches the critical-table check.
+
+    Regression test for the missing rollback in ``check_database_readiness``:
+    on PostgreSQL a failed statement aborts the whole transaction, and every
+    later statement on that session fails with "current transaction is aborted,
+    commands ignored until end of transaction block". Without the rollback the
+    probe reported a misleading ``DATABASE_UNAVAILABLE``/503 instead of the
+    intended dev/test fallback that then verifies ``CRITICAL_TABLES``.
+
+    This cannot be reproduced on SQLite, which does not abort the transaction on
+    a failed statement -- which is why the default ``create_all()`` test path
+    never caught it.
+    """
+    from sqlalchemy import text
+
+    from conftest import engine as test_engine, test_session
+
+    if test_engine.dialect.name != "postgresql":
+        pytest.skip(
+            "aborted-transaction semantics are PostgreSQL-specific; SQLite cannot "
+            "reproduce the failure mode this test guards against"
+        )
+
+    # Save and remove alembic_version so the probe takes its fallback branch.
+    saved_revision: str | None = None
+    async with test_engine.begin() as conn:
+        present = (
+            await conn.execute(text("SELECT to_regclass('public.alembic_version')"))
+        ).scalar()
+        if present is not None:
+            saved_revision = (
+                await conn.execute(text("SELECT version_num FROM alembic_version"))
+            ).scalar()
+            await conn.execute(text("DROP TABLE alembic_version"))
+
+    try:
+        async with test_session() as session:
+            result = await check_database_readiness(session=session)
+        # The probe must complete on a usable transaction: not an aborted one.
+        assert result["status"] == "ready", result
+        assert result.get("code") is None, result
+        assert result["reason"] is None, result
+    finally:
+        if saved_revision is not None:
+            async with test_engine.begin() as conn:
+                await conn.execute(
+                    text(
+                        "CREATE TABLE IF NOT EXISTS alembic_version ("
+                        "version_num VARCHAR(32) NOT NULL, "
+                        "CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num))"
+                    )
+                )
+                await conn.execute(
+                    text("INSERT INTO alembic_version (version_num) VALUES (:v)"),
+                    {"v": saved_revision},
+                )
+
+
+@pytest.mark.asyncio
 async def test_readiness_probe_database_unavailable_returns_503(client: AsyncClient):
     """Readiness probe /ready returns HTTP 503 when database connectivity fails."""
     mock_db = AsyncMock()

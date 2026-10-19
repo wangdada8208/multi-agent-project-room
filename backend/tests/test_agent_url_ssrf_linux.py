@@ -22,6 +22,7 @@ from app.a2a.url_policy import (
     validate_agent_card_url,
 )
 from app.models.agent_card import AgentCardRecord
+from conftest import protect_infrastructure_hosts
 
 
 # ── Synthetic Test Matrix for Register ─────────────────────────────────────────
@@ -96,7 +97,7 @@ async def test_register_rejects_dns_resolving_to_private_ip(db):
             (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("10.0.0.5", port or 80))
         ]
 
-    with patch("socket.getaddrinfo", side_effect=fake_getaddrinfo):
+    with patch("socket.getaddrinfo", side_effect=protect_infrastructure_hosts(fake_getaddrinfo)):
         with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
             with pytest.raises(ValueError):
                 await AgentDiscovery.register("PrivateDNSAgent", "http://agent.internal.corp")
@@ -112,7 +113,7 @@ async def test_register_rejects_mixed_dns_records(db):
             (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("127.0.0.1", port or 80)),
         ]
 
-    with patch("socket.getaddrinfo", side_effect=fake_getaddrinfo):
+    with patch("socket.getaddrinfo", side_effect=protect_infrastructure_hosts(fake_getaddrinfo)):
         with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
             with pytest.raises(ValueError):
                 await AgentDiscovery.register("MixedDNSAgent", "http://rebind.attacker.com")
@@ -164,7 +165,7 @@ async def test_probe_ignores_proxy_env(db, monkeypatch):
         async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
             return httpx.Response(200, json={"skills": ["test"]})
 
-    with patch("socket.getaddrinfo", side_effect=fake_getaddrinfo):
+    with patch("socket.getaddrinfo", side_effect=protect_infrastructure_hosts(fake_getaddrinfo)):
         with patch("app.a2a.url_policy.create_pinned_transport", return_value=MockTransport()):
             with patch.object(httpx.AsyncClient, "__init__", spying_init):
                 reg = await AgentDiscovery.register("ProxyTestAgent", "https://agent.example.com/card")
@@ -193,7 +194,7 @@ async def test_valid_public_url_pins_verified_ip_and_sets_host_sni(db):
                 json={"name": "PublicAgent", "skills": [{"id": "search"}]},
             )
 
-    with patch("socket.getaddrinfo", side_effect=fake_getaddrinfo):
+    with patch("socket.getaddrinfo", side_effect=protect_infrastructure_hosts(fake_getaddrinfo)):
         with patch("app.a2a.url_policy.create_pinned_transport", return_value=MockTransport()):
             reg = await AgentDiscovery.register("PublicAgent", "https://agent.example.com/card")
             assert reg["status"] == "registered"
@@ -225,7 +226,7 @@ async def test_redirect_to_internal_ip_is_blocked(db):
                 headers={"Location": "http://127.0.0.1:8000/secret"},
             )
 
-    with patch("socket.getaddrinfo", side_effect=fake_getaddrinfo):
+    with patch("socket.getaddrinfo", side_effect=protect_infrastructure_hosts(fake_getaddrinfo)):
         with patch("app.a2a.url_policy.create_pinned_transport", return_value=MockRedirectTransport()):
             # Registration proceeds without following redirect (skills remains empty)
             reg = await AgentDiscovery.register("RedirectAgent", "http://redirect.example.com")
@@ -305,7 +306,7 @@ async def test_public_domain_aaaa_ipv6_host_header_no_brackets():
             recorded_requests.append(request)
             return httpx.Response(200, json={"jsonrpc": "2.0", "result": "ok", "id": "1"})
 
-    with patch("socket.getaddrinfo", side_effect=fake_getaddrinfo):
+    with patch("socket.getaddrinfo", side_effect=protect_infrastructure_hosts(fake_getaddrinfo)):
         with patch("app.a2a.url_policy.create_pinned_transport", return_value=MockTransport()):
             resp = await safe_agent_http_request(
                 "https://agent.example.com",
@@ -341,7 +342,7 @@ async def test_safe_agent_http_request_post_json_rpc():
             recorded_requests.append(request)
             return httpx.Response(200, json={"jsonrpc": "2.0", "result": {"task_id": "abc"}, "id": "42"})
 
-    with patch("socket.getaddrinfo", side_effect=fake_getaddrinfo):
+    with patch("socket.getaddrinfo", side_effect=protect_infrastructure_hosts(fake_getaddrinfo)):
         with patch("app.a2a.url_policy.create_pinned_transport", return_value=MockTransport()):
             resp = await safe_agent_http_request(
                 "http://rpc-agent.example.com/a2a",
@@ -379,7 +380,7 @@ async def test_safe_agent_http_request_bounded_timeouts():
         async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
             return httpx.Response(200, json={"ok": True})
 
-    with patch("socket.getaddrinfo", side_effect=fake_getaddrinfo):
+    with patch("socket.getaddrinfo", side_effect=protect_infrastructure_hosts(fake_getaddrinfo)):
         with patch("app.a2a.url_policy.create_pinned_transport", return_value=MockTransport()):
             with patch.object(httpx.AsyncClient, "__init__", spying_init):
                 # Pass excessive timeouts: connect 20s, read 120s

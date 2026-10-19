@@ -24,6 +24,18 @@ env:
 jobs:
   test:
     runs-on: ubuntu-latest
+    env:
+      # Numeric hosts, not "localhost": several SSRF/interop suites patch
+      # socket.getaddrinfo to answer for every hostname, which would hijack the
+      # PostgreSQL lookup and time out the DB connection (60s TimeoutError). A
+      # literal IP takes asyncio's _ipaddr_info fast path and never consults the
+      # stub. Keep these numeric even after the stubs are scoped.
+      MAPR_DATABASE_URL: postgresql+asyncpg://postgres:test_password@127.0.0.1:5432/agent_room_test
+      MAPR_TEST_DATABASE_URL: postgresql+asyncpg://postgres:test_password@127.0.0.1:5432/agent_room_test
+      # Real PostgreSQL + real Redis are mandatory: several audit suites skip
+      # when they are absent, and a silent skip must never look like a pass.
+      MAPR_TESTING: "1"
+      MAPR_TEST_REDIS_URL: redis://127.0.0.1:6379/15
     services:
       postgres:
         image: postgres:16-alpine
@@ -38,6 +50,18 @@ jobs:
           --health-interval 5s
           --health-timeout 3s
           --health-retries 5
+      # The audit suites require a real Redis: without it the rate-limit and
+      # Redis-isolation tests fail on "Error 111 connecting to localhost:6379",
+      # and a missing Redis must never be allowed to look like a pass.
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
 
     steps:
       - uses: actions/checkout@v6
@@ -52,16 +76,40 @@ jobs:
           pip install -r backend/requirements.txt
           pip install pytest pytest-asyncio httpx
 
-      - name: Wait for PostgreSQL
+      - name: Wait for PostgreSQL and Redis
         run: |
+          # Always pass -d so the readiness probe never falls back to the
+          # runner's OS user as a PostgreSQL role ("FATAL: role root does not exist").
           for i in $(seq 1 10); do
-            pg_isready -h localhost -U postgres && break
+            pg_isready -h localhost -p 5432 -U postgres -d agent_room_test && break
             sleep 2
           done
+          pg_isready -h localhost -p 5432 -U postgres -d agent_room_test
+          # redis-cli is not installed on the runner image; probe with Python instead.
+          for i in $(seq 1 30); do
+            if python3 - <<'PY'
+          import socket, sys
+          s = socket.socket(); s.settimeout(1)
+          try:
+              s.connect(("127.0.0.1", 6379)); s.sendall(b"PING\r\n")
+              ok = s.recv(16).startswith(b"+PONG")
+          except OSError:
+              ok = False
+          finally:
+              s.close()
+          sys.exit(0 if ok else 1)
+          PY
+            then echo "Redis is up"; break; fi
+            sleep 2
+          done
+          python3 - <<'PY'
+          import socket, sys
+          s = socket.socket(); s.settimeout(2); s.connect(("127.0.0.1", 6379))
+          s.sendall(b"PING\r\n"); print("redis:", s.recv(16)); s.close()
+          PY
 
       - name: Run migrations
         env:
-          MAPR_DATABASE_URL: postgresql+asyncpg://postgres:test_password@localhost:5432/agent_room_test
           PYTHONPATH: backend
         run: |
           python3 -m alembic upgrade head
@@ -88,10 +136,25 @@ jobs:
           node scripts/validate-release-config.mjs
           npm run build
 
+      - name: Prove real PostgreSQL and real Redis are wired (no silent skip)
+        run: |
+          python3 - <<'PY'
+          import sys
+          sys.path.insert(0, "backend/tests"); sys.path.insert(0, "backend")
+          import app.main  # noqa: register all models
+          import conftest as C
+          from app.auth import rate_limit
+          assert C.engine.dialect.name == "postgresql", f"tests would run on {C.engine.dialect.name}, not PostgreSQL"
+          client = rate_limit._get_redis_sync()
+          assert client is not None, "Redis is unreachable: rate-limit tests would silently skip"
+          assert client.ping() is True
+          url = rate_limit._get_effective_redis_url()
+          assert url.rstrip("/").endswith("/15"), f"tests must use the dedicated Redis DB, got {url}"
+          print("OK: PostgreSQL dialect =", C.engine.dialect.name, "| Redis DB =", url)
+          PY
+
       - name: Run tests
         env:
-          MAPR_TEST_DATABASE_URL: postgresql+asyncpg://postgres:test_password@localhost:5432/agent_room_test
-          MAPR_DATABASE_URL: postgresql+asyncpg://postgres:test_password@localhost:5432/agent_room_test
           PYTHONPATH: backend
         run: |
           python3 -m pytest backend/tests/ tests/test_local_agent_adapter.py tests/test_deploy_script.py -v
