@@ -114,9 +114,19 @@ gh workflow run prod-hygiene.yml --ref main -f mode=check
 | `43462676253` | execute | **success** | 备份 → 单事务删除 → 断言通过 |
 
 执行后另发起独立 `check` 复核。北京 runner 到 github.com 的 `actions/checkout` 偶发连接超时
-（`43463042336` 失败、`43463703590` 重试），属网络抖动，**不影响已提交的事务**；
-此前 `43458683262` 也因 `sudo` secure_path 找不到 docker 失败（已改为解析绝对路径后修复），
-`43459834227` 因同一网络抖动失败，第三次 `43460928682` 成功。
+（`43463042336`、`43463703590` 两次失败，均为网络抖动，不影响已提交的事务；
+第三次 `43464569873` **成功**）。此前 `43458683262` 也因 `sudo` secure_path 找不到 docker
+失败（已改为解析绝对路径后修复），`43459834227` 因同一网络抖动失败，
+第三次 `43460928682` 成功。
+
+成功的事后只读复核（`43464569873`）：
+
+```text
+CHECK OK - session was READ ONLY, nothing modified.
+JSON_SUMMARY {"mode":"check","read_only":true,"rooms_total":5,"rooms_xmtp":1,
+ "rooms_agent":4,"rooms_legacy":0,"msgs_in_legacy":0,"msgs_parent_ref":0,
+ "room_id_tables":11,"fk_constraints":12}
+```
 
 即使不依赖事后复核，`43462676253` 自身在 COMMIT 之后已重新取数并断言通过：
 `rooms_legacy 0`、`rooms_agent 4`、`rooms_xmtp 1`、`room_orphans 0`、
