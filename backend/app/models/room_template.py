@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
-from sqlalchemy import String, Boolean, DateTime, Text
+from sqlalchemy import String, Boolean, DateTime, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 from app.core.database import Base
 
@@ -11,8 +11,12 @@ from app.core.database import Base
 class RoomTemplate(Base):
     __tablename__ = "room_templates"
 
+    # d40c20261010 names this constraint explicitly. Keep the same name so the
+    # ORM metadata matches the migrated DB (a bare unique=True would not).
+    __table_args__ = (UniqueConstraint("key", name="uq_room_templates_key"),)
+
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    key: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    key: Mapped[str] = mapped_column(String(64), nullable=False)
     name: Mapped[str] = mapped_column(String(128), nullable=False)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     icon: Mapped[str] = mapped_column(String(16), default="🏠")

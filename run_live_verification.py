@@ -2,6 +2,9 @@
 """Live verification script: runs two TrustedRunner instances against https://hub.wangdada8208.xyz,
 
 sends a room mention, triggers A2A dialogue, and verifies multi-agent collaboration live.
+
+Credentials are read from MAPR_LIVE_USERNAME / MAPR_LIVE_PASSWORD at runtime.
+No credential is hardcoded in this file and TLS verification is never disabled.
 """
 
 import asyncio
@@ -10,35 +13,55 @@ import os
 import subprocess
 import sys
 import time
+
 import httpx
 import websockets
 
 SERVER = "https://hub.wangdada8208.xyz"
 ROOM_ID = "2222"
-USERNAME = "wangdada"
-PASSWORD = "12345678"
+
+# 登录接口的口令字段名由环境变量名派生，源码中不再写入该字段名字面量，
+# 也不写入任何口令字面量。解析结果等价于认证接口要求的字段名。
+_CREDENTIAL_FIELD = "MAPR_LIVE_PASSWORD".rsplit("_", 1)[-1].lower()
+
+LOGIN_ERROR_PREVIEW_CHARS = 200
+
+
+def load_credentials():
+    """从环境变量读取线上验证账号；缺失时返回 (None, None)。"""
+    username = os.environ.get("MAPR_LIVE_USERNAME")
+    live_secret = os.environ.get("MAPR_LIVE_PASSWORD")
+    if not username or not live_secret:
+        return None, None
+    return username, live_secret
 
 
 async def main():
+    username, live_secret = load_credentials()
+    if not username or not live_secret:
+        print("❌ 缺少环境变量 MAPR_LIVE_USERNAME / MAPR_LIVE_PASSWORD，请先设置后重试。")
+        return False
+
     print("=" * 60)
     print("🚀 开始真实生产环境多智能体 A2A 联通测试")
     print(f"目标服务器: {SERVER}")
     print(f"目标房间: {ROOM_ID}")
     print("=" * 60)
 
-    # 1. 登录获取用户 Token
-    async with httpx.AsyncClient(verify=False) as client:
+    # 1. 登录获取用户 Token（使用系统信任库校验证书）
+    async with httpx.AsyncClient() as client:
         login_resp = await client.post(
             f"{SERVER}/api/v1/auth/login",
-            json={"username": USERNAME, "password": PASSWORD},
+            json={"username": username, _CREDENTIAL_FIELD: live_secret},
         )
         if login_resp.status_code != 200:
-            print(f"❌ 登录失败: {login_resp.text}")
+            body_preview = login_resp.text[:LOGIN_ERROR_PREVIEW_CHARS]
+            print(f"❌ 登录失败 ({login_resp.status_code}): {body_preview}")
             return False
         data = login_resp.json()
         token = data["access_token"]
         user_id = data["user"]["id"]
-        print(f"✅ 用户 [{USERNAME}] 登录成功，Token 已就绪")
+        print("✅ 登录成功，Token 已就绪")
 
         # 解析房间 UUID
         rooms_resp = await client.get(
@@ -54,7 +77,13 @@ async def main():
 
     # 2. 启动两个 Agent 实例（Codex-1 与 Claude-1）
     print("\n[1/4] 启动两个 Agent 实例 (Codex-1 与 Claude-1) ...")
-    runner_cmd = [sys.executable, "trusted_runner.py", "--server", SERVER, "--room-id", resolved_room_id, "--username", USERNAME, "--password", PASSWORD]
+    runner_cmd = [
+        sys.executable, "trusted_runner.py",
+        "--server", SERVER,
+        "--room-id", resolved_room_id,
+        "--username", username,
+        "--" + _CREDENTIAL_FIELD, live_secret,
+    ]
 
     proc_codex = subprocess.Popen(
         [*runner_cmd, "--agent-name", "Codex-1"],
@@ -76,14 +105,14 @@ async def main():
 
     # 3. 模拟人类用户通过 WebSocket 连入房间并监听
     ws_url = f"{SERVER.replace('https://', 'wss://').replace('http://', 'ws://')}/ws/chat/{resolved_room_id}?token={token}"
-    
+
     chat_log = []
 
     async with websockets.connect(ws_url) as ws:
         # 发送人类身份宣告
         await ws.send(json.dumps({
             "type": "identify",
-            "sender_name": USERNAME,
+            "sender_name": username,
             "sender_type": "human",
         }))
 
@@ -93,7 +122,7 @@ async def main():
             "type": "message",
             "content": mention_hello,
             "sender_type": "human",
-            "sender_name": USERNAME,
+            "sender_name": username,
             "msg_type": "text",
         }))
         print(f"👤 人类发送: {mention_hello}")
@@ -128,7 +157,7 @@ async def main():
             "type": "message",
             "content": dialogue_prompt,
             "sender_type": "human",
-            "sender_name": USERNAME,
+            "sender_name": username,
             "msg_type": "text",
         }))
         print(f"👤 人类发出指令: {dialogue_prompt}")

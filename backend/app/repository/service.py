@@ -21,7 +21,11 @@ class GitService:
         )
         if result.returncode != 0:
             raise RuntimeError(result.stderr.strip() or "git command failed")
-        return result.stdout.strip()
+        # Keep leading whitespace: `git status --short` encodes the unstaged
+        # status in column 0 (" M file"). A full strip() removes that column on
+        # the first line and changes() then slices off the first character of
+        # the filename (" M SMOKE.md" -> "MOKE.md"). Only trim line endings.
+        return result.stdout.rstrip("\r\n")
 
     def branch(self) -> dict:
         return {"branch": self._git("branch", "--show-current") or "detached"}
@@ -54,6 +58,8 @@ class GitService:
         raw = self._git("status", "--short")
         changes = []
         for line in raw.splitlines():
+            if len(line) < 3:
+                continue
             status = line[:2].strip() or "modified"
             path = line[3:]
             changes.append({"path": path, "status": status})

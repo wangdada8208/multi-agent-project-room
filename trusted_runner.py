@@ -22,16 +22,189 @@ import logging
 import os
 import re
 import signal
+import socket
+import ssl
 import sys
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Optional
+from urllib.parse import urlparse
 
 import httpx
 import websockets
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(levelname)s %(message)s")
 logger = logging.getLogger("trusted_runner")
+
+
+# ── TLS 证书校验（方案 A：默认系统信任库，显式可控地放开） ──────────────
+#
+# 背景：本文件以前在 3 处 httpx.AsyncClient 上关闭了证书校验，会把 Bearer
+# 令牌 / 口令明文暴露给中间人。改严后：
+#   * 默认 verify=True（系统信任库），显式传给 httpx，便于审计与测试断言；
+#   * --tls-ca-bundle PATH        仅信任该 CA bundle（自签内网服务器）；
+#   * --tls-cert-fingerprint HEX  仅信任 SHA-256 指纹匹配的这一张叶子证书；
+#   * 不提供任何"无条件不校验证书"的开关。
+# 三处 httpx 调用与 WebSocket 连接共用同一份 compute_verify() 结果。
+CERT_EXPIRY_WARN_DAYS = 30
+LOGIN_ERROR_BODY_LIMIT = 200
+_CERT_FETCH_TIMEOUT = 5.0
+
+
+def truncate_error_body(text: Any, limit: int = LOGIN_ERROR_BODY_LIMIT) -> str:
+    """截断外部响应体，避免被冒充的服务器把任意文本注入异常与日志。"""
+    if text is None:
+        return ""
+    body = str(text)
+    if len(body) <= limit:
+        return body
+    return body[:limit] + "...(truncated)"
+
+
+def normalise_fingerprint(pin: str) -> str:
+    """规范化用户提供的 SHA-256 指纹：大小写不敏感，允许冒号分隔。"""
+    cleaned = re.sub(r"[\s:]", "", str(pin)).lower()
+    if not re.fullmatch(r"[0-9a-f]{64}", cleaned):
+        raise ValueError(
+            "tls-cert-fingerprint 必须是 64 位 SHA-256 十六进制字符串（可带冒号分隔）"
+        )
+    return cleaned
+
+
+def fetch_peer_cert_pem(server_url: str, timeout: float = _CERT_FETCH_TIMEOUT) -> bytes:
+    """仅取回对端叶子证书的 PEM 字节，不发送任何 HTTP 请求、不携带任何凭据。
+
+    这里刻意用一个不校验的裸 TLS 握手抓证书字节；它是"读取证书"而不是
+    "发请求"。调用方必须先把它换算成 DER 的 SHA-256 与用户提供的指纹比对，
+    只有一致才把它加载成唯一信任锚 —— 指纹固定的就是这一张证书本身。
+    """
+    parsed = urlparse(server_url)
+    if parsed.scheme != "https" or not parsed.hostname:
+        raise ValueError(f"证书指纹模式要求 https 地址，收到: {server_url!r}")
+    pem = ssl.get_server_certificate(
+        (parsed.hostname, parsed.port or 443), timeout=timeout
+    )
+    return pem.encode("ascii")
+
+
+def ssl_context_for_fingerprint(server_url: str, fingerprint: str) -> ssl.SSLContext:
+    """按指纹固定（pin）唯一一张服务器叶子证书，返回可作 httpx verify= 的 context。"""
+    pin = normalise_fingerprint(fingerprint)
+    pem = fetch_peer_cert_pem(server_url).decode("ascii")
+    der = ssl.PEM_cert_to_DER_cert(pem)
+    actual = hashlib.sha256(der).hexdigest()
+    if actual != pin:
+        raise ValueError(
+            f"证书指纹不匹配：期望 {pin}，实际 {actual}；拒绝连接（可能是中间人）"
+        )
+    ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    # 指纹固定取代了自签内网服务器的主机名/CA 信任：身份由"仅信任这一张叶子
+    # 证书"的指纹比对保证，而不是靠主机名匹配或公开 CA。因此关闭主机名检查；
+    # verify_mode 仍保持 CERT_REQUIRED，握手必须出示证书并通过链校验。
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_REQUIRED
+    ctx.load_verify_locations(cadata=pem)
+    return ctx
+
+
+def compute_verify(
+    server_url: str,
+    tls_ca_bundle: Optional[str] = None,
+    tls_cert_fingerprint: Optional[str] = None,
+) -> Any:
+    """计算传给 httpx.AsyncClient(verify=...) 的值。
+
+    返回 True（系统信任库）| CA bundle 路径 | ssl.SSLContext（指纹固定）。
+    """
+    if tls_ca_bundle and tls_cert_fingerprint:
+        raise ValueError("--tls-ca-bundle 与 --tls-cert-fingerprint 只能二选一")
+    if tls_ca_bundle:
+        if not os.path.isfile(tls_ca_bundle):
+            raise FileNotFoundError(f"CA bundle 文件不存在: {tls_ca_bundle}")
+        return tls_ca_bundle
+    if tls_cert_fingerprint:
+        return ssl_context_for_fingerprint(server_url, tls_cert_fingerprint)
+    # 显式传 True：httpx 默认就是校验的，写出来便于审计与测试断言。
+    return True
+
+
+def ws_ssl_context(verify: Any) -> Optional[ssl.SSLContext]:
+    """把 compute_verify 的结果转成 websockets.connect(ssl=...) 需要的 context。
+
+    默认模式返回 None —— 此时不传 ssl 参数，websockets 照常用系统信任库校验；
+    CA bundle / 指纹模式返回对应的 SSLContext（指纹模式复用同一个对象）。
+    """
+    if isinstance(verify, ssl.SSLContext):
+        return verify
+    if isinstance(verify, str):
+        ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        ctx.load_verify_locations(cafile=verify)
+        return ctx
+    return None
+
+
+# ── 证书到期提醒（尽力而为；任何网络/解析错误都不阻断启动） ──────────────
+
+def days_until_expiry(not_after: str, now: Optional[datetime] = None) -> int:
+    """纯函数：返回距离证书 notAfter 的整天数（负数表示已过期）。
+
+    not_after 形如 OpenSSL / getpeercert() 的 "Dec 18 08:33:20 2026 GMT"。
+    """
+    if now is None:
+        now = datetime.now(timezone.utc)
+    text = not_after.strip()
+    for suffix in (" GMT", " UTC"):
+        if text.endswith(suffix):
+            text = text[: -len(suffix)]
+            break
+    expires = datetime.strptime(text, "%b %d %H:%M:%S %Y").replace(tzinfo=timezone.utc)
+    return (expires - now).days
+
+
+def should_warn_cert_expiry(days_left: int, warn_days: int = CERT_EXPIRY_WARN_DAYS) -> bool:
+    """纯函数：剩余天数小于等于阈值时应该告警。"""
+    return days_left <= warn_days
+
+
+def peer_cert_not_after(
+    server_url: str, context: Optional[ssl.SSLContext] = None
+) -> Optional[str]:
+    """尽力而为地取回对端证书 notAfter；非 https / 任何异常一律返回 None。"""
+    parsed = urlparse(server_url)
+    if parsed.scheme != "https" or not parsed.hostname:
+        return None
+    ctx = context or ssl.create_default_context()
+    try:
+        with socket.create_connection(
+            (parsed.hostname, parsed.port or 443), timeout=_CERT_FETCH_TIMEOUT
+        ) as raw:
+            with ctx.wrap_socket(raw, server_hostname=parsed.hostname) as tls:
+                cert = tls.getpeercert()
+        return cert.get("notAfter")
+    except Exception as exc:  # 超时 / DNS / 自签证书 / 拒绝连接 —— 全部忽略
+        logger.debug("certificate expiry probe skipped: %s", exc)
+        return None
+
+
+def warn_if_cert_expiring_soon(
+    server_url: str,
+    verify: Any = True,
+    warn_days: int = CERT_EXPIRY_WARN_DAYS,
+) -> None:
+    """https 目标证书在 warn_days 天内到期时记录 WARNING；绝不抛异常。"""
+    try:
+        not_after = peer_cert_not_after(server_url, ws_ssl_context(verify))
+        if not not_after:
+            return
+        days = days_until_expiry(not_after)
+        if should_warn_cert_expiry(days, warn_days):
+            logger.warning(
+                "服务器证书将在 %s 天内到期（notAfter=%s）。续期失败会导致接入层拒绝连接，请及时续期。",
+                days,
+                not_after,
+            )
+    except Exception as exc:
+        logger.debug("certificate expiry warning skipped: %s", exc)
 
 
 def compute_params_hash(params: Any) -> str:
@@ -103,6 +276,8 @@ class TrustedRunner:
         server_url: str = "http://localhost:8000",
         room_id: Optional[str] = None,
         command: Optional[str] = None,
+        tls_ca_bundle: Optional[str] = None,
+        tls_cert_fingerprint: Optional[str] = None,
     ) -> None:
         self.agent_name = agent_name
         self.server_url = server_url.rstrip("/")
@@ -111,6 +286,10 @@ class TrustedRunner:
         self.controller = ProcessGroupController()
         self.is_canceled = False
         self.current_task_id: Optional[str] = None
+
+        # 方案 A：三处 httpx 与 WebSocket 共用同一份校验证书配置。
+        self.verify = compute_verify(self.server_url, tls_ca_bundle, tls_cert_fingerprint)
+        self.ws_ssl = ws_ssl_context(self.verify)
 
         self.token: Optional[str] = None
         self.user_id: Optional[str] = None
@@ -122,7 +301,7 @@ class TrustedRunner:
     def _get_client(self) -> httpx.AsyncClient:
         if self._http_client is not None:
             return self._http_client
-        return httpx.AsyncClient(verify=False, timeout=30.0)
+        return httpx.AsyncClient(verify=self.verify, timeout=30.0)
 
     # ── 授权与取消控制 ────────────────────────────────────
 
@@ -601,13 +780,16 @@ class TrustedRunner:
             if not username or not password:
                 raise ValueError("必须提供 --token，或者同时提供 --username 与 --password")
             logger.info("authenticating with server %s as user=%s ...", self.server_url, username)
-            async with httpx.AsyncClient(verify=False) as client:
+            async with httpx.AsyncClient(verify=self.verify) as client:
                 login_resp = await client.post(
                     f"{self.server_url}/api/v1/auth/login",
                     json={"username": username, "password": password},
                 )
                 if login_resp.status_code != 200:
-                    raise ValueError(f"登录失败 ({login_resp.status_code}): {login_resp.text}")
+                    raise ValueError(
+                        f"登录失败 ({login_resp.status_code}): "
+                        f"{truncate_error_body(login_resp.text)}"
+                    )
                 data = login_resp.json()
                 token = data.get("access_token")
                 self.user_id = data.get("user", {}).get("id")
@@ -619,7 +801,7 @@ class TrustedRunner:
 
         # 自动解析房间标识（支持传入房间名称自动解析为房间 UUID）
         try:
-            async with httpx.AsyncClient(verify=False, timeout=10.0) as client:
+            async with httpx.AsyncClient(verify=self.verify, timeout=10.0) as client:
                 rooms_resp = await client.get(f"{self.server_url}/api/v1/rooms", headers={"Authorization": f"Bearer {token}"})
                 if rooms_resp.status_code == 200:
                     for r in rooms_resp.json().get("rooms", []):
@@ -637,7 +819,14 @@ class TrustedRunner:
         ws_url = f"{ws_server}/ws/chat/{self.room_id}?token={token}"
 
         logger.info("connecting to room %s as agent [%s] ...", self.room_id, self.agent_name)
-        async with websockets.connect(ws_url) as ws:
+        # websockets 默认（不传 ssl 参数）使用系统信任库校验；只有显式配置了
+        # 自定义 CA / 指纹时才把同一份 SSLContext 传给 wss:// 连接。
+        # 注意：wss:// 显式传 ssl=None 会被 websockets 拒绝，所以默认模式干脆不传。
+        if self.ws_ssl is not None and ws_url.startswith("wss://"):
+            connection = websockets.connect(ws_url, ssl=self.ws_ssl)
+        else:
+            connection = websockets.connect(ws_url)
+        async with connection as ws:
             # 1. 发送身份宣告帧，让系统识别为 Agent
             identify_payload = {
                 "type": "identify",
@@ -695,6 +884,14 @@ def main() -> None:
     parser.add_argument("--username", default=None, help="账号用户名（用于自动登录）")
     parser.add_argument("--password", default=None, help="账号密码（用于自动登录）")
     parser.add_argument("--command", default=None, help="可选本地 AI 执行命令，例如 codex 或 claude -p")
+    parser.add_argument(
+        "--tls-ca-bundle", default=None,
+        help="自签内网服务器的 CA bundle 路径（显式放开，仅信任该 CA）",
+    )
+    parser.add_argument(
+        "--tls-cert-fingerprint", default=None,
+        help="仅信任 SHA-256 指纹匹配的这一张服务器证书（64 位十六进制，可带冒号）",
+    )
     args = parser.parse_args()
 
     runner = TrustedRunner(
@@ -702,7 +899,11 @@ def main() -> None:
         server_url=args.server,
         room_id=args.room_id,
         command=args.command,
+        tls_ca_bundle=args.tls_ca_bundle,
+        tls_cert_fingerprint=args.tls_cert_fingerprint,
     )
+    # 尽力而为的到期提醒：只记录 WARNING，网络/证书错误都不阻断启动。
+    warn_if_cert_expiring_soon(runner.server_url, runner.verify)
     try:
         asyncio.run(runner.connect_and_run(token=args.token, username=args.username, password=args.password))
     except KeyboardInterrupt:

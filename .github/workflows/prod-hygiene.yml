@@ -1,0 +1,59 @@
+name: Production DB hygiene (legacy hub rooms)
+
+# The ONLY production-DB write entry point in this repository.
+# It is manual, runs on the self-hosted Beijing runner, and `execute` requires
+# the exact confirmation string plus a fresh pg_dump backup inside the tool.
+# See docs/verification/2026-11-12-prod-legacy-room-cleanup-tool.md.
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "check = read-only inventory; backup = dump only; execute = delete legacy hub rooms"
+        required: true
+        default: check
+        type: choice
+        options:
+          - check
+          - backup
+          - execute
+      confirm:
+        description: "execute mode requires exactly DELETE-LEGACY-HUB-ROOMS"
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  hygiene:
+    runs-on: [self-hosted, multi-agent]
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Locate the production PostgreSQL container
+        run: |
+          set -euo pipefail
+          DC="docker"
+          if ! docker info >/dev/null 2>&1; then
+            DC="sudo -n docker"
+          fi
+          name="$($DC ps --format '{{.Names}}' | grep -m1 postgres || true)"
+          if [ -z "$name" ]; then
+            echo "No running postgres container found; refusing to run." >&2
+            exit 1
+          fi
+          echo "MAPR_HYGIENE_PG_CONTAINER=$name" >> "$GITHUB_ENV"
+          echo "MAPR_HYGIENE_DOCKER_CMD=$DC" >> "$GITHUB_ENV"
+          echo "PostgreSQL container located; docker command configured."
+
+      - name: Run the hygiene tool
+        env:
+          MODE: ${{ inputs.mode }}
+          CONFIRM: ${{ inputs.confirm }}
+        run: |
+          set -euo pipefail
+          python3 scripts/verify/prod_legacy_rooms_cleanup.py \
+            --mode "$MODE" --confirm "$CONFIRM"

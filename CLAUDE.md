@@ -16,9 +16,12 @@ Step 4: 生产环境已成功迁移至北京服务器，服务在线（https://h
 ## 2. 项目状态
 
 ```
-当前阶段: 全部研发阶段已交付并合并主分支，北京生产环境恢复在线（2026-10-08）
-总体进度: 阶段 A 至阶段 F（包含主人网关、协调者、连接器、代理自助接入与 Connect with MAPR）已全部完成并合入 main。生产环境已迁移至北京服务器，Cloudflare 健康检查返回 HTTP 200，CI/CD runner（multi-agent-runner-bj）已在线就绪。
+当前阶段: 研发阶段 A–F 与第四轮审计修复全部交付并合并 main，剩余收尾事项于 2026-11-12 关闭（2026-11-12）
+总体进度: 阶段 A 至阶段 F（主人网关、协调者、连接器、代理自助接入与 Connect with MAPR）已全部完成并合入 main。生产库已迁移至 i90c20261017，北京生产 /health 为 200，自建 runner（multi-agent-runner-bj）在线。第四轮审计的 H1–H4 高危项与 CI 32 项失败根因已关闭（真实 CI：791 passed / 0 failed）。2026-11-12 主人一次性批准并收尾：接入层证书校验改严、main 合并门禁加固、生产库旧明文房间清理、alembic check 漂移治理、文档与验收状态同步。逐项证据见 docs/verification/2026-11-12-*.md。
 ```
+
+> 注意：`docs/superpowers/plans/2026-09-23-00-总路线与执行规则.md` 第 8 节的旧进度表在 A–F 交付时未同步勾选；
+> 以 `main` 的实际提交、`ACCEPTANCE_CHECKLIST.md` 和 `docs/verification/` 为准，不要以旧勾选框判断进度。
 
 ## 3. 技术栈概要
 
@@ -61,7 +64,11 @@ frontend/         React 前端
 如果你是**第一次加入**，先读 `PLAN.md` 全文，然后看
 `ACCEPTANCE_CHECKLIST.md` 和 `RUNBOOK.md` 了解当前上线状态。
 
-如果你是**回来继续工作**，看 `PLAN.md` 第 0 节和 `ROADMAP.md`。当前阶段 C 尚未开始，应等待合并决定与决策答复，按 `docs/superpowers/plans/2026-09-23-00-总路线与执行规则.md` 与 `docs/superpowers/plans/2026-09-23-C-E-后续阶段任务书.md` 准备展开。
+如果你是**回来继续工作**，看 `PLAN.md` 第 0 节、`ROADMAP.md` 第 0 节和
+`docs/verification/2026-11-12-*.md`。阶段 A–F 与第四轮审计修复均已交付，
+2026-11-12 的剩余收尾事项（证书校验、合并门禁、生产库旧明文房间清理、alembic 漂移、文档同步）已关闭；
+新的工作从 `ACCEPTANCE_CHECKLIST.md` 的未勾选项与 `decisions.md` 的最新决策开始，
+不要再按「阶段 C 尚未开始」展开——那是 2026-10-01 之前的陈旧描述。
 
 ---
 

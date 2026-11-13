@@ -3,13 +3,17 @@ from __future__ import annotations
 import secrets
 from datetime import datetime, timezone
 from typing import Optional
-from sqlalchemy import String, DateTime, ForeignKey, JSON
+from sqlalchemy import String, DateTime, ForeignKey, JSON, Index
 from sqlalchemy.orm import Mapped, mapped_column
 from app.core.database import Base
 
 
 class RoomInvite(Base):
     __tablename__ = "room_invites"
+
+    # f9a1c2d3e4b5 creates this index explicitly; declare it in metadata so
+    # autogenerate does not propose dropping it.
+    __table_args__ = (Index("ix_room_invites_room_id", "room_id"),)
 
     token: Mapped[str] = mapped_column(
         String(64), primary_key=True, default=lambda: secrets.token_urlsafe(32)

@@ -3,13 +3,18 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
-from sqlalchemy import String, Integer, DateTime, ForeignKey
+from sqlalchemy import String, Integer, DateTime, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 from app.core.database import Base
 
 
 class RoomFile(Base):
     __tablename__ = "room_files"
+
+    # d40c20261010 names this UNIQUE constraint explicitly. Declaring it here
+    # (instead of a bare unique=True) keeps ORM metadata and the migrated DB
+    # in agreement for `alembic check`.
+    __table_args__ = (UniqueConstraint("stored_name", name="uq_room_files_stored_name"),)
 
     id: Mapped[str] = mapped_column(
         String(36), primary_key=True, default=lambda: str(uuid.uuid4())
@@ -18,7 +23,7 @@ class RoomFile(Base):
         String(36), ForeignKey("rooms.id"), nullable=False, index=True
     )
     filename: Mapped[str] = mapped_column(String(255), nullable=False)
-    stored_name: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
+    stored_name: Mapped[str] = mapped_column(String(255), nullable=False)
     size: Mapped[int] = mapped_column(Integer, nullable=False)
     uploaded_by: Mapped[str] = mapped_column(String(64), nullable=False)
     uploaded_at: Mapped[datetime] = mapped_column(

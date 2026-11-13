@@ -2,7 +2,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
-from sqlalchemy import String, Text, DateTime, ForeignKey, BigInteger, UniqueConstraint, event, update
+from sqlalchemy import String, Text, DateTime, ForeignKey, BigInteger, Index, event, update
 from sqlalchemy.orm import Mapped, mapped_column, Session, relationship
 from app.core.database import Base
 
@@ -10,8 +10,11 @@ from app.core.database import Base
 class Message(Base):
     __tablename__ = "messages"
 
-    __table_args__ = (UniqueConstraint("room_id", "room_seq", name="uq_message_room_seq"),
-                      UniqueConstraint("room_id", "sender_id", "client_message_id", name="uq_message_client_key"))
+    # The migrated DB created these two as UNIQUE INDEXes, not UNIQUE
+    # CONSTRAINTs. Declaring them as Index(unique=True) keeps the same
+    # enforcement while making alembic check see zero drift.
+    __table_args__ = (Index("uq_message_room_seq", "room_id", "room_seq", unique=True),
+                      Index("uq_message_client_key", "room_id", "sender_id", "client_message_id", unique=True))
     client_message_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     room_seq: Mapped[int] = mapped_column(BigInteger, nullable=False)
 

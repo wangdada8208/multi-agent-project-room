@@ -3,12 +3,25 @@
 本文档是多智能体项目协作室的统一实施规划。
 文档整合了历史阶段成果，并以可信协作指导意见作为后续推进依据。
 
-## 0. 当前执行入口（2026-10-08）
+## 0. 当前状态（2026-11-12）
 
-当前执行 `docs/superpowers/plans/2026-09-23-00-总路线与执行规则.md`。
-阶段 A 至阶段 F 的模块已合并入 `main`，但不代表全部功能已验收。2026-10-08 审查发现协议与运行入口缺口，当前处于修复与全流程验收阶段。
-当前修复状态见 `docs/修复记录-审查问题-2026-10-08.md`，涉及兼容扩展的确认项见对应修复提案。
-生产环境已成功迁移至北京服务器，公网健康检查 `https://hub.wangdada8208.xyz/health` 恢复 HTTP 200。自建部署 runner（multi-agent-runner-bj）已就绪。
+阶段 A 至阶段 F 的功能已全部交付并合并入 `main`（B/C/D 于 2026-10-01、E 于 2026-10-05、F 于 2026-10-07/08 合并），
+生产环境于 2026-10-08 迁移至北京服务器并恢复 `/health` 200。2026-10-08 审查发现的协议与运行入口缺口，
+已通过第三、第四轮审计修复关闭；2026-10-19 生产库迁移至 `i90c20261017` 并通过独立验收，
+同一次 push 触发的真实 CI（`39194420306`）结果为 `791 passed, 30 skipped, 0 failed`、前端 `64 passed`、构建成功。
+
+2026-11-12 主人一次性批准全部剩余收尾事项，收尾范围与决策见 `decisions.md` 的「2026-11-12」节：
+
+- 接入层 4 处 `verify=False` 改为默认校验证书（方案 A），见 `docs/verification/2026-11-12-tls-hardening.md`。
+- `main` 分支保护补上管理员强制与 1 名评审，见 `docs/verification/2026-11-12-合并门禁与CI证据.md`。
+- 生产库旧明文房间清理，见 `docs/verification/2026-11-12-prod-legacy-room-cleanup-tool.md` 及执行记录。
+- 仓库级 `alembic check` 漂移治理，见 `docs/verification/2026-11-12-schema-drift-fix.md`。
+- 本地全量验收与文档状态同步，见 `docs/verification/2026-11-12-local-full-verification.md`
+  与 `docs/verification/2026-11-12-live-smoke-acceptance.md`。
+
+**当前执行入口**：`ACCEPTANCE_CHECKLIST.md`（验收状态）与 `docs/verification/`（逐项证据）。
+本文件第 2 节的 Phase 0/1/2 勾选框属于 2026-09-19 的旧规划轨道，A–F 交付时未同步勾选，
+不再作为进度判断依据；以 `main` 的提交、真实 CI 运行与验收记录为准。
 
 ## 1. 历史阶段演进概况
 
