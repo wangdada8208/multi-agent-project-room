@@ -7,17 +7,24 @@ item with the date, tester, environment, and evidence link or log snippet.
 
 | Area | Status | Notes |
 | --- | --- | --- |
-| GitHub Actions deploy | Passed 2026-10-08 | 北京 self-hosted runner multi-agent-runner-bj 部署成功，自动完成 ghcr 镜像拉取与 alembic 数据库迁移（f9a1c2d3e4b5）。 |
-| Production health | Passed 2026-10-08 | 生产环境已成功迁移至北京服务器，Cloudflare 回源 HTTP 200，/health、/connect-demo 与 /agents/skill.md 均在线正常响应。 |
+| GitHub Actions deploy | Passed 2026-11-13 | 北京 self-hosted runner `multi-agent-runner-bj` 在线。2026-11-13 三次 push 触发的真实 Deploy 运行 `43458558843` / `43459786523` 均 success（`test` + `build` 通过、`deploy` 按设计跳过）；最新 `b007ff1` 运行见 `docs/verification/2026-11-12-合并门禁与CI证据.md`。 |
+| Production health | Passed 2026-11-12/13 | `https://hub.wangdada8208.xyz/health` 实测 200 `{"status":"ok","service":"Multi-Agent Project Room"}`；生产库 `alembic_version = i90c20261017`，`/ready` 200（2026-10-19 迁移验收）。 |
 | Dual-machine drill | Passed 2026-09-30 | 两机同群，非名单发送者被丢弃。Mac(甲机)与Windows(乙机)分别运行XMTP成员进程，双向互发消息正常解密，两端owner-notes记录均沉淀，白名单外发送者被ledger.jsonl记录丢弃。 |
-| Chat persistence | Needs manual pass | Refresh the room and confirm recent messages remain visible. |
-| Agent presence panel | Needs manual pass | Confirm Claude and Codex online state updates within a few seconds. |
-| A2A task routing | Needs manual pass | Send `@Codex 你在吗` and confirm task reaches completed. |
-| A2A relay dialogue | Needs manual pass | Start a 30 second Codex/Claude dialogue and confirm no per-turn `@` is needed. |
-| Knowledge module | Needs manual pass | Upload, list, read, and search a Markdown document. |
-| Repository module | Needs manual pass | Confirm branch, latest commit, status, log, and diff render correctly. |
-| Approval flow | Needs manual pass | Create, approve, reject, and observe WebSocket updates. |
-| Responsive/dark UI | Needs manual pass | Check desktop, narrow window, and dark mode toggle. |
+| Fourth-round audit closeout | Passed 2026-10-19 / 2026-11-12 | 真实 CI `39194420306`：后端 `791 passed, 30 skipped, 0 failed`、前端 `64 passed`、构建成功。2026-11-12 本地隔离 PG17+Redis 全量复核 `795 passed, 30 skipped, 0 failed`（含新增 4 项回归用例），见 `docs/verification/2026-11-12-local-full-verification.md`。 |
+| TLS verification (local runner) | Passed 2026-11-12 | 4 处 `verify=False` 全部清除；方案 A（默认系统信任库 + CA/指纹显式放开 + 到期提醒）；新增 25 项测试通过，变异验证生效，见 `docs/verification/2026-11-12-tls-hardening.md`。 |
+| main branch merge gate | Passed 2026-11-12 | 经典分支保护：4 项必需检查、`strict`、`enforce_admins=true`、1 名评审、禁 force push/删除、要求会话解决。回读证据见 `docs/verification/2026-11-12-合并门禁与CI证据.md`。 |
+| `alembic check` drift | Passed 2026-11-12 | 真实迁移库上 `alembic check` → `No new upgrade operations detected.`（exit 0），单 head 仍为 `i90c20261017`，未新增迁移、未改生产 schema，见 `docs/verification/2026-11-12-schema-drift-fix.md`。 |
+| Production legacy hub-room cleanup | Passed 2026-11-14 | 只读盘点 `43460928682` → 备份＋单事务删除 `43462676253`：7 个旧明文房间删除，4 个 `_agent_` 与 1 个 xmtp 房间保留，零孤儿行，`/health` 200、`/ready` `i90c20261017`，见 `docs/verification/2026-11-12-prod-legacy-room-cleanup-tool.md`。 |
+| Live backend smoke | Passed 2026-11-12 | 本机起真实 FastAPI，`/health`、`/ready`、注册登录鉴权、房间与权限、双 WS 客户端、审批流 4 个实时帧、知识库增删查搜、仓库面板、Agent Card 等共 17 项 PASS；见 `docs/verification/2026-11-12-live-smoke-acceptance.md`。 |
+| Repository panel defect | Fixed 2026-11-12 | 实跑发现 `git/status` 把 `SMOKE.md` 报成 `MOKE.md`（`_git()` 的 `strip()` 吃掉首列状态位），已修并加 4 项回归测试，见 `docs/verification/2026-11-12-live-smoke-acceptance.md`。 |
+| Chat persistence | By design / needs manual pass | 加密房间正文不落 Hub（已由 `backend/tests/test_xmtp_room_storage.py` 与实跑双重确认）；刷新后可见依赖本机 XMTP 历史，需在浏览器人工确认。 |
+| Agent presence panel | Passed (live WS) 2026-11-12 | 实跑 2 个 WS 客户端收到 `presence_snapshot` 含 2 名参与者。 |
+| A2A task routing | Needs manual pass | 无本地 AI 命令/适配器时不能完成 `@Codex -> completed`；实跑中 `agent/list` 为空。需人工在接好适配器后确认。 |
+| A2A relay dialogue | Needs manual pass | 30 秒 Codex/Claude 连续对话未覆盖（无本地 AI 命令）。 |
+| Knowledge module | Passed 2026-11-12 | 实跑 create/list/read/search 唯一关键字，且服务重启后仍在。 |
+| Repository module | Passed 2026-11-12 | 实跑 `/git/{status,branch,log,diff}` 均 200；`git/status` 文件名截断缺陷已修并回归。 |
+| Approval flow | Passed 2026-11-12 | 实跑 create/pending/approve/reject，并收到 4 个 `approval_update` WS 帧（`pending`/`approved`/`rejected`）。 |
+| Responsive/dark UI | Needs manual pass | 浏览器专属：`frontend/src` 只有 `[data-theme="light"]` 覆盖、没有主题切换按钮；按 `docs/verification/2026-11-12-live-smoke-acceptance.md` 的 DevTools 步骤人工确认。 |
 | Owner gateway consent (dev) | Passed 2026-10-01 | 单机双网关：批准后只收到时段，越界自动拒绝，重复批准被拒，缺请求头 403。 |
 | Coordinator and scoreboard (dev) | Passed 2026-10-01 | 单机三网关：未授权 task.run 拒发且不调模型，第一轮质疑重试、第二轮通过完成，计分板准确统计采纳与拒发次数。 |
 | Real connectors and privacy redact (dev) | Passed 2026-10-01 | 连接器体系就绪：本地日历、Google日历与Gmail客票连接器，强制 0600 凭据权限隔离，隐私脱敏正则过滤手机邮箱，越界约束自动拒发。 |
@@ -118,8 +125,22 @@ Target: `https://hub.wangdada8208.xyz`
 
 ## Release Notes Checklist
 
-- [ ] `PLAN.md` reflects current progress.
-- [ ] `CLAUDE.md` reflects current phase and handoff instructions.
-- [ ] `RUNBOOK.md` has current deploy and adapter commands.
-- [ ] Any known limitations are listed in `ROADMAP.md` or `PLAN.md`.
-- [ ] GitHub Actions latest run on `main` is green.
+- [x] `PLAN.md` reflects current progress. — 2026-11-12 第 0 节重写为 A–F 交付 + 第四轮修复 + 收尾状态。
+- [x] `CLAUDE.md` reflects current phase and handoff instructions. — 2026-11-12 修正「阶段 C 尚未开始」等陈旧描述。
+- [x] `RUNBOOK.md` has current deploy and adapter commands. — 2026-11-13 补 Redis service、作业依赖与 `prod-hygiene.yml` 入口。
+- [x] Any known limitations are listed in `ROADMAP.md` or `PLAN.md`. — 见 `ROADMAP.md` 第 0/1/4 节与 `docs/verification/2026-11-12-*.md`。
+- [x] GitHub Actions latest run on `main` is green. — 2026-11-13 三次 push 触发的 Deploy 运行见 `docs/verification/2026-11-12-合并门禁与CI证据.md` 与下方「2026-11-12 收尾验证」。
+
+## 2026-11-12 收尾验证（证据索引）
+
+| 事项 | 证据 |
+| --- | --- |
+| 接入层证书校验改严（方案 A） | `docs/verification/2026-11-12-tls-hardening.md` |
+| `main` 合并门禁与真实 CI 证据 | `docs/verification/2026-11-12-合并门禁与CI证据.md` |
+| 生产库旧明文房间清理工具、本地验证与执行记录 | `docs/verification/2026-11-12-prod-legacy-room-cleanup-tool.md` |
+| 仓库级 `alembic check` 漂移治理 | `docs/verification/2026-11-12-schema-drift-fix.md` |
+| 本地全量 CI 等价验证 | `docs/verification/2026-11-12-local-full-verification.md` |
+| 实跑后端验收映射（含仓库面板缺陷） | `docs/verification/2026-11-12-live-smoke-acceptance.md` |
+
+仍需人工完成的浏览器/AI 适配器验收项见上表标为 `Needs manual pass` 的行，
+以及 `docs/verification/2026-11-12-live-smoke-acceptance.md` 的「remaining human-only checks」一节。

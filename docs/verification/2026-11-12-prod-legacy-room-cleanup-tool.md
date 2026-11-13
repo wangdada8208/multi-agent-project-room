@@ -28,8 +28,11 @@
 
 - 子表与外键列**全部由数据库目录动态发现**（`information_schema` + `pg_constraint`），不写死表清单。
   实测发现 `analytics_events.room_id` 没有外键，写死清单会漏掉它并留下孤儿行。
-- 删除顺序：`UPDATE messages SET parent_id = NULL ...`（自引用 FK）→ 删除引用 `messages` 的表
-  （如 `a2a_tasks.source_message_id`）→ 删除所有含 `room_id` 的表 → 删除 `rooms`。
+- 删除顺序：`UPDATE messages SET parent_id = NULL ...`（自引用 FK）→ 按外键的
+  `ON DELETE` 动作处理引用 `messages` 的表（`SET NULL`/`SET DEFAULT` 用 UPDATE 置空/置默认，
+  只有 NO ACTION / RESTRICT / CASCADE 才删除整行）→ 删除所有含 `room_id` 的表 → 删除 `rooms`。
+  **这一条很重要**：保留房间（例如 `_agent_`）里的任务行可能引用了旧房间的消息，
+  整行删除会越出批准范围；置空引用才能既保住数据又不阻塞删除。
 - 待删集合用 `left(id,7) <> '_agent_'` 界定，与 `transport='hub'` 同时成立才算，避免误伤内部通道。
 - 单事务；`ON_ERROR_STOP=1`；空集合时回滚/直接零写入退出。
 - 不打印数据库口令、房间完整 id、聊天正文；错误信息经过脱敏。
@@ -58,19 +61,27 @@ legacy / 非 legacy 行、自引用 `parent_id` 消息、`a2a_tasks.source_messa
 - 错误 `--confirm` 零删除；
 - 正确 `--confirm` 后：待删房间为 0，`_agent_` 与 xmtp 房间及其子表行完整保留，
   所有 legacy 子表行清空，无 `room_id` / `message` 孤儿行；
+- 新增回归：**`_agent_` 房间里的任务引用了旧房间消息时，该任务行必须保留、
+  只把 `source_message_id` 置空**（初版工具会整行删除，属于越界删除，已修正并加用例）；
 - 工具源码通过 `ast.parse(feature_version=(3,6))` 语法兼容检查。
 
 结果：
 
 ```text
 $ .venv/bin/python -m pytest scripts/verify/test_prod_legacy_rooms_cleanup.py -q
-5 passed in 16.88s
+6 passed in 18.54s
 ```
 
-**过程中发现并修复的一个测试数据集缺陷**（不是产品缺陷）：`messages` 上
-`uq_message_room_seq(room_id, room_seq)` 唯一索引、`room_seq` 默认 0，
-同一房间插入多条消息会自相冲突。已为每条消息显式指定不同的 `room_seq`，
-修复后 5/5 通过。这也说明工具的目录驱动方式是必要的——手写 SQL 很容易忽略唯一约束。
+**过程中发现并修复的两个问题**：
+
+1. 测试数据集缺陷（不是产品缺陷）：`messages` 上 `uq_message_room_seq(room_id, room_seq)`
+   唯一索引、`room_seq` 默认 0，同一房间插入多条消息会自相冲突。已为每条消息显式指定
+   不同的 `room_seq`。这也说明目录驱动方式是必要的——手写 SQL 很容易忽略唯一约束。
+2. **工具本身的越界删除缺陷**：初版对引用 `messages` 的外键一律 `DELETE`，
+   生产只读盘点显示 `a2a_tasks.source_message_id` 为 `ON DELETE SET NULL`，
+   保留房间里的任务若引用旧消息会被误删。改为按 `confdeltype` 分别用
+   `UPDATE ... SET col = NULL` / `SET DEFAULT` / `DELETE`，并补回归用例。
+   该修正在**生产执行之前**完成并重新跑通全部 6 项本地测试。
 
 ## 3. 复核命令（任何人都可照抄）
 
@@ -89,9 +100,84 @@ gh workflow run prod-hygiene.yml --ref main \
 gh workflow run prod-hygiene.yml --ref main -f mode=check
 ```
 
-## 4. 生产执行记录
+## 4. 生产执行记录（真实运行结果）
 
-> 本节由组长在真实 dispatch 后补写，见下方「执行记录」。
-> 截至本文初次落盘：工具与本地验证已完成，生产尚未执行。
+执行时间：2026-11-14 00:27（Asia/Taipei）/ 2026-11-13 16:27 UTC。
+全部通过 `prod-hygiene.yml` 的 `workflow_dispatch` 在北京自建 runner 上完成，组长未直接登录服务器。
 
-（执行记录待补）
+| 运行 | 模式 | 结论 | 作用 |
+|---|---|---|---|
+| `43458683262` | check | failure | 首次尝试：`sudo -n docker` 因 sudo secure_path 找不到 docker 二进制（已修工作流） |
+| `43459834227` | check | failure | runner 到 github.com 的 checkout 连接超时（网络抖动，重试后恢复） |
+| `43460928682` | check | **success** | 只读盘点，输出 7 个待删房间与完整依赖图 |
+| `43461966513` | check | **success** | 复核「保留房间任务引用旧消息」修正后的 SQL（UPDATE 置空而非 DELETE） |
+| `43462676253` | execute | **success** | 备份 → 单事务删除 → 断言通过 |
+
+执行后另发起独立 `check` 复核。北京 runner 到 github.com 的 `actions/checkout` 偶发连接超时
+（`43463042336` 失败、`43463703590` 重试），属网络抖动，**不影响已提交的事务**；
+此前 `43458683262` 也因 `sudo` secure_path 找不到 docker 失败（已改为解析绝对路径后修复），
+`43459834227` 因同一网络抖动失败，第三次 `43460928682` 成功。
+
+即使不依赖事后复核，`43462676253` 自身在 COMMIT 之后已重新取数并断言通过：
+`rooms_legacy 0`、`rooms_agent 4`、`rooms_xmtp 1`、`room_orphans 0`、
+`message_orphans 0`、`assertions_ok=true`；再加上生产 `/health` 200、
+`/ready` 仍为 `i90c20261017`（见本节末尾）。因此清理结果的证据是充分的，
+事后 `check` 只是额外确认。
+
+只读盘点（`43460928682` / `43461966513`）：
+
+```text
+read_only session         : on
+total rooms 12 | xmtp rooms 1 | _agent_ rooms 4 | legacy hub rooms 7 (DELETE TARGET)
+a2a_tasks 41 | analytics_events 15 | messages 15 | room_permissions 1
+messages referencing them via parent_id: 25
+CHECK OK - session was READ ONLY, nothing modified.
+JSON_SUMMARY {"mode":"check","read_only":true,"rooms_total":12,"rooms_xmtp":1,
+ "rooms_agent":4,"rooms_legacy":7,"msgs_in_legacy":15,"msgs_parent_ref":25,
+ "room_id_tables":11,"fk_constraints":12}
+```
+
+执行（`43462676253`）：
+
+```text
+BACKUP_PATH /opt/multi-agent-project-room/backups/legacy-room-backup-20261114T002701102148/database.dump
+backup verified: non-empty, starts with PGDMP
+Running ONE transaction (BEGIN ... COMMIT) ...
+Before / After counts:
+  total rooms              12 ->  5
+  xmtp rooms                1 ->  1
+  _agent_ rooms             4 ->  4
+  legacy hub rooms          7 ->  0
+  messages in legacy rooms 15 ->  0
+  room_id orphans           0 ->  0
+  message-FK orphans        0 ->  0
+  a2a_tasks                41 ->  0
+  analytics_events          15 ->  0
+  messages                  15 ->  0
+  room_permissions           1 ->  0
+EXECUTE OK - legacy hub rooms deleted; _agent_ and xmtp rooms preserved;
+             no orphan rows; single transaction committed.
+JSON_SUMMARY {"mode":"execute","backup_ok":true,"assertions_ok":true, ...}
+```
+
+执行后线上复核（同一时刻直接请求生产）：
+
+```text
+GET https://hub.wangdada8208.xyz/health
+200 {"status":"ok","service":"Multi-Agent Project Room"}
+
+GET https://hub.wangdada8208.xyz/ready
+200 {"status":"ready","service":"Multi-Agent Project Room",
+     "database":"connected","revision":"i90c20261017"}
+```
+
+**结论**：生产库 7 个旧明文房间及其 41 条任务、15 条埋点、15 条消息、1 条权限记录已删除；
+4 个 `_agent_` 内部通道与 1 个 xmtp 房间完整保留；零孤儿行；删除在单个事务内完成，
+删除前已生成并校验 `pg_dump` 备份；生产服务与迁移版本未受影响。
+
+### 4.1 恢复方式（如需要）
+
+备份位于生产主机 `/opt/multi-agent-project-room/backups/legacy-room-backup-20261114T002701102148/database.dump`
+（`PGDMP` 自定义格式）。恢复须由人类批准，并且**必须先停掉所有写入该库的 Hub**，
+按 `RUNBOOK.md` 的「Deploy Notes」把备份还原到独立的影子库验证后再决定，
+不要在正在运行的库上直接覆盖。

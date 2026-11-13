@@ -128,8 +128,14 @@ triggered manually with `workflow_dispatch`.
 
 Latest workflow expectations:
 
-- Test job runs on GitHub-hosted Ubuntu with PostgreSQL service.
+- Test job runs on GitHub-hosted Ubuntu with real PostgreSQL **and real Redis** services;
+  `deploy.yml` 的 test job 还包含 "Prove real PostgreSQL and real Redis are wired (no silent skip)" 步骤，
+  并用数字 IP `127.0.0.1` 作为 DSN 主机，避免测试里的 DNS stub 劫持数据库连接。
 - Deploy job runs on the self-hosted runner labeled `multi-agent`.
+- `deploy.yml` 的 `build` 依赖 `test`、`deploy` 依赖 `build`；push 到 main 只跑 test+build，
+  `deploy` 仅在 `workflow_dispatch` 且 `deploy=true` 时执行。
+- 生产库旧明文房间清理是独立的手动入口 `prod-hygiene.yml`（`workflow_dispatch`，
+  默认 `mode=check` 只读），见 `docs/verification/2026-11-12-prod-legacy-room-cleanup-tool.md`。
 - `scripts/deploy.sh` uses immutable image tags, saves the current Compose/env
   files and a protected PostgreSQL backup, then checks the release health.
 - Before running Alembic, the script stops its Compose backend. Every other Hub

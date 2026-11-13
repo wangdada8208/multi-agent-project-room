@@ -14,7 +14,10 @@
 
 - 接入层 4 处 `verify=False` 改为默认校验证书（方案 A），见 `docs/verification/2026-11-12-tls-hardening.md`。
 - `main` 分支保护补上管理员强制与 1 名评审，见 `docs/verification/2026-11-12-合并门禁与CI证据.md`。
-- 生产库旧明文房间清理，见 `docs/verification/2026-11-12-prod-legacy-room-cleanup-tool.md` 及执行记录。
+- 生产库旧明文房间清理：2026-11-14 已在自建 runner 上执行完成（先只读盘点、再做 `pg_dump`
+  备份、单事务删除、执行后复核）。7 个旧房间删除，4 个 `_agent_` 内部通道与 1 个 xmtp 房间保留，
+  零孤儿行，`/health` 200、`/ready` 仍为 `i90c20261017`；见
+  `docs/verification/2026-11-12-prod-legacy-room-cleanup-tool.md` 及执行记录。
 - 仓库级 `alembic check` 漂移治理，见 `docs/verification/2026-11-12-schema-drift-fix.md`。
 - 本地全量验收与文档状态同步，见 `docs/verification/2026-11-12-local-full-verification.md`
   与 `docs/verification/2026-11-12-live-smoke-acceptance.md`。
