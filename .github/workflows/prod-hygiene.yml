@@ -36,9 +36,27 @@ jobs:
       - name: Locate the production PostgreSQL container
         run: |
           set -euo pipefail
-          DC="docker"
-          if ! docker info >/dev/null 2>&1; then
-            DC="sudo -n docker"
+          # sudo's secure_path does not always contain the docker binary, so
+          # resolve an ABSOLUTE path before ever prefixing it with `sudo -n`.
+          DOCKER_BIN=""
+          for cand in "$(command -v docker 2>/dev/null || true)" \
+                      /usr/bin/docker /usr/local/bin/docker /snap/bin/docker; do
+            if [ -n "$cand" ] && [ -x "$cand" ]; then
+              DOCKER_BIN="$cand"
+              break
+            fi
+          done
+          if [ -z "$DOCKER_BIN" ]; then
+            echo "No docker binary found; refusing to run." >&2
+            exit 1
+          fi
+          if "$DOCKER_BIN" info >/dev/null 2>&1; then
+            DC="$DOCKER_BIN"
+          elif sudo -n "$DOCKER_BIN" info >/dev/null 2>&1; then
+            DC="sudo -n $DOCKER_BIN"
+          else
+            echo "Docker daemon is unreachable (even via sudo -n); refusing to run." >&2
+            exit 1
           fi
           name="$($DC ps --format '{{.Names}}' | grep -m1 postgres || true)"
           if [ -z "$name" ]; then
