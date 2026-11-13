@@ -550,5 +550,42 @@ def test_execute_with_correct_confirm_deletes_legacy_only(db):
     assert scalar(env, "SELECT count(*) FROM public.messages WHERE id='m-l1-2';") == 0
 
 
+def test_task_in_preserved_room_referencing_legacy_message_is_not_deleted(db):
+    """Regression: a task in an _agent_ room may point at a legacy message.
+
+    The FK is ON DELETE SET NULL, so the correct behaviour is to NULL the
+    reference and KEEP the row. An earlier version of the tool deleted every
+    row whose FK pointed at a legacy message, which would destroy data outside
+    the approved deletion scope.
+    """
+    env = db
+    reset_dataset(env)
+    run_sql(env, """
+        INSERT INTO public.a2a_tasks (id, query, room_id, source_message_id)
+        VALUES ('task-cross','cross-room task','_agent_internal','m-l1-1');
+    """)
+    assert scalar(env, "SELECT count(*) FROM public.a2a_tasks WHERE id='task-cross';") == 1
+
+    rc, out, err = run_tool(env, "execute", CONFIRM_TOKEN)
+    print("\n===== execute (cross-room FK) output =====\n" + out)
+    assert rc == 0, err + "\n" + out
+    assert "EXECUTE OK" in out
+
+    # Row survives in the preserved internal channel; only its dangling
+    # message reference is cleared.
+    assert scalar(
+        env,
+        "SELECT count(*) FROM public.a2a_tasks "
+        "WHERE id='task-cross' AND room_id='_agent_internal';",
+    ) == 1
+    assert run_sql(
+        env, "SELECT COALESCE(source_message_id,'NULL') "
+             "FROM public.a2a_tasks WHERE id='task-cross';"
+    ).strip() == "NULL"
+    assert scalar(env, "SELECT count(*) FROM public.rooms WHERE id='_agent_internal';") == 1
+    assert room_orphans(env) == 0
+    assert message_orphans(env) == 0
+
+
 if __name__ == "__main__":
     sys.exit(pytest.main([os.path.abspath(__file__), "-v", "-s"]))

@@ -298,10 +298,28 @@ def build_execute_sql(cat):
                 "WHERE " + col + " IN (" + legacy_msg_ids + ");"
             )
         else:
-            stmts.append(
-                "DELETE FROM " + child + " WHERE " + col + " IN (" +
-                legacy_msg_ids + ");"
-            )
+            # A message may be referenced by a row that lives in a room we
+            # MUST preserve (e.g. an _agent_ task). Deleting that row would
+            # destroy data outside the approved scope. Honour the FK's ON DELETE
+            # action instead: SET NULL / SET DEFAULT rows are nulled or reset,
+            # and only hard-dependency (NO ACTION / RESTRICT / CASCADE) rows are
+            # deleted. In the production schema a2a_tasks.source_message_id is
+            # ON DELETE SET NULL, so those rows survive with a NULL reference.
+            if f["deltype"] == "n":
+                stmts.append(
+                    "UPDATE " + child + " SET " + col + " = NULL "
+                    "WHERE " + col + " IN (" + legacy_msg_ids + ");"
+                )
+            elif f["deltype"] == "d":
+                stmts.append(
+                    "UPDATE " + child + " SET " + col + " = DEFAULT "
+                    "WHERE " + col + " IN (" + legacy_msg_ids + ");"
+                )
+            else:
+                stmts.append(
+                    "DELETE FROM " + child + " WHERE " + col + " IN (" +
+                    legacy_msg_ids + ");"
+                )
     # 3) Every public room_id table (messages included), topologically ordered.
     for schema, table in cat["ordered_tables"]:
         stmts.append(
