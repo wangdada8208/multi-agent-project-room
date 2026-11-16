@@ -5,7 +5,7 @@ import logging
 from datetime import datetime, timezone, timedelta
 import hashlib
 import json
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.approval.models import Approval, ActionGrant
@@ -25,6 +25,12 @@ async def create_approval(
     metadata: dict | None = None,
 ) -> Approval:
     """Create a new approval request."""
+    task_id = (metadata or {}).get("task_id")
+    if task_id:
+        task = await tm.get_task(str(task_id))
+        if task is None or task.get("room_id") != room_id:
+            raise ValueError("task_id does not belong to this room")
+
     approval = Approval(
         room_id=room_id,
         requestor_id=requestor_id,
@@ -50,7 +56,6 @@ async def create_approval(
         room_id,
         {'type': 'system', 'content': f'📋 审批请求: {title} ({risk_level})'},
     )
-    task_id = (metadata or {}).get("task_id")
     if task_id:
         await tm.link_approval(str(task_id), approval.id)
 
@@ -106,9 +111,16 @@ async def decide_approval(
         if perm is None or perm.role not in ("owner", "member"):
             raise ValueError("Decider has insufficient role to decide approval")
 
-    approval.status = decision
-    approval.decided_by = decider_id
-    approval.decided_at = datetime.now(timezone.utc)
+    now = datetime.now(timezone.utc)
+    claim = await db.execute(
+        update(Approval)
+        .where(Approval.id == approval_id, Approval.status == "pending")
+        .values(status=decision, decided_by=decider_id, decided_at=now)
+    )
+    if claim.rowcount != 1:
+        await db.rollback()
+        await db.refresh(approval)
+        return approval  # Lost the race; return the current state
     await db.commit()
     await db.refresh(approval)
     logger.info("approval decided id=%s decision=%s decider=%s", approval_id, decision, decider_id)
@@ -224,7 +236,14 @@ async def verify_and_consume_grant(
     if grant.params_hash != expected_hash:
         raise ValueError("Action grant parameter hash mismatch: arguments have been tampered with")
 
-    grant.consumed_at = now
+    claim = await db.execute(
+        update(ActionGrant)
+        .where(ActionGrant.id == grant_id, ActionGrant.consumed_at.is_(None))
+        .values(consumed_at=now)
+    )
+    if claim.rowcount != 1:
+        await db.rollback()
+        raise ValueError("Action grant has already been consumed")
     await db.commit()
     await db.refresh(grant)
     logger.info("action grant consumed id=%s scope=%s", grant.id, scope)

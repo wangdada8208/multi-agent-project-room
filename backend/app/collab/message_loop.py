@@ -137,6 +137,9 @@ class MessageLoop:
         self.current_round = 0
         self.turns: list[TurnResult] = []
         self.consensus_summary: str | None = None
+        self.candidate_proposal: Optional[CandidateSlotProposal] = None
+        self.suspension_reason: Optional[str] = None
+        self.required_grant_scope: Optional[str] = None
 
     @property
     def active_agent_index(self) -> int:

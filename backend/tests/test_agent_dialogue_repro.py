@@ -6,6 +6,8 @@ import pytest
 from httpx import AsyncClient
 
 from app.models.room import Room
+from app.models.room_permission import RoomPermission
+from sqlalchemy import select
 from app.models.user import User
 from app.chat import service as chat_service
 from trusted_runner import TrustedRunner
@@ -48,7 +50,7 @@ async def test_trusted_runner_detect_dialogue_request():
 
 
 @pytest.mark.asyncio
-async def test_trusted_runner_a2a_dialogue_cycle(client: AsyncClient, auth_headers: dict):
+async def test_trusted_runner_a2a_dialogue_cycle(client: AsyncClient, auth_headers: dict, db):
     """Verify end-to-end A2A dialogue between two TrustedRunner instances."""
     room_id = "test-a2a-collab-room"
 
@@ -59,21 +61,31 @@ async def test_trusted_runner_a2a_dialogue_cycle(client: AsyncClient, auth_heade
         headers=auth_headers,
     )
 
+    resp_a = await client.post(
+        "/api/v1/auth/register",
+        json={"username": "codex-1", "password": "password123", "display_name": "Codex-1"},
+    )
+    assert resp_a.status_code == 200
+    resp_b = await client.post(
+        "/api/v1/auth/register",
+        json={"username": "claude-1", "password": "password123", "display_name": "Claude-1"},
+    )
+    assert resp_b.status_code == 200
+
     runner_a = TrustedRunner(agent_name="Codex-1", server_url="http://testserver", room_id=room_id)
     runner_b = TrustedRunner(agent_name="Claude-1", server_url="http://testserver", room_id=room_id)
 
-    token = auth_headers["Authorization"].replace("Bearer ", "")
-    runner_a.token = token
-    runner_b.token = token
-    runner_a.user_id = "test-user-id"
-    runner_b.user_id = "test-user-id"
+    runner_a.token = resp_a.json()["access_token"]
+    runner_b.token = resp_b.json()["access_token"]
+    runner_a.user_id = resp_a.json()["user"]["id"]
+    runner_b.user_id = resp_b.json()["user"]["id"]
 
     # Mock client on runner
     runner_a._http_client = client
     runner_b._http_client = client
 
     # 1. Runner A registers agent card
-    reg_ok = await runner_a.register_agent_card(token)
+    reg_ok = await runner_a.register_agent_card(runner_a.token)
     assert reg_ok is True
 
     # 2. Runner A starts dialogue with Runner B
@@ -84,6 +96,13 @@ async def test_trusted_runner_a2a_dialogue_cycle(client: AsyncClient, auth_heade
         max_turns=4,
     )
     assert dialogue_id is not None
+
+    # Runner B must hold a room role before it can send into the dialogue, and
+    # the shared test account (tester) must hold one to read dialogue status.
+    db.add(RoomPermission(room_id=room_id, user_id=runner_b.user_id, role="member"))
+    tester = (await db.execute(select(User).where(User.username == "tester"))).scalar_one()
+    db.add(RoomPermission(room_id=room_id, user_id=tester.id, role="member"))
+    await db.commit()
 
     # 3. Check dialogue status from server
     status_resp = await client.post(
@@ -133,12 +152,7 @@ async def test_trusted_runner_a2a_dialogue_cycle(client: AsyncClient, auth_heade
 @pytest.mark.asyncio
 async def test_agent_message_distinct_sender_identity(client: AsyncClient, auth_headers: dict):
     """Verify that agent messages are saved with distinct agent composite sender_id and not the human user_id."""
-    room_resp = await client.post(
-        "/api/v1/rooms",
-        json={"name": "Identity Room", "description": "test"},
-        headers=auth_headers,
-    )
-    room_id = room_resp.json()["room"]["id"]
+    room_id = "dialogue-identity-room"
 
     d_resp = await client.post(
         "/a2a/dialogue-rpc",
@@ -148,8 +162,8 @@ async def test_agent_message_distinct_sender_identity(client: AsyncClient, auth_
             "method": "dialogues/create",
             "params": {
                 "room_id": room_id,
-                "initiator_agent": "Codex-1",
-                "participants": ["Codex-1", "Claude-1"],
+                "initiator_agent": "tester",
+                "participants": ["tester", "Claude-1"],
             },
             "id": "id-create",
         },
@@ -165,8 +179,8 @@ async def test_agent_message_distinct_sender_identity(client: AsyncClient, auth_
             "params": {
                 "dialogue_id": dialogue_id,
                 "room_id": room_id,
-                "sender_id": "agent_codex_1_custom",
-                "sender_name": "Codex-1",
+                "sender_id": "agent_tester",
+                "sender_name": "tester",
                 "target_agent": "Claude-1",
                 "content": "我是 Codex-1，在线协作中。",
             },
@@ -176,6 +190,11 @@ async def test_agent_message_distinct_sender_identity(client: AsyncClient, auth_
     assert msg_resp.status_code == 200
     assert msg_resp.json()["result"]["status"] == "sent"
 
+    me = await client.get("/api/v1/auth/me", headers=auth_headers)
+    human_id = me.json()["user"]["id"]
+
     msgs_resp = await client.get(f"/api/v1/rooms/{room_id}/messages", headers=auth_headers)
     assert msgs_resp.status_code == 200
-    assert msgs_resp.json()["messages"] == []
+    senders = {m["sender_id"] for m in msgs_resp.json()["messages"]}
+    assert senders == {"agent_tester"}
+    assert human_id not in senders

@@ -49,20 +49,23 @@ async def create_approval(
         raise HTTPException(status_code=404, detail="Room not found")
 
     await require_role(room_id, current_user, db, min_role="member")
-    approval = await approval_service.create_approval(
-        db=db,
-        room_id=room_id,
-        requestor_id=current_user.id,
-        title=payload.title,
-        description=payload.description,
-        risk_level=payload.risk_level,
-        metadata={
-            **(payload.metadata or {}),
-            **({"task_id": payload.task_id} if payload.task_id else {}),
-            **({"requested_action": payload.requested_action} if payload.requested_action else {}),
-            **({"risk_summary": payload.risk_summary} if payload.risk_summary else {}),
-        } or None,
-    )
+    try:
+        approval = await approval_service.create_approval(
+            db=db,
+            room_id=room_id,
+            requestor_id=current_user.id,
+            title=payload.title,
+            description=payload.description,
+            risk_level=payload.risk_level,
+            metadata={
+                **(payload.metadata or {}),
+                **({"task_id": payload.task_id} if payload.task_id else {}),
+                **({"requested_action": payload.requested_action} if payload.requested_action else {}),
+                **({"risk_summary": payload.risk_summary} if payload.risk_summary else {}),
+            } or None,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"approval": approval.to_dict()}
 
 
@@ -99,10 +102,13 @@ async def approve_approval(
     if approval is None:
         raise HTTPException(status_code=404, detail="Approval not found")
     await require_role(approval.room_id, current_user, db, min_role="member")
-    result = await approval_service.decide_approval(
-        db=db, approval_id=approval_id, decider_id=current_user.id,
-        decision=payload.decision,
-    )
+    try:
+        result = await approval_service.decide_approval(
+            db=db, approval_id=approval_id, decider_id=current_user.id,
+            decision=payload.decision,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     if result is None:
         raise HTTPException(status_code=404, detail="Approval not found")
     return {"approval": result.to_dict()}

@@ -20,7 +20,15 @@ interface AuthState {
 
 const storedToken = localStorage.getItem("mapr-auth-token");
 const storedUser = localStorage.getItem("mapr-auth-user");
-const initialUser = storedUser ? JSON.parse(storedUser) as AuthUser : null;
+let initialUser: AuthUser | null = null;
+if (storedUser) {
+  try {
+    initialUser = JSON.parse(storedUser) as AuthUser;
+  } catch {
+    localStorage.removeItem("mapr-auth-user");
+    localStorage.removeItem("mapr-auth-token");
+  }
+}
 
 export const useAuthStore = create<AuthState>((set) => ({
   user: initialUser,

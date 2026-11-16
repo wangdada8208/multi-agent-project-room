@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -33,7 +34,7 @@ async def git_status(
 ) -> dict:
     await require_role(room_id, current_user, db)
     try:
-        return _service(room_id).status()
+        return await asyncio.to_thread(_service(room_id).status)
     except RuntimeError as exc:
         raise HTTPException(status_code=500, detail="Repository operation unavailable") from None
 
@@ -46,7 +47,7 @@ async def git_branch(
 ) -> dict:
     await require_role(room_id, current_user, db)
     try:
-        return _service(room_id).branch()
+        return await asyncio.to_thread(_service(room_id).branch)
     except RuntimeError as exc:
         raise HTTPException(status_code=500, detail="Repository operation unavailable") from None
 
@@ -60,7 +61,7 @@ async def git_log(
 ) -> dict:
     await require_role(room_id, current_user, db)
     try:
-        return {"commits": _service(room_id).log(limit=limit)}
+        return {"commits": await asyncio.to_thread(_service(room_id).log, limit=limit)}
     except RuntimeError as exc:
         raise HTTPException(status_code=500, detail="Repository operation unavailable") from None
 
@@ -73,6 +74,6 @@ async def git_diff(
 ) -> dict:
     await require_role(room_id, current_user, db)
     try:
-        return _service(room_id).diff()
+        return await asyncio.to_thread(_service(room_id).diff)
     except RuntimeError as exc:
         raise HTTPException(status_code=500, detail="Repository operation unavailable") from None

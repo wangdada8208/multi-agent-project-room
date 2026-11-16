@@ -60,9 +60,14 @@ def _reject_claim():
 
 def _limit_attempt(user_id: str, action: str, limit: int, window: int):
     now = time.monotonic()
-    attempts = _attempts[(user_id, action)]
+    key = (user_id, action)
+    attempts = _attempts[key]
     while attempts and attempts[0] <= now - window:
         attempts.popleft()
+    if not attempts:
+        # Drop drained keys so the map does not grow one entry per user forever.
+        del _attempts[key]
+        attempts = _attempts[key]
     if len(attempts) >= limit:
         raise HTTPException(429, "Too many binding attempts")
     attempts.append(now)

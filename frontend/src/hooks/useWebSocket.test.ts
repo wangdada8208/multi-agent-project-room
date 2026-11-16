@@ -60,7 +60,7 @@ beforeEach(() => {
   FakeSocket.all = [];
   harness.fetch.mockReset();
   harness.fetch.mockResolvedValue({ ok: false });
-  useChatStore.setState({ tasks: [], messages: [], participants: [], typingUsers: [] });
+  useChatStore.setState({ tasks: [], messages: [], participants: [] });
 });
 afterEach(() => {
   harness.cleanups.splice(0).forEach((cleanup) => cleanup());

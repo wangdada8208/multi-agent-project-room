@@ -92,7 +92,12 @@ async def upload_file(
         uploaded_by=current_user.display_name or current_user.username,
     )
     db.add(record)
-    await db.commit()
+    try:
+        await db.commit()
+    except Exception:
+        await db.rollback()
+        file_path.unlink(missing_ok=True)
+        raise
     await db.refresh(record)
 
     logger.info("File uploaded: %s (%d bytes) to room %s", clean_name, len(content), room_id[:8])

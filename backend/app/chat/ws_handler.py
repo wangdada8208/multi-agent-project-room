@@ -184,20 +184,17 @@ async def persist_incoming_message(
     async with async_session() as db:
         room = await db.get(Room, room_id)
         if room is None:
-            if not room_id.startswith("_agent_"):
-                room = Room(
-                    id=room_id,
-                    name=f"Room {room_id[:8]}",
-                    transport="xmtp",
-                )
-                db.add(room)
-                await db.commit()
-                return None
+            # An unknown room materializes as an encrypted (XMTP) room so that
+            # inbound plaintext still has nowhere safe to land.
             room = await chat_service.get_or_create_room(
                 db, room_id, name=f"Room {room_id[:8]}"
             )
         if room.transport == "xmtp":
             return None
+        if parent_id is not None:
+            parent = await db.get(Message, parent_id)
+            if parent is None or parent.room_id != room_id:
+                parent_id = None
         return await chat_service.save_message(
             db=db,
             room_id=room_id,
@@ -250,7 +247,8 @@ async def handle_chat(websocket: WebSocket, room_id: str, token: str = Query(def
                     or len(matching_users) != 1 or matching_users[0].id != user.id):
                 await websocket.close(code=4003, reason="Agent channel access denied")
                 return
-            resolved = await chat_service.resolve_room(db, room_id)
+            # Agent channels are addressed by exact ID; a same-named room must not hijack them.
+            resolved = await db.get(Room, room_id)
             if resolved:
                 room_id = resolved.id
         else:
@@ -337,7 +335,11 @@ async def handle_chat(websocket: WebSocket, room_id: str, token: str = Query(def
             except FrameRejected as error:
                 await connection_manager.send_checked(websocket, {"type": "error", "code": error.code})
                 continue
-            if not isinstance(raw, dict) or len(json.dumps(raw).encode("utf-8")) > 65536:
+            if not isinstance(raw, dict):
+                await connection_manager.send_checked(websocket, {"type": "error", "code": "invalid_frame"})
+                continue
+            # Test doubles bypass _receive_frame's byte check; keep a parsed-size bound.
+            if len(json.dumps(raw).encode("utf-8")) > MAX_FRAME_BYTES:
                 await connection_manager.send_checked(websocket, {"type": "error", "code": "frame_too_large"})
                 continue
             msg_type = raw.get("type", "")
@@ -355,6 +357,9 @@ async def handle_chat(websocket: WebSocket, room_id: str, token: str = Query(def
                 await websocket.close(code=4003, reason="Authentication no longer valid")
                 raise WebSocketDisconnect(code=4003)
             if msg_type == "messages_resume":
+                if not is_agent_channel and connection_manager.room_sync is None:
+                    await connection_manager.send_checked(websocket, {"type": "error", "code": "resume_unavailable"})
+                    continue
                 cursor = raw.get("after_seq", 0)
                 valid = type(cursor) is int and 0 <= cursor <= 2**63 - 1
                 if valid and not is_agent_channel and connection_manager.room_sync and await authorize_outbound():
@@ -471,7 +476,14 @@ async def handle_chat(websocket: WebSocket, room_id: str, token: str = Query(def
 
             # ── Typing indicator ──
             if msg_type == "typing":
-                if role == "viewer":
+                if not is_agent_channel:
+                    async with async_session() as db:
+                        live_perm = (await db.execute(select(RoomPermission).where(
+                            RoomPermission.room_id == room_id,
+                            RoomPermission.user_id == authenticated_user_id,
+                        ))).scalar_one_or_none()
+                        role = live_perm.role if live_perm else None
+                if role != "owner" and role != "member":
                     continue
                 await connection_manager.broadcast(
                     room_id,

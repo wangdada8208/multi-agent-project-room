@@ -35,7 +35,6 @@ async def create_doc(
     current_user: User = Depends(get_current_user),
 ) -> dict:
     await _ensure_room(db, room_id)
-    await require_role(room_id, current_user, db)
     await require_role(room_id, current_user, db, min_role="member")
     if payload.author_id is not None and payload.author_id != current_user.id:
         raise HTTPException(status_code=403, detail="Cannot impersonate document author")

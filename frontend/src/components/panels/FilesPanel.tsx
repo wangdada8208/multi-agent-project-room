@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { apiFetch } from "../../lib/api";
 
 interface RoomFile {
   id: string;
@@ -11,7 +12,6 @@ interface RoomFile {
 
 interface FilesPanelProps {
   roomId: string;
-  authToken?: string;
 }
 
 function formatSize(bytes: number): string {
@@ -20,7 +20,7 @@ function formatSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-export function FilesPanel({ roomId, authToken }: FilesPanelProps) {
+export function FilesPanel({ roomId }: FilesPanelProps) {
   const [files, setFiles] = useState<RoomFile[]>([]);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
@@ -28,9 +28,7 @@ export function FilesPanel({ roomId, authToken }: FilesPanelProps) {
 
   const loadFiles = useCallback(async () => {
     try {
-      const res = await fetch(`/api/v1/rooms/${roomId}/files`, {
-        headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},
-      });
+      const res = await apiFetch(`/api/v1/rooms/${roomId}/files`);
       if (res.ok) {
         const data = await res.json();
         setFiles(data.files ?? []);
@@ -38,7 +36,7 @@ export function FilesPanel({ roomId, authToken }: FilesPanelProps) {
     } catch {
       // silent
     }
-  }, [roomId, authToken]);
+  }, [roomId]);
 
   useEffect(() => {
     loadFiles();
@@ -52,9 +50,8 @@ export function FilesPanel({ roomId, authToken }: FilesPanelProps) {
       for (const file of Array.from(fileList)) {
         const form = new FormData();
         form.append("file", file);
-        const res = await fetch(`/api/v1/rooms/${roomId}/files/upload`, {
+        const res = await apiFetch(`/api/v1/rooms/${roomId}/files/upload`, {
           method: "POST",
-          headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},
           body: form,
         });
         if (!res.ok) {
@@ -67,6 +64,27 @@ export function FilesPanel({ roomId, authToken }: FilesPanelProps) {
       setError("网络错误");
     } finally {
       setUploading(false);
+      if (inputRef.current) inputRef.current.value = "";
+    }
+  }
+
+  async function handleDownload(file: RoomFile) {
+    setError("");
+    try {
+      const res = await apiFetch(`/api/v1/rooms/${roomId}/files/${file.id}/download`);
+      if (!res.ok) {
+        setError(`下载失败: ${file.filename}`);
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = file.filename;
+      anchor.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      setError("网络错误");
     }
   }
 
@@ -94,11 +112,12 @@ export function FilesPanel({ roomId, authToken }: FilesPanelProps) {
       ) : (
         <div className="files-list">
           {files.map((f) => (
-            <a
+            <button
               key={f.id}
+              type="button"
               className="file-row"
-              href={`/api/v1/rooms/${roomId}/files/${f.id}/download`}
-              download={f.filename}
+              style={{ background: "none", border: "none", font: "inherit", color: "inherit", width: "100%", textAlign: "left", cursor: "pointer" }}
+              onClick={() => handleDownload(f)}
             >
               <span>📄</span>
               <div className="file-row__info">
@@ -106,7 +125,7 @@ export function FilesPanel({ roomId, authToken }: FilesPanelProps) {
                 <small>{formatSize(f.size)} · {f.uploaded_by}</small>
               </div>
               <span className="file-row__download">↓</span>
-            </a>
+            </button>
           ))}
         </div>
       )}

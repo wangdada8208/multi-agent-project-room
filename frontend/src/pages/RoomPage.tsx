@@ -191,7 +191,7 @@ export function RoomPage() {
       addMessage(toLocalChatMessage({
         id: message.id, roomId,
         content: describeEnvelope(message.content) ?? message.content,
-        senderId: message.senderInboxId,
+        senderId: message.senderInboxId === client.inboxId ? (user?.id ?? message.senderInboxId) : message.senderInboxId,
         senderName: message.senderInboxId === client.inboxId ? user?.display_name ?? "我" : `Member (${message.senderInboxId.slice(0, 6)}...)`,
         senderType: message.senderInboxId === client.inboxId ? "human" : "agent",
         createdAt: message.sentAt?.toISOString(),
@@ -258,8 +258,6 @@ export function RoomPage() {
     track("message_send", roomId, { sender_type: senderType });
     return sendMessage({
       content,
-      senderId: user?.id ?? "anon",
-      senderType,
       transport: roomQuery.data?.transport,
       xmtpGroupId: roomQuery.data?.xmtp_group_id,
       sendToXmtp: xmtpClient
@@ -270,10 +268,8 @@ export function RoomPage() {
 
   async function handleShare() {
     try {
-      const token = useAuthStore.getState().token ?? "";
-      const res = await fetch(`/api/v1/rooms/${roomId}/share`, {
+      const res = await apiFetch(`/api/v1/rooms/${roomId}/share`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ expires_hours: 72 }),
       });
       if (res.ok) {
@@ -455,9 +451,9 @@ export function RoomPage() {
       <SidePanel
         roomId={roomId}
         members={<MembersPanel participants={participants} />}
-        tasks={<TasksPanel tasks={tasks} />}
+        tasks={<TasksPanel tasks={tasks.filter((t) => !t.room_id || t.room_id === roomId)} />}
         dialogue={<DialoguePanel roomId={roomId} onlineAgents={onlineAgentNames} />}
-        files={<FilesPanel roomId={roomId} authToken={useAuthStore.getState().token ?? undefined} />}
+        files={<FilesPanel roomId={roomId} />}
         team={<TeamPanel />}
       />
     </div>

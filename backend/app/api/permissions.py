@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.agent.service import find_username_matches
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models.room import Room
@@ -87,10 +88,12 @@ async def invite_member(
     """Invite a user to a room with a specific role."""
     await require_role(room_id, current_user, db, min_role="owner")
 
-    # Find target user by username
-    stmt = select(User).where(User.username == payload.username)
-    result = await db.execute(stmt)
-    target_user = result.scalars().first()
+    # Find target user by username; registration stores canonicalized names,
+    # so exact-match lookups miss users whose name was normalized.
+    matches = await find_username_matches(db, payload.username)
+    if len(matches) > 1:
+        raise HTTPException(status_code=409, detail=f"Username '{payload.username}' is ambiguous")
+    target_user = matches[0] if matches else None
     if target_user is None:
         raise HTTPException(status_code=404, detail=f"User '{payload.username}' not found")
 
@@ -129,6 +132,14 @@ async def update_role(
     perm = result.scalars().first()
     if perm is None:
         raise HTTPException(status_code=404, detail="Member not found")
+
+    if perm.role == "owner" and payload.role != "owner":
+        owners_stmt = select(func.count(RoomPermission.id)).where(
+            RoomPermission.room_id == room_id, RoomPermission.role == "owner"
+        )
+        owner_count = (await db.execute(owners_stmt)).scalar() or 0
+        if owner_count <= 1:
+            raise HTTPException(status_code=400, detail="Cannot demote the only owner")
 
     perm.role = payload.role
     await db.commit()

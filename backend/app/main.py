@@ -79,6 +79,9 @@ async def lifespan(app: FastAPI):
     """Application lifecycle: create tables on startup."""
     install_redacting_filter()
     await init_db()
+    from app.api.templates import seed_system_templates
+    async with async_session() as db:
+        await seed_system_templates(db)
     # Lifespan runs in each worker, including servers that preload before fork.
     from app.a2a import http_protocol
     import uuid

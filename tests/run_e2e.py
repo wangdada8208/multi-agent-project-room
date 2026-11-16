@@ -20,7 +20,7 @@ import uvicorn
 async def main():
     # 模块级改环境变量会污染同一进程里的 pytest 会话（见全量失败清单），挪进函数。
     os.environ["MAPR_DATABASE_URL"] = f"sqlite+aiosqlite:///{PROJECT_ROOT}/e2e_test.db"
-    os.environ["MAPR_AUTH_SECRET_KEY"] = "e2e-test-secret"
+    os.environ["MAPR_AUTH_SECRET_KEY"] = "e2e-test-secret-e2e-test-secret-0123456789abcdef"
 
     from app.main import app as fastapi_app
 

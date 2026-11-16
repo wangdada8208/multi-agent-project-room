@@ -26,8 +26,6 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://postgres:password@localhost:5432/agent_room"
     repository_root: str = "/data/repos"
     redis_url: str = "redis://localhost:6379/0"
-    a2a_host: str = "0.0.0.0"
-    a2a_port: int = 8765
     a2a_public_url: str = "http://localhost:8000"
     a2a_protocol_version: str = "1.0.0"
     a2a_task_timeout_seconds: int = 300
@@ -35,7 +33,6 @@ class Settings(BaseSettings):
     auth_secret_key: str = "dev-change-me"
     agent_enrollment_secret: SecretStr = SecretStr("")
     auth_token_ttl_minutes: int = 60 * 24 * 7
-    rate_limit_per_minute: int = 60
     environment: str = "development"
     trusted_proxies: list[str] = ["127.0.0.1", "::1", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"]
 

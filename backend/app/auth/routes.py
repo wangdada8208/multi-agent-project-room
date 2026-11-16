@@ -59,6 +59,16 @@ def _auth_response(user: User) -> dict:
     }
 
 
+_dummy_hash: str | None = None
+
+
+def _timing_dummy_hash() -> str:
+    global _dummy_hash
+    if _dummy_hash is None:
+        _dummy_hash = hash_password("mapr-timing-equalizer")
+    return _dummy_hash
+
+
 @router.post("/register")
 async def register(request: Request, payload: RegisterRequest, db: AsyncSession = Depends(get_db)) -> dict:
     canonical_username = normalize_unicode_casefold(payload.username)
@@ -113,7 +123,10 @@ async def login(request: Request, payload: LoginRequest, db: AsyncSession = Depe
 
     matches = await find_username_matches(db, payload.username)
     user = matches[0] if len(matches) == 1 else None
-    if user is None or not verify_password(payload.password, user.password_hash):
+    # Verify against a constant hash even when the username is unknown so the
+    # response time does not reveal whether the account exists.
+    password_hash = user.password_hash if user is not None else _timing_dummy_hash()
+    if not verify_password(payload.password, password_hash) or user is None:
         raise HTTPException(status_code=401, detail="Invalid username or password")
 
     if not getattr(user, "is_active", True):

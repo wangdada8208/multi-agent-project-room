@@ -425,7 +425,7 @@ class TaskService:
             update(A2ATask)
             .where(
                 A2ATask.id == task_id,
-                A2ATask.status.in_(("submitted", "working")),
+                A2ATask.status.in_(("submitted", "working", "input_required")),
             )
             .values(
                 approval_id=approval_id,

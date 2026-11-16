@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { createRoom, fetchRooms, fetchTemplates } from "../lib/api";
+import { apiFetch, createRoom, fetchRooms, fetchTemplates } from "../lib/api";
 import { useAnalytics } from "../hooks/useAnalytics";
 import { useAuthStore } from "../stores/authStore";
 import type { Room } from "../types/chat";
@@ -152,10 +152,8 @@ export function RoomsPage() {
                 className="room-card"
                 onClick={async () => {
                   try {
-                    const token = localStorage.getItem("mapr-auth-token") ?? "";
-                    const res = await fetch("/api/v1/templates/create-room", {
+                    const res = await apiFetch("/api/v1/templates/create-room", {
                       method: "POST",
-                      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
                       body: JSON.stringify({ template_key: t.key, name: `${t.name} - ${new Date().toLocaleDateString("zh-CN")}` }),
                     });
                     const data = await res.json();

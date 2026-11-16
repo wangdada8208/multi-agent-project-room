@@ -1,26 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
-import { deliverOutgoing, routeOutgoing, sendXmtpMessage, toLocalChatMessage } from "./xmtpSend";
-
-describe("routeOutgoing", () => {
-  it("does not put xmtp room text into the hub payload", () => {
-    const route = routeOutgoing({
-      transport: "xmtp",
-      content: "只有成员能看",
-    });
-    expect(route.channel).toBe("xmtp");
-    expect(route.hubPayload).toBeNull();
-  });
-});
+import { deliverOutgoing, sendXmtpMessage, toLocalChatMessage } from "./xmtpSend";
 
 describe("deliverOutgoing", () => {
-  it("treats a missing transport as not deliverable on the hub", async () => {
+  it("does not deliver non-xmtp transports", async () => {
     const result = await deliverOutgoing({
       transport: "hub",
       content: "旧明文",
       xmtpGroupId: null,
     });
     expect(result.delivered).toBe(false);
-    expect(result.hubPayload).toBeNull();
   });
   it("does not report success when the xmtp sender is missing", async () => {
     const result = await deliverOutgoing({
@@ -29,7 +17,6 @@ describe("deliverOutgoing", () => {
       xmtpGroupId: null,
     });
     expect(result.delivered).toBe(false);
-    expect(result.hubPayload).toBeNull();
   });
 
   it("reports success only after the xmtp sender resolves", async () => {
@@ -43,7 +30,6 @@ describe("deliverOutgoing", () => {
       },
     });
     expect(result.delivered).toBe(true);
-    expect(result.hubPayload).toBeNull();
     expect(seen).toEqual(["group-dev-1:只有成员能看"]);
   });
 });

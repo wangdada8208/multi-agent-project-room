@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useChatStore, sanitizeTaskPatch, isTaskProgressEvent } from "../stores/chatStore";
-import type { ChatMessage, MessageType, RoomSocketEvent, SenderType } from "../types/chat";
+import type { ChatMessage, RoomSocketEvent } from "../types/chat";
 
 import { useAuthStore } from "../stores/authStore";
 import { websocketUrl, apiFetch } from "../lib/api";
@@ -8,9 +8,6 @@ import { deliverOutgoing } from "../lib/xmtpSend";
 
 interface SendMessageInput {
   content: string;
-  senderId: string;
-  senderType: SenderType;
-  msgType?: MessageType;
   transport?: string;
   xmtpGroupId?: string | null;
   sendToXmtp?: (groupId: string, content: string) => Promise<void>;
@@ -47,7 +44,6 @@ export function useWebSocket(roomId: string, transport: string = "xmtp") {
   const reconnectAttemptRef = useRef(0);
 
   const addMessage = useChatStore((state) => state.addMessage);
-  const markTyping = useChatStore((state) => state.markTyping);
   const setParticipants = useChatStore((state) => state.setParticipants);
   const upsertParticipant = useChatStore((state) => state.upsertParticipant);
   const removeParticipant = useChatStore((state) => state.removeParticipant);
@@ -195,7 +191,7 @@ export function useWebSocket(roomId: string, transport: string = "xmtp") {
 
         if (payload.type === "system" && payload.content) {
           addMessage({
-            id: `sys-${Date.now()}`,
+            id: `sys-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
             room_id: roomId,
             sender_id: "system",
             sender_type: "system",
@@ -203,10 +199,6 @@ export function useWebSocket(roomId: string, transport: string = "xmtp") {
             msg_type: "system",
             created_at: new Date().toISOString(),
           });
-        }
-
-        if (payload.type === "typing") {
-          markTyping(payload.sender_id);
         }
 
         if (payload.type === "presence_snapshot") {
@@ -273,42 +265,18 @@ export function useWebSocket(roomId: string, transport: string = "xmtp") {
         socket.close();
       }
     };
-  }, [transport, addMessage, markTyping, removeParticipant, roomId, setConnectionStatus, setParticipants, upsertParticipant, upsertTask, updateTaskProgress]);
+  }, [transport, addMessage, removeParticipant, roomId, setConnectionStatus, setParticipants, upsertParticipant, upsertTask, updateTaskProgress]);
 
   const sendMessage = useCallback(async (input: SendMessageInput): Promise<boolean> => {
-    const socket = socketRef.current;
-    const displayName = useAuthStore.getState().displayName;
-    const user = useAuthStore.getState().user;
-
+    // Room text only travels over XMTP; the hub never carries plaintext.
+    // The XMTP stream supplies the canonical message ID, including our own sends.
     const delivery = await deliverOutgoing({
       transport: input.transport ?? transport,
       content: input.content,
       xmtpGroupId: input.xmtpGroupId,
       sendToXmtp: input.sendToXmtp,
     });
-
-    if (delivery.hubPayload === null) {
-      // Encrypted room messages are delivered via XMTP, not Hub WebSocket
-      // The XMTP stream supplies the canonical message ID, including our own sends.
-      return delivery.delivered;
-    }
-
-    if (!socket || socket.readyState !== WebSocket.OPEN) {
-      return false;
-    }
-
-    socket.send(
-      JSON.stringify({
-        type: "message",
-        sender_id: user?.id ?? input.senderId,
-        sender_type: input.senderType,
-        sender_name: user?.display_name ?? displayName,
-        msg_type: input.msgType ?? "text",
-        content: delivery.hubPayload.content,
-      }),
-    );
-
-    return true;
+    return delivery.delivered;
   }, [transport]);
 
   return useMemo(() => ({ sendMessage }), [sendMessage]);

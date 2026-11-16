@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -45,18 +46,22 @@ SYSTEM_TEMPLATES = [
 ]
 
 
+async def seed_system_templates(db: AsyncSession) -> None:
+    """Insert missing system templates. Safe under concurrent workers."""
+    for tmpl_data in SYSTEM_TEMPLATES:
+        try:
+            async with db.begin_nested():
+                db.add(RoomTemplate(**tmpl_data))
+        except IntegrityError:
+            continue
+    await db.commit()
+
+
 @router.get("")
 async def list_templates(
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     """List all available room templates."""
-    # Seed system templates if not present
-    for tmpl_data in SYSTEM_TEMPLATES:
-        existing = await db.execute(select(RoomTemplate).where(RoomTemplate.key == tmpl_data["key"]))
-        if existing.scalars().first() is None:
-            db.add(RoomTemplate(**tmpl_data))
-    await db.commit()
-
     result = await db.execute(select(RoomTemplate).where(RoomTemplate.is_system == True).order_by(RoomTemplate.name))
     templates = result.scalars().all()
     return {"templates": [t.to_dict() for t in templates]}

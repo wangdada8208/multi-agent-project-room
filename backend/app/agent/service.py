@@ -24,8 +24,6 @@ logger = logging.getLogger(__name__)
 # Punctuation that comparison_identity folds to a single separator, and the
 # characters a pre-filter variant may use in its place.
 _SEPARATOR_CHARS = ("_", "-", ".", "·", "・")
-_MAX_VARIANT_POSITIONS = 6
-_MAX_VARIANT_GROUPS = 32
 
 
 def _enum_punctuation_variants(name: str) -> set[str]:

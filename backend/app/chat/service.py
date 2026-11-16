@@ -29,38 +29,46 @@ def retention_cutoff() -> datetime:
     return datetime.now(timezone.utc) - timedelta(days=settings.message_retention_days)
 
 
-async def cleanup_expired_messages(db: AsyncSession) -> int:
-    """Delete messages older than the configured retention period with safe FK nullification."""
+async def cleanup_expired_messages(db: AsyncSession | None = None) -> int:
+    """Delete messages older than the configured retention period with safe FK nullification.
+
+    Runs on its own session: a rollback here must never discard the caller's
+    uncommitted work, and its commit must never flush the caller's transaction
+    early. The session parameter is accepted for call-site compatibility and
+    deliberately unused.
+    """
+    from app.core.database import async_session
+
     try:
-        cutoff = retention_cutoff()
-        expired_subquery = select(Message.id).where(Message.created_at < cutoff)
+        async with async_session() as db:
+            cutoff = retention_cutoff()
+            expired_subquery = select(Message.id).where(Message.created_at < cutoff)
 
-        # 1. Nullify tasks referencing expired messages
-        from app.a2a.models import A2ATask
-        await db.execute(
-            update(A2ATask)
-            .where(A2ATask.source_message_id.in_(expired_subquery))
-            .values(source_message_id=None)
-        )
+            # 1. Nullify tasks referencing expired messages
+            from app.a2a.models import A2ATask
+            await db.execute(
+                update(A2ATask)
+                .where(A2ATask.source_message_id.in_(expired_subquery))
+                .values(source_message_id=None)
+            )
 
-        # 2. Nullify replies referencing expired parent messages
-        await db.execute(
-            update(Message)
-            .where(Message.parent_id.in_(expired_subquery))
-            .values(parent_id=None)
-        )
+            # 2. Nullify replies referencing expired parent messages
+            await db.execute(
+                update(Message)
+                .where(Message.parent_id.in_(expired_subquery))
+                .values(parent_id=None)
+            )
 
-        stmt = (
-            delete(Message)
-            .where(Message.created_at < cutoff)
-            .execution_options(synchronize_session=False)
-        )
-        result = await db.execute(stmt)
-        await db.commit()
-        return result.rowcount or 0
+            stmt = (
+                delete(Message)
+                .where(Message.created_at < cutoff)
+                .execution_options(synchronize_session=False)
+            )
+            result = await db.execute(stmt)
+            await db.commit()
+            return result.rowcount or 0
     except Exception as err:
         logger.warning("Failed to cleanup expired messages; details suppressed")
-        await db.rollback()
         return 0
 
 

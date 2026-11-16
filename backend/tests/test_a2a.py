@@ -59,7 +59,7 @@ async def test_dialogue_create_and_send(client: AsyncClient, auth_headers: dict)
             "method": "dialogues/create",
             "params": {
                 "room_id": "test-dialogue-room",
-                "initiator_agent": "Codex",
+                "initiator_agent": "tester",
                 "participants": ["Claude"],
                 "duration_seconds": 30,
                 "max_turns": 5,
@@ -84,8 +84,8 @@ async def test_dialogue_create_and_send(client: AsyncClient, auth_headers: dict)
             "params": {
                 "dialogue_id": dialogue_id,
                 "content": "Hello Claude!",
-                "sender_id": "codex-id",
-                "sender_name": "Codex",
+                "sender_id": "agent_tester",
+                "sender_name": "tester",
             },
             "id": "ds1",
         },
@@ -108,7 +108,7 @@ async def test_dialogue_end(client: AsyncClient, auth_headers: dict):
             "method": "dialogues/create",
             "params": {
                 "room_id": "test-end-room",
-                "initiator_agent": "Codex",
+                "initiator_agent": "tester",
                 "participants": ["Claude"],
             },
             "id": "de0",
