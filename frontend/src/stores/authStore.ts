@@ -18,7 +18,7 @@ interface AuthState {
   logout: () => void;
 }
 
-const storedToken = localStorage.getItem("mapr-auth-token");
+let storedToken = localStorage.getItem("mapr-auth-token");
 const storedUser = localStorage.getItem("mapr-auth-user");
 let initialUser: AuthUser | null = null;
 if (storedUser) {
@@ -27,6 +27,7 @@ if (storedUser) {
   } catch {
     localStorage.removeItem("mapr-auth-user");
     localStorage.removeItem("mapr-auth-token");
+    storedToken = null;
   }
 }
 

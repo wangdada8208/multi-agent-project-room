@@ -28,6 +28,7 @@ import argparse
 import asyncio
 import json
 import logging
+import os
 import signal
 import sys
 import uuid
@@ -291,8 +292,10 @@ def main():
     parser.add_argument("--backend", choices=list(BACKENDS.keys()), help="Predefined backend type")
     parser.add_argument("--command", nargs="+", help="Custom command (overrides --backend)")
     parser.add_argument("--room-id", required=True, help="Room to join")
-    parser.add_argument("--username", help="Agent account username (for authenticated API calls)")
-    parser.add_argument("--password", help="Agent account password")
+    parser.add_argument("--username", default=os.environ.get("MAPR_AGENT_USERNAME"),
+                        help="Agent account username (or MAPR_AGENT_USERNAME)")
+    parser.add_argument("--password", default=os.environ.get("MAPR_AGENT_PASSWORD"),
+                        help="Agent account password (or MAPR_AGENT_PASSWORD)")
     parser.add_argument("--poll-interval", type=float, default=3.0)
     args = parser.parse_args()
 

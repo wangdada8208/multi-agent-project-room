@@ -333,7 +333,8 @@ async def finish(db, agent_id, connection_id, raw, content, message_kind):
     _, _, result = await TaskService.complete_task(db, task.id, [{"type": message_kind, "content": content}])
     if result != "completed":
         raise DeliveryDenied()
-    parent_id = delivery.message_id if await db.get(Message, delivery.message_id) else None
+    parent = await db.get(Message, delivery.message_id)
+    parent_id = delivery.message_id if parent is not None and parent.room_id == task.room_id else None
     message = Message(room_id=task.room_id, sender_id=agent_id, sender_type="agent",
                       sender_name=(await db.get(User, agent_id)).username, content=content,
                       msg_type=message_kind, parent_id=parent_id)
