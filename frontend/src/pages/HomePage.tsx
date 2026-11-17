@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { fetchRooms } from "../lib/api";
 import { useAuthStore } from "../stores/authStore";
@@ -34,6 +34,7 @@ export function HomePage() {
       <header className="topbar">
         <span className="topbar__brand">🤖 协作空间</span>
         <span className="topbar__spacer" />
+        <Link to="/agents" className="btn btn-ghost btn-sm">🤖 我的 Agent</Link>
         {user?.display_name && <span className="topbar__user">{user.display_name}</span>}
         <button type="button" className="btn btn-ghost btn-sm" onClick={logout}>退出</button>
       </header>

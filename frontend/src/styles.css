@@ -458,6 +458,51 @@ a:hover { text-decoration: underline; }
 .unlock-card h3 { font-size: 17px; display: flex; align-items: center; gap: 8px; }
 .unlock-card .unlock-desc { font-size: 13px; color: var(--text-2); margin-top: 6px; }
 .unlock-card form { margin-top: 16px; display: flex; flex-direction: column; gap: 12px; }
+.agent-panel-stack .unlock-card { margin: 0 auto; }
+
+/* ── 我的 Agent / 本机助手接入 ────────────────────── */
+
+.agents-page { max-width: 760px; margin: 0 auto; padding: 28px 20px 64px; }
+.agents-page .setup-head { margin-bottom: 20px; }
+
+.agent-panel-stack { display: flex; flex-direction: column; gap: 16px; }
+.agent-panel { display: flex; flex-direction: column; gap: 12px; }
+.agent-panel__title { font-size: 14px; font-weight: 700; color: var(--text); }
+.agent-panel__actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+
+.agent-list { display: flex; flex-direction: column; gap: 8px; }
+.agent-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 11px 13px; border: 1px solid var(--border);
+  border-radius: var(--radius-sm); background: var(--surface);
+}
+.agent-row__icon { font-size: 22px; flex-shrink: 0; }
+.agent-row__info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.agent-row__info strong {
+  font-size: 14px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+}
+.agent-row__info small {
+  font-size: 12px; color: var(--text-3);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.agent-tag {
+  font-size: 11px; font-weight: 600; padding: 1px 8px; border-radius: 999px;
+  background: var(--surface-soft); border: 1px solid var(--border); color: var(--text-2);
+}
+.agent-tag--warn { color: #92400e; background: var(--amber-soft); border-color: #fde68a; }
+
+.agent-link {
+  background: none; border: none; padding: 0; margin: 0 2px;
+  color: var(--accent); font: inherit; cursor: pointer; text-decoration: underline;
+}
+
+.pair-code-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.pair-code {
+  font-family: var(--mono); font-size: 14px; font-weight: 600;
+  background: var(--surface-soft); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 8px 14px; letter-spacing: 0.5px;
+  word-break: break-all;
+}
 
 /* owner notes */
 .owner-note {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import type { Client } from "@xmtp/browser-sdk";
@@ -6,36 +6,18 @@ import {
   apiFetch, bindXmtpGroup, createRoom, createRoomFromTemplate, fetchTemplates,
 } from "../lib/api";
 import {
-  buildMemberCommands, buildMemberEnv, getOrCreateWorkerCredentials, memberProcessAlive,
-} from "../lib/setup";
+  listRoomSeats, markSeatGroupAdded, type HubSeatView,
+} from "../lib/localHelper";
 import {
   hasEncryptedVault, inboxAddress, unlockOrCreateInboxKey, createLocalXmtpClient,
 } from "../lib/xmtpLocalIdentity";
-import { memberIdentifier } from "../lib/xmtpGroup";
+import { syncPendingSeatsToGroup } from "../lib/seatGroupSync";
+import { AgentJoinSection } from "./AgentsPage";
 import { useAuthStore } from "../stores/authStore";
 import { useAnalytics } from "../hooks/useAnalytics";
 import type { Room } from "../types/chat";
 
 type SubState = "idle" | "running" | "done" | "failed";
-
-function CopyButton({ text, label = "复制" }: { text: string; label?: string }) {
-  const [copied, setCopied] = useState(false);
-  return (
-    <button
-      type="button"
-      className={`copy-btn ${copied ? "copied" : ""}`}
-      onClick={async () => {
-        try {
-          await navigator.clipboard.writeText(text);
-          setCopied(true);
-          setTimeout(() => setCopied(false), 1600);
-        } catch { /* 剪贴板不可用时静默 */ }
-      }}
-    >
-      {copied ? "✓ 已复制" : `📋 ${label}`}
-    </button>
-  );
-}
 
 function CheckRow({ label, state }: { label: string; state: SubState }) {
   return (
@@ -51,11 +33,16 @@ function CheckRow({ label, state }: { label: string; state: SubState }) {
 
 const STEP_LABELS = ["选场景", "加密配置", "接入 Agent", "完成"];
 
+const GROUP_STATUS_LABEL: Record<HubSeatView["group_status"], string> = {
+  pending: "等待入群",
+  added: "已入群",
+  removed: "已移除",
+};
+
 export function SetupPage() {
   const { roomId: routeRoomId } = useParams();
   const navigate = useNavigate();
   const { track } = useAnalytics();
-  const token = useAuthStore((s) => s.token);
   const user = useAuthStore((s) => s.user);
 
   const [step, setStep] = useState(0);
@@ -106,12 +93,6 @@ export function SetupPage() {
   }
 
   // ── Step 1: 解锁身份 + 建群绑定 ──
-  // 密钥按房间缓存在 sessionStorage，重跑向导不会换地址
-  const credentials = useMemo(
-    () => (room ? getOrCreateWorkerCredentials(room.id) : null),
-    [room],
-  );
-
   const [password, setPassword] = useState("");
   const creatingVault = !hasEncryptedVault();
   const [myAddress, setMyAddress] = useState("");
@@ -124,8 +105,8 @@ export function SetupPage() {
     { label: "绑定到房间", state: "idle" },
   ]);
 
-  // 客户端跨步骤保留：成员的加密身份要等其进程首次启动后才注册到网络，
-  // 邀请只能在注册之后发出（在「完成」步轮询补发）。
+  // 客户端跨步骤保留：新席位的加密身份要等其进程首次启动后才注册到网络，
+  // 拉进群只能在注册之后发出（在「完成」步轮询补拉）。
   const clientRef = useRef<Client<any> | null>(null);
   useEffect(() => () => {
     clientRef.current?.close();
@@ -136,7 +117,7 @@ export function SetupPage() {
     setProgress((prev) => prev.map((p, i) => (i === index ? { ...p, state } : p)));
 
   async function configureEncryption() {
-    if (!room || !password || !credentials) return;
+    if (!room || !password) return;
     setCryptoBusy(true);
     setCryptoError("");
     let client: Client<any> | null = null;
@@ -176,95 +157,47 @@ export function SetupPage() {
     }
   }
 
-  // ── Step 2: 生成 .env 与命令 ──
-  const [agentName, setAgentName] = useState("Claude");
-  const hubBaseUrl = useMemo(() => {
-    const base = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/$/, "");
-    return base || window.location.origin;
-  }, []);
+  // ── Step 2: 接入 Agent（本机助手 + 一次性票据，见 AgentJoinSection） ──
+  const [joinedCount, setJoinedCount] = useState(0);
 
-  const envText = useMemo(() => {
-    if (!room || !groupId || !myAddress || !token || !credentials) return "";
-    return buildMemberEnv({
-      agentName: agentName.trim() || "Claude",
-      myAddress,
-      roomId: room.id,
-      groupId,
-      hubBaseUrl,
-      hubToken: token,
-      credentials,
-    });
-  }, [room, groupId, myAddress, token, agentName, credentials]);
+  // ── Step 3: 看席位状态 + 补拉入群 ──
+  const [seats, setSeats] = useState<HubSeatView[]>([]);
+  const [seatPollFailed, setSeatPollFailed] = useState(false);
 
-  const commandText = useMemo(
-    () => [
-      "# 1. 获取代码（已有代码可跳过）",
-      "git clone https://github.com/wangdada8208/multi-agent-project-room.git",
-      "",
-      "# 2. 进入成员进程目录并安装依赖（需要 Node.js 22+）",
-      ...buildMemberCommands(),
-      "",
-      "# 说明：先把上面下载的 .env 文件放进 workers/xmtp-member/ 目录，",
-      "#       并在 MEMBER_MODEL_API_KEY= 后填上你的模型密钥。",
-    ].join("\n"),
-    []
-  );
-
-  function downloadEnv() {
-    const blob = new Blob([envText], { type: "text/plain" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = ".env";
-    a.click();
-    URL.revokeObjectURL(url);
-  }
-
-  // ── Step 3: 检测成员进程 + 补发入群邀请 ──
-  const [memberOnline, setMemberOnline] = useState(false);
-  const [memberInvited, setMemberInvited] = useState(false);
-
-  // 成员进程的 XMTP 身份在它第一次启动时才注册到网络；可解析后再邀请入群。
-  async function inviteMember(): Promise<boolean> {
-    const client = clientRef.current;
-    if (!client || !groupId || !credentials) return false;
-    try {
-      const inboxId = await client.fetchInboxIdByIdentifier(
-        memberIdentifier(credentials.workerAddress),
-      );
-      if (!inboxId) return false;
-      await client.conversations.syncAll();
-      const group = await client.conversations.getConversationById(groupId);
-      if (!group) return false;
-      const members = await (group as any).members?.() ?? [];
-      const present = members.flatMap(
-        (m: any) => m.accountIdentifiers?.map((i: any) => String(i.identifier).toLowerCase()) ?? [],
-      );
-      if (!present.includes(credentials.workerAddress.toLowerCase())) {
-        await (group as any).addMembersByIdentifiers([memberIdentifier(credentials.workerAddress)]);
-      }
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
+  // 新席位的 XMTP 身份在其进程首次启动后才注册到网络；可解析后才拉进群。
+  // 只拉 owner 是自己且 pending 的席位，不替别人拉（方案 5.4）。
   useEffect(() => {
-    if (step !== 3) return;
+    if (step !== 3 || !room) return;
     let cancelled = false;
+    const roomId = room.id;
+    const myId = user?.id;
     const tick = async () => {
-      if (!memberOnline && (await memberProcessAlive()) && !cancelled) {
-        setMemberOnline(true);
-      }
-      if (!memberInvited && (await inviteMember()) && !cancelled) {
-        setMemberInvited(true);
+      try {
+        const list = await listRoomSeats(roomId);
+        if (cancelled) return;
+        setSeats(list.filter((s) => s.group_status !== "removed"));
+        setSeatPollFailed(false);
+        const client = clientRef.current;
+        if (!client || !groupId || !myId) return;
+        await syncPendingSeatsToGroup({
+          client,
+          roomId,
+          groupId,
+          currentUserId: myId,
+          // 席位列表刚拉过，直接喂给同步逻辑，省一次请求。
+          deps: { listSeats: async () => list, markAdded: markSeatGroupAdded },
+        });
+      } catch {
+        if (!cancelled) setSeatPollFailed(true);
       }
     };
     void tick();
     const timer = window.setInterval(tick, 4000);
     return () => { cancelled = true; window.clearInterval(timer); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step, memberOnline, memberInvited, groupId, credentials]);
+  }, [step, room, groupId, user?.id]);
+
+  const myLiveSeats = seats.filter((s) => s.owner_user_id === user?.id);
+  const allMineIn = myLiveSeats.length > 0 && myLiveSeats.every((s) => s.group_status === "added");
 
   const dot = (i: number) =>
     `setup-step-dot ${i < step ? "done" : i === step ? "current" : ""}`;
@@ -280,7 +213,7 @@ export function SetupPage() {
       <div className="setup-page">
         <div className="setup-head">
           <h1>一键配置</h1>
-          <p>三步完成：建房间 → 加密配置 → 拿到接入命令。</p>
+          <p>三步完成：建房间 → 加密配置 → 接入 Agent。</p>
         </div>
 
         <div className="setup-steps">
@@ -407,79 +340,69 @@ export function SetupPage() {
           <div className="card setup-card">
             <h2>🤖 接入你的 Agent</h2>
             <p className="setup-desc">
-              加密群已就绪。下面这个配置文件让 Agent 在你自己的电脑上运行——密钥不出本机。
+              加密群已就绪。Agent 跑在你自己的电脑上——密钥不出本机，点一下「加入」即可。
             </p>
             <div className="setup-body">
               {myAddress && (
                 <div className="field">
-                  <label>我的加密地址（对方配置时需填进 TA 的白名单）</label>
+                  <label>我的加密地址</label>
                   <span className="addr-pill" onClick={() => navigator.clipboard.writeText(myAddress).catch(() => {})} title="点击复制">
                     {myAddress} 📋
                   </span>
                 </div>
               )}
-              <div className="field">
-                <label>Agent 名称（群里的显示名）</label>
-                <input
-                  className="input"
-                  value={agentName}
-                  onChange={(e) => setAgentName(e.target.value)}
-                  placeholder="Claude"
-                />
-              </div>
-              <div className="field">
-                <label>第 1 步 · 下载配置文件 .env</label>
-                <div className="code-block">
-                  <CopyButton text={envText} label="复制内容" />
-                  {envText}
-                </div>
-                <div style={{ display: "flex", gap: 8 }}>
-                  <button type="button" className="btn btn-ghost btn-sm" onClick={downloadEnv}>
-                    ⬇ 下载 .env
-                  </button>
-                </div>
-              </div>
-              <div className="field">
-                <label>第 2 步 · 在你的电脑上运行（需要 Node.js 22+）</label>
-                <div className="code-block">
-                  <CopyButton text={commandText} label="复制命令" />
-                  {commandText}
-                </div>
-              </div>
-              <div className="setup-note">
-                ⚠️ .env 里有密钥，别发给任何人、别提交到 git。MEMBER_MODEL_API_KEY 需要你自己填一个模型服务的密钥。
-              </div>
+              <AgentJoinSection
+                roomId={room.id}
+                roomName={room.name}
+                ownerXmtpAddress={myAddress}
+                onJoined={() => setJoinedCount((n) => n + 1)}
+              />
             </div>
             <div className="setup-actions">
               <button type="button" className="btn btn-primary" onClick={() => setStep(3)}>
-                我已启动成员进程 →
+                {joinedCount > 0 ? "下一步 →" : "先不接入，下一步 →"}
               </button>
               <button type="button" className="btn btn-ghost" onClick={() => setStep(1)}>← 返回</button>
             </div>
           </div>
         )}
 
-        {/* ── Step 3 检测与完成 ── */}
+        {/* ── Step 3 席位状态与完成 ── */}
         {step === 3 && room && (
           <div className="card setup-card">
-            <h2>{memberInvited ? "🎉 配置完成" : "⏳ 等待成员进程启动"}</h2>
+            <h2>{allMineIn ? "🎉 配置完成" : "⏳ 席位状态"}</h2>
             <p className="setup-desc">
-              {memberInvited
-                ? "成员进程已连接并已加入加密群，协作空间就绪。"
-                : "正在检测本机成员进程（127.0.0.1:8787）。在你的终端里完成上一步命令后，这里会自动变绿，成员会被自动邀请进加密群。"}
+              {allMineIn
+                ? "你的 Agent 已创建席位并加入加密群，协作空间就绪。"
+                : "这里每 4 秒刷新一次席位状态。新席位要等它的进程首次启动、加密身份注册后才会被自动拉进群。"}
             </p>
             <div className="setup-body">
-              <CheckRow
-                label={memberOnline ? "成员进程已连接" : "等待成员进程启动…"}
-                state={memberOnline ? "done" : "running"}
-              />
-              <CheckRow
-                label={memberInvited ? "成员已加入加密群" : "等待成员身份注册，就绪后自动邀请入群…"}
-                state={memberInvited ? "done" : "running"}
-              />
+              {seats.length === 0 && !seatPollFailed && (
+                <p className="hint">
+                  这个房间还没有席位。回到上一步接入 Agent，或之后在「我的 Agent」页随时接入。
+                </p>
+              )}
+              {seatPollFailed && <p className="error-text">席位状态刷新失败，正在重试…</p>}
+              {seats.map((seat) => (
+                <div key={seat.seat_id} className="agent-row">
+                  <span className="agent-row__icon">🤖</span>
+                  <div className="agent-row__info">
+                    <strong>
+                      {seat.agent_display_name}
+                      <span className={`task-badge ${seat.group_status === "added" ? "task-badge--completed" : seat.group_status === "pending" ? "task-badge--working" : ""}`}>
+                        {GROUP_STATUS_LABEL[seat.group_status]}
+                      </span>
+                    </strong>
+                    <small>
+                      {seat.xmtp_address.slice(0, 10)}…{seat.xmtp_address.slice(-4)}
+                      {seat.owner_user_id !== user?.id ? " · 他人的 Agent" : ""}
+                    </small>
+                  </div>
+                </div>
+              ))}
               <div className="setup-info">
                 💡 对方的 Agent 也要接入时，把房间 ID <code>{room.id}</code> 发给 TA，
-                让 TA 在自己的电脑上走一遍这个向导即可。记得互相把「我的加密地址」加进白名单。
+                让 TA 在自己的电脑上走一遍这个向导即可。
               </div>
             </div>
             <div className="setup-actions">
@@ -492,9 +415,9 @@ export function SetupPage() {
                   navigate(`/rooms/${room.id}`);
                 }}
               >
-                {memberInvited ? "进入房间 🚀" : "先进入房间看看 →"}
+                {allMineIn ? "进入房间 🚀" : "先进入房间看看 →"}
               </button>
-              <Link to="/" className="hint setup-skip">回首页</Link>
+              <button type="button" className="btn btn-ghost" onClick={() => setStep(2)}>← 返回接入</button>
             </div>
           </div>
         )}
