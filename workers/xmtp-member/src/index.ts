@@ -19,7 +19,7 @@ import {
   saveLoopState,
   type LocalLoopState,
 } from "./localLoop.ts";
-import { completeWithFetch } from "./modelComplete.ts";
+import { createReplyEngine, engineConfigFromEnv, engineToComplete } from "./engines/index.ts";
 import { onInboundText } from "./onInboundText.ts";
 import { buildRequestEnvelope } from "./outgoingRequest.ts";
 import type { OwnerNote } from "./ownerNote.ts";
@@ -27,7 +27,7 @@ import { createOwnerConsoleServer } from "./ownerConsole.ts";
 import { ownerNotesBindAddress, readOwnerNotesFile } from "./ownerNotesHttp.ts";
 import { loadPolicy } from "./policy.ts";
 import { scoreboard } from "./scoreboard.ts";
-import { isAllowedSender, parseAllowedSenders } from "./senderPolicy.ts";
+import { GroupMemberCache, isAllowedSender, parseAllowedSenders } from "./senderPolicy.ts";
 import { TaskStore } from "./taskStore.ts";
 import type { Connector } from "./connectors/types.ts";
 import { LocalCalendarConnector } from "./connectors/localCalendar.ts";
@@ -183,15 +183,10 @@ export async function startMember(): Promise<void> {
     });
   }
 
-  const complete =
-    config.memberModelApiKey && config.memberModelUrl
-      ? (prompt: string) =>
-          completeWithFetch({
-            apiKey: config.memberModelApiKey!,
-            url: config.memberModelUrl!,
-            prompt,
-          })
-      : undefined;
+  const engineConfig = engineConfigFromEnv(process.env);
+  const complete = engineConfig
+    ? engineToComplete(createReplyEngine(engineConfig), engineConfig.timeoutMs)
+    : undefined;
 
   const writeLedger = (entry: LedgerEntry) => appendLedger(ledgerPath, entry);
 
@@ -322,10 +317,19 @@ export async function startMember(): Promise<void> {
   }, 30_000);
   expiryTimer.unref();
 
+  const groupMembers = new GroupMemberCache();
+  const allowGroupMembers = process.env.XMTP_ALLOW_GROUP_MEMBERS === "1";
+
   agent.on("text", async (ctx: any) => {
     const sender = ((await ctx.getSenderAddress()) || "").toLowerCase();
     if (sender && sender === selfAddress) return;
-    if (!isAllowedSender(sender, config.allowedSenders)) {
+    const senderAllowed =
+      isAllowedSender(sender, config.allowedSenders) ||
+      (allowGroupMembers &&
+        typeof ctx.isGroup === "function" &&
+        ctx.isGroup() &&
+        (await groupMembers.allows(sender, ctx.conversation)));
+    if (!senderAllowed) {
       await writeLedger(
         buildLedgerEntry({
           now: new Date(),
