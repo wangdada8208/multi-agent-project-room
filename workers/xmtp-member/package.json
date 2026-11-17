@@ -9,9 +9,9 @@
     "node": ">=22"
   },
   "scripts": {
-    "test": "node --experimental-strip-types --test src/*.test.ts src/connectors/*.test.ts",
+    "test": "node --experimental-strip-types --test src/*.test.ts src/connectors/*.test.ts src/engines/*.test.ts src/helper/*.test.ts",
     "typecheck": "tsc --noEmit -p . --allowImportingTsExtensions",
-    "start": "node --experimental-strip-types src/index.ts"
+    "start": "node --env-file=.env --experimental-strip-types src/index.ts"
   },
   "dependencies": {
     "@xmtp/agent-sdk": "2.3.0",

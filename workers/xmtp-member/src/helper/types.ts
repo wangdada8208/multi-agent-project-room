@@ -1,0 +1,129 @@
+import type { AgentKind } from "../engines/types.ts";
+
+/**
+ * 本机助手（mapr helper）的领域模型。
+ *
+ * LocalAgent：这台电脑上能用的一个 Agent（探测到的命令行工具，或主人手动添加的云端 Agent）。
+ * Seat（席位）：某个 LocalAgent 在某个房间里的一个身份。一个席位 = 一把独立 XMTP 私钥
+ *   + 一个独立数据目录 + 一个独立的成员进程。同一 Agent 进 3 个房间就是 3 个席位。
+ *
+ * 落盘位置（全部 0600 / 0700，不进 git，不上报 Hub）：
+ *   ~/.mapr/helper.json             HelperConfig
+ *   ~/.mapr/agents/<key>.secret     手动添加的云端 Agent 的密钥
+ *   ~/.mapr/seats/<seatId>/seat.json  SeatRecord（含私钥）
+ *   ~/.mapr/seats/<seatId>/xmtp/      XMTP_DB_DIRECTORY
+ *   ~/.mapr/seats/<seatId>/state/     成员进程 .state（账本、任务、主人记录）
+ *   ~/.mapr/sandbox/<seatId>/         命令行 Agent 的空白工作目录
+ */
+
+export type AgentSource = "detected" | "manual";
+
+/** 只根据文件是否存在判断，不读取任何登录文件的内容。 */
+export type LoginState = "likely-ready" | "needs-login" | "unknown";
+
+export interface LocalAgent {
+  /** 稳定键：探测类用种类名（如 "claude-code"）；手动类用 "manual:<uuid>"。 */
+  key: string;
+  kind: AgentKind;
+  displayName: string;
+  source: AgentSource;
+  binaryPath?: string;
+  version?: string;
+  loginState: LoginState;
+}
+
+export interface KnownCliAgent {
+  kind: Extract<AgentKind, "claude-code" | "codex" | "gemini-cli">;
+  displayName: string;
+  /** 在 PATH 里查找的命令名，按顺序尝试。 */
+  binaries: string[];
+  versionArgs: string[];
+  /** 相对家目录的路径；任一存在即视为 likely-ready。 */
+  loginMarkers: string[];
+}
+
+export interface ManualAgent {
+  key: string;
+  kind: Extract<AgentKind, "openai-compatible" | "webhook">;
+  displayName: string;
+  /** openai-compatible 用 baseUrl+model；webhook 用 url。 */
+  baseUrl?: string;
+  model?: string;
+  url?: string;
+}
+
+export interface HelperConfig {
+  hubOrigin: string;
+  helperId: string;
+  helperToken: string;
+  deviceName: string;
+  ownerUserId: string;
+  ownerDisplayName: string;
+  manualAgents: ManualAgent[];
+}
+
+export type SeatStatus = "starting" | "running" | "crashed" | "stopped" | "revoked";
+
+export interface SeatRecord {
+  seatId: string;
+  agentKey: string;
+  roomId: string;
+  roomName: string;
+  agentUsername: string;
+  xmtpWalletKey: string;
+  xmtpDbEncryptionKey: string;
+  xmtpAddress: string;
+  xmtpGroupId: string | null;
+  allowedSenders: string[];
+  agentToken: string;
+  consolePort: number;
+  createdAt: string;
+}
+
+/** 本机接口对外返回的席位视图：不含任何私钥或登录信息。 */
+export interface SeatView {
+  seatId: string;
+  agentKey: string;
+  roomId: string;
+  roomName: string;
+  xmtpAddress: string;
+  consolePort: number;
+  status: SeatStatus;
+  lastError: string | null;
+}
+
+// ── 与 Hub 的接口（字段名与 backend/app/helper/schemas.py 一一对应） ──
+
+export interface PairResponse {
+  helper_id: string;
+  helper_token: string;
+  owner_user_id: string;
+  owner_display_name: string;
+}
+
+export interface HubRoom {
+  id: string;
+  name: string;
+  xmtp_group_id: string | null;
+  role: "owner" | "member" | "viewer";
+}
+
+export interface SeatGrant {
+  seat_id: string;
+  room_id: string;
+  room_name: string;
+  agent_user_id: string;
+  agent_username: string;
+  agent_token: string;
+  xmtp_group_id: string | null;
+  allowed_senders: string[];
+}
+
+export interface HeartbeatResponse {
+  revoked: boolean;
+  seats_to_stop: string[];
+}
+
+export type CreateSeatRequest =
+  | { via: "ticket"; ticket: string; agent_key: string; kind: AgentKind; display_name: string; xmtp_address: string }
+  | { via: "local"; room_id: string; agent_key: string; kind: AgentKind; display_name: string; xmtp_address: string };

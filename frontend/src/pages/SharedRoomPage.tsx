@@ -11,7 +11,6 @@ export function SharedRoomPage() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    // 分享凭据在网址里，只按当前网址取一次；换链接时重新取。
     let cancelled = false;
 
     async function fetchShared() {
@@ -24,54 +23,52 @@ export function SharedRoomPage() {
         setRoomName(view.roomName);
       } catch (err) {
         if (cancelled) return;
-        // 404 是链接失效；其余（含网络错误）统一提示加载失败，避免把“过期”错报给用户。
-        if (err instanceof SharedLinkError) {
-          setError(err.message);
-        } else {
-          setError("网络错误");
-        }
+        setError(err instanceof SharedLinkError ? err.message : "网络错误");
       } finally {
         if (!cancelled) setLoading(false);
       }
     }
 
     void fetchShared();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [token]);
 
   return (
-    <div className="shared-room-page">
-      <header className="shared-room-header">
-        <span className="brand-mini">🤖 Multi-Agent Project Room</span>
-        {roomName && <span className="shared-room-name">{roomName}</span>}
-        <span className="shared-badge">只读分享</span>
-        <Link to="/login" className="btn-ghost" style={{ padding: "6px 14px", marginLeft: "auto" }}>
-          登录参与
-        </Link>
+    <div className="shared-page">
+      <header className="topbar" style={{ margin: "-28px -20px 0" }}>
+        <span className="topbar__brand">🤖 Multi-Agent Project Room</span>
+        <span className="topbar__spacer" />
+        <Link to="/login" className="btn btn-ghost btn-sm">登录参与</Link>
       </header>
 
-      {loading && <p className="chat-loading">加载中...</p>}
-      {error && <p className="chat-error">{error}</p>}
-
-      {!loading && !error && (
-        <div className="shared-messages">
-          {messages.length === 0 && <p className="chat-empty">暂无消息</p>}
-          {messages.map((msg) => (
-            <div key={msg.id} className="msg-row msg-row--shared">
-              <div className="msg-avatar">{(msg.sender_name ?? "A").charAt(0).toUpperCase()}</div>
-              <div className={`msg-bubble ${msg.sender_type === "agent" ? "msg-bubble--agent" : ""}`}>
-                <div className="msg-meta">
-                  <span className="msg-meta__name">{msg.sender_name ?? msg.sender_id}</span>
-                  <span className="msg-meta__time">{new Date(msg.created_at).toLocaleString("zh-CN")}</span>
-                </div>
-                <div className="msg-content"><p>{msg.content}</p></div>
-              </div>
-            </div>
-          ))}
+      <div style={{ marginTop: 28 }}>
+        <div className="shared-banner">
+          👁 {roomName ? `「${roomName}」` : ""} 只读分享 — 只能查看，不能发言
         </div>
-      )}
+
+        {loading && <div className="loading-center"><span className="spinner" />加载中...</div>}
+        {error && <div className="page-error card"><p>{error}</p></div>}
+
+        {!loading && !error && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            {messages.length === 0 && <div className="home-empty"><p>暂无消息</p></div>}
+            {messages.map((msg) => (
+              <div key={msg.id} className="msg">
+                <div className={`msg__avatar ${msg.sender_type === "agent" ? "msg__avatar--agent" : ""}`}>
+                  {(msg.sender_name ?? "A").charAt(0).toUpperCase()}
+                </div>
+                <div className={`msg__bubble ${msg.sender_type === "agent" ? "msg__bubble--agent" : ""}`}>
+                  <div className="msg__meta">
+                    <span className="msg__name">{msg.sender_name ?? msg.sender_id}</span>
+                    <span className="msg__time">{new Date(msg.created_at).toLocaleString("zh-CN")}</span>
+                  </div>
+                  <div className="msg__content"><p>{msg.content}</p></div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

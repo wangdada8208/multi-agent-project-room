@@ -34,7 +34,7 @@ export function DialoguePanel({ roomId, onlineAgents }: DialoguePanelProps) {
   const [injectText, setInjectText] = useState("");
   const pollRef = useRef<number | null>(null);
 
-  const all_participants = 2; // initiator + participant
+  const allParticipants = 2; // initiator + participant
 
   const stopPolling = () => {
     if (pollRef.current !== null) {
@@ -82,7 +82,7 @@ export function DialoguePanel({ roomId, onlineAgents }: DialoguePanelProps) {
             setLoop((prev) => prev ? {
               ...prev,
               status: status.status,
-              current_round: Math.floor((status.turns?.length ?? 0) / all_participants),
+              current_round: Math.floor((status.turns?.length ?? 0) / allParticipants),
               turns: (status.turns ?? []).map((t: Record<string, unknown>, index: number) => ({
                 agent_name: t.agent as string,
                 content: t.content as string,
@@ -94,9 +94,7 @@ export function DialoguePanel({ roomId, onlineAgents }: DialoguePanelProps) {
             } : null);
             if (status.status !== "active") stopPolling();
           }
-        } catch {
-          // Transient poll failure; the next tick retries.
-        }
+        } catch { /* 瞬时轮询失败，下一拍重试 */ }
       }, 5000);
     } catch (err) {
       setError(err instanceof Error ? err.message : "启动失败");
@@ -157,72 +155,78 @@ export function DialoguePanel({ roomId, onlineAgents }: DialoguePanelProps) {
     <div className="panel-section">
       {!loop && (
         <>
-          <div className="panel-field">
+          <div className="field">
             <label>对话主题</label>
-            <input value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="例如：设计登录页面方案" />
+            <input className="input" value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="例如：设计登录页面方案" />
           </div>
-          <div className="panel-field-row">
-            <div className="panel-field">
+          <div style={{ display: "flex", gap: 8 }}>
+            <div className="field" style={{ flex: 1 }}>
               <label>发起方</label>
-              <select value={initiator} onChange={(e) => setInitiator(e.target.value)}>
+              <select className="input" value={initiator} onChange={(e) => setInitiator(e.target.value)}>
                 {onlineAgents.map((a) => <option key={a} value={a}>{a}</option>)}
               </select>
             </div>
-            <div className="panel-field">
+            <div className="field" style={{ flex: 1 }}>
               <label>参与方</label>
-              <select value={participant} onChange={(e) => setParticipant(e.target.value)}>
+              <select className="input" value={participant} onChange={(e) => setParticipant(e.target.value)}>
                 {onlineAgents.filter((a) => a !== initiator).map((a) => <option key={a} value={a}>{a}</option>)}
               </select>
             </div>
           </div>
-          <div className="panel-field">
+          <div className="field">
             <label>最大轮数: {maxTurns}</label>
             <input type="range" min={2} max={20} value={maxTurns} onChange={(e) => setMaxTurns(Number(e.target.value))} />
           </div>
-          <button type="button" className="btn-primary" onClick={startDialogue} disabled={loading || !topic.trim() || onlineAgents.length < 2}>
+          <button type="button" className="btn btn-primary" onClick={startDialogue} disabled={loading || !topic.trim() || onlineAgents.length < 2}>
             {loading ? "启动中..." : "▶ 自动运行对话"}
           </button>
           {onlineAgents.length < 2 && (
-            <p className="panel-hint" style={{ marginTop: 6 }}>至少需要 2 个 Agent 在线才能启动对话。</p>
+            <p className="panel-hint">至少需要 2 个 Agent 在线才能启动对话。</p>
           )}
         </>
       )}
 
       {loop && (
         <>
-          <div className={`dialogue-status dialogue-status--${loop.status}`}>
+          <div className={`dialogue-status dialogue-status--${loop.status === "active" ? "active" : loop.status === "consensus" ? "consensus" : ""}`}>
             {isActive ? "🟢 自动运行中" : loop.status === "consensus" ? "✅ 已达成共识" : "⚫ 已结束"}
             {" · "}
             第 ~{loop.current_round}/{loop.max_turns} 轮
           </div>
-          <p className="panel-topic">{loop.topic}</p>
+          <p style={{ fontSize: 13, fontWeight: 600 }}>{loop.topic}</p>
           <p className="panel-hint">Agent 回复会实时出现在聊天区。</p>
 
           {isActive && (
             <>
-              <div className="dialogue-interventions">
-                <button type="button" className="btn-ghost dialogue-btn-skip" onClick={skipTurn} disabled={loading}>
+              <div style={{ display: "flex", gap: 6 }}>
+                <button type="button" className="btn btn-ghost btn-sm" onClick={skipTurn} disabled={loading}>
                   ⏭ 跳过当前轮
                 </button>
-                <button type="button" className="btn-danger" onClick={endDialogue} disabled={loading}>
+                <button type="button" className="btn btn-danger btn-sm" onClick={endDialogue} disabled={loading}>
                   ⏹ 停止对话
                 </button>
               </div>
-              <div className="panel-field dialogue-inject">
+              <div className="field">
                 <label>注入人类消息</label>
                 <div style={{ display: "flex", gap: 6 }}>
                   <input
+                    className="input"
                     value={injectText}
                     onChange={(e) => setInjectText(e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && injectHumanMessage()}
                     placeholder="输入你的意见或引导方向..."
                   />
-                  <button type="button" className="btn-primary" onClick={injectHumanMessage} disabled={!injectText.trim() || loading} style={{ width: "auto", padding: "8px 14px" }}>
+                  <button type="button" className="btn btn-primary btn-sm" onClick={injectHumanMessage} disabled={!injectText.trim() || loading}>
                     注入
                   </button>
                 </div>
               </div>
             </>
+          )}
+          {!isActive && (
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => setLoop(null)}>
+              开始新对话
+            </button>
           )}
         </>
       )}

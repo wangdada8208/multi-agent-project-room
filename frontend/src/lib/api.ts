@@ -329,6 +329,26 @@ export async function fetchTemplates(): Promise<RoomTemplateInfo[]> {
   return payload.templates ?? [];
 }
 
+export async function createRoomFromTemplate(templateKey: string, name: string): Promise<Room> {
+  const response = await apiFetch("/api/v1/templates/create-room", {
+    method: "POST",
+    body: JSON.stringify({ template_key: templateKey, name }),
+  });
+  if (!response.ok) throw new Error("Failed to create room from template");
+  const payload = (await response.json()) as { room: Room };
+  return payload.room;
+}
+
+export async function bindXmtpGroup(roomId: string, groupId: string): Promise<void> {
+  const response = await apiFetch(`/api/v1/rooms/${roomId}/xmtp-binding`, {
+    method: "POST",
+    body: JSON.stringify({ xmtp_group_id: groupId }),
+  });
+  if (response.status === 403) throw new Error("只有房主可以绑定加密群");
+  if (response.status === 409) return; // 已绑定，幂等成功
+  if (!response.ok) throw new Error("加密群绑定失败，请重试");
+}
+
 export async function searchMessages(roomId: string, query: string): Promise<ChatMessage[]> {
   if (!query.trim()) return [];
   const response = await apiFetch(`/api/v1/rooms/${roomId}/messages/search?q=${encodeURIComponent(query)}`);

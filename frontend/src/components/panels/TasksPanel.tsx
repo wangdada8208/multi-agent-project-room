@@ -2,6 +2,7 @@ import type { RoomTask } from "../../types/chat";
 
 const STATUS_MAP: Record<string, string> = {
   submitted: "已提交",
+  queued: "排队中",
   working: "处理中",
   completed: "已完成",
   failed: "失败",
@@ -10,7 +11,6 @@ const STATUS_MAP: Record<string, string> = {
 };
 
 const STATUS_CLASS: Record<string, string> = {
-  submitted: "task-badge--submitted",
   working: "task-badge--working",
   completed: "task-badge--completed",
   failed: "task-badge--failed",
@@ -32,6 +32,9 @@ export function TasksPanel({ tasks }: { tasks: RoomTask[] }) {
             </span>
           </div>
           <p className="task-card__query">{task.query}</p>
+          {task.progress && task.progress.percent > 0 && task.progress.percent < 100 && (
+            <div className="task-progress"><div style={{ width: `${task.progress.percent}%` }} /></div>
+          )}
         </div>
       ))}
     </div>
