@@ -17,6 +17,10 @@ jobs:
     timeout-minutes: 60
 
     steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ops/publish-helper-pkg
+
       - name: Download, verify, and expose files
         env:
           SOURCE_BASE_URL: ${{ inputs.source_base_url }}
@@ -50,24 +54,22 @@ jobs:
           $SUDO mkdir -p "$TMP"
           $SUDO chown "$(id -u):$(id -g)" "$TMP"
 
-          curl --fail --location --retry 5 --retry-delay 5 \
-            --output "$TMP/$CLASSIFICATION_NAME" \
-            "$BASE_URL/$CLASSIFICATION_NAME"
-          curl --fail --location --retry 5 --retry-delay 5 \
-            --output "$TMP/$PACKAGE_NAME" \
-            "$BASE_URL/$PACKAGE_NAME"
+          # 运维分支内自带发布包：runner 到 github release CDN 的直连不稳，
+          # checkout(git 协议)可用，故从工作区复制而不是 curl 下载。
+          cp "${GITHUB_WORKSPACE}/release-pkg/$CLASSIFICATION_NAME" "$TMP/$CLASSIFICATION_NAME"
+          cp "${GITHUB_WORKSPACE}/release-pkg/$PACKAGE_NAME" "$TMP/$PACKAGE_NAME"
 
           printf "%s  %s\n" "$CLASSIFICATION_SHA256" "$TMP/$CLASSIFICATION_NAME" | sha256sum -c -
           printf "%s  %s\n" "$PACKAGE_SHA256" "$TMP/$PACKAGE_NAME" | sha256sum -c -
 
           cat > "$TMP/README.txt" <<EOF
-          Skill handoff downloads
+          mapr-helper (xmtp-member) release package
 
           Package:
             $PACKAGE_NAME
             sha256 $PACKAGE_SHA256
 
-          Classification:
+          Checksum sidecar:
             $CLASSIFICATION_NAME
             sha256 $CLASSIFICATION_SHA256
           EOF
