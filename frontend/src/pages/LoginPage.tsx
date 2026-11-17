@@ -17,7 +17,7 @@ export function LoginPage() {
     e.preventDefault();
     setError("");
     if (mode === "register" && password.length < 8) {
-      setError("密码长度至少需要 8 位，请重新输入");
+      setError("密码长度至少需要 8 位");
       return;
     }
     setSubmitting(true);
@@ -31,61 +31,60 @@ export function LoginPage() {
           })
         : await login({ username: username.trim(), password });
       setSession(payload.user, payload.access_token);
-      navigate("/rooms");
+      navigate("/");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "认证失败");
+      setError(err instanceof Error ? err.message : "认证失败，请重试");
     } finally {
       setSubmitting(false);
     }
   }
 
   return (
-    <div className="login-page">
-      <div className="login-card">
-        <div className="login-logo">
-          <span>◈</span>
-          <h1>{mode === "login" ? "欢迎回来" : "创建账户"}</h1>
-          <p>多人多 Agent 协作空间</p>
-        </div>
+    <div className="auth-page">
+      <div className="card auth-card">
+        <div className="auth-logo">🤖</div>
+        <h1>{mode === "login" ? "欢迎回来" : "创建账户"}</h1>
+        <p className="auth-sub">多人多 Agent 协作空间</p>
 
-        <form className="login-form" onSubmit={handleSubmit}>
+        <form className="auth-form" onSubmit={handleSubmit}>
           <input
+            className="input"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
             placeholder="用户名"
             autoFocus
           />
-
           {mode === "register" && (
             <input
+              className="input"
               value={displayName}
               onChange={(e) => setDisplayNameInput(e.target.value)}
               placeholder="显示名称（可选）"
             />
           )}
-
           <input
+            className="input"
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            placeholder="密码"
+            placeholder={mode === "register" ? "密码（至少 8 位）" : "密码"}
           />
 
-          {error && <div className="login-error">{error}</div>}
+          {error && <div className="auth-error">{error}</div>}
 
           <button
             type="submit"
-            className="btn-primary"
+            className="btn btn-primary"
             disabled={submitting || !username.trim() || !password}
           >
             {submitting ? "处理中..." : mode === "login" ? "登录" : "注册并进入"}
           </button>
         </form>
 
-        <div className="login-switch">
+        <div className="auth-switch">
           {mode === "login"
-            ? <>没有账户？<button onClick={() => setMode("register")}>创建一个</button></>
-            : <>已有账户？<button onClick={() => setMode("login")}>返回登录</button></>
+            ? <>没有账户？<button type="button" onClick={() => { setMode("register"); setError(""); }}>创建一个</button></>
+            : <>已有账户？<button type="button" onClick={() => { setMode("login"); setError(""); }}>返回登录</button></>
           }
         </div>
       </div>

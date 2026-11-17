@@ -1,7 +1,7 @@
 import { memo } from "react";
-import type { ChatMessage } from "../../types/chat";
+import type { ChatMessage } from "../types/chat";
 
-interface MessageItemProps {
+interface ChatMessageProps {
   message: ChatMessage;
   isOwn: boolean;
 }
@@ -26,7 +26,6 @@ function detectConflicts(content: string): string[] {
   return conflicts.slice(0, 3);
 }
 
-/** Simple markdown-ish rendering */
 function renderContent(content: string) {
   return content.split("\n").map((line, i) => {
     if (line.startsWith("### ")) return <h4 key={i}>{line.slice(4)}</h4>;
@@ -35,11 +34,11 @@ function renderContent(content: string) {
     if (line.startsWith("- ") || line.startsWith("• "))
       return <li key={i} style={{ marginLeft: 16 }}>{line.slice(2)}</li>;
     if (line.trim() === "") return <div key={i} style={{ height: 6 }} />;
-    return <p key={i} style={{ margin: 0 }}>{line}</p>;
+    return <p key={i}>{line}</p>;
   });
 }
 
-export const MessageItem = memo(function MessageItem({ message, isOwn: rawIsOwn }: MessageItemProps) {
+export const ChatMessageItem = memo(function ChatMessageItem({ message, isOwn: rawIsOwn }: ChatMessageProps) {
   const isSystem = message.msg_type === "system";
   const isAgent = message.sender_type === "agent";
   const isOwn = !isAgent && rawIsOwn;
@@ -48,49 +47,44 @@ export const MessageItem = memo(function MessageItem({ message, isOwn: rawIsOwn 
 
   if (isSystem) {
     return (
-      <div className="msg-system">
-        <span>{message.content}</span>
-      </div>
+      <div className="msg-sys"><span>{message.content}</span></div>
     );
   }
 
   return (
-    <div className={`msg-row ${isOwn ? "msg-row--own" : ""}`}>
+    <div className={`msg ${isOwn ? "msg--own" : ""}`}>
       {!isOwn && (
-        <div className={`msg-avatar ${isAgent ? "msg-avatar--agent" : ""}`}>
+        <div className={`msg__avatar ${isAgent ? "msg__avatar--agent" : ""}`}>
           {isAgent ? "🤖" : (message.sender_name || "?").charAt(0).toUpperCase()}
         </div>
       )}
       <div
         className={[
-          "msg-bubble",
-          isAgent ? "msg-bubble--agent" : "",
-          isOwn ? "msg-bubble--own" : "",
-          hasConsensus ? "msg-bubble--consensus" : "",
-          conflicts.length > 0 && !hasConsensus ? "msg-bubble--conflict" : "",
+          "msg__bubble",
+          isAgent ? "msg__bubble--agent" : "",
+          hasConsensus ? "msg__bubble--consensus" : "",
+          conflicts.length > 0 && !hasConsensus ? "msg__bubble--conflict" : "",
         ].filter(Boolean).join(" ")}
       >
-        <div className="msg-meta">
-          <span className="msg-meta__name">
+        <div className="msg__meta">
+          <span className="msg__name">
             {isAgent ? (message.sender_name || "Agent") : (isOwn ? "我" : message.sender_name || message.sender_id.slice(0, 8))}
             {isAgent && message.msg_type !== "text" && (
-              <span className="msg-tag">{message.msg_type}</span>
+              <span className="msg__tag">{message.msg_type}</span>
             )}
           </span>
-          <span className="msg-meta__time">
+          <span className="msg__time">
             {message.created_at && new Date(message.created_at).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}
           </span>
         </div>
 
-        {hasConsensus && (
-          <div className="badge badge--consensus">✅ 已达成共识</div>
-        )}
+        {hasConsensus && <div className="badge-consensus">✅ 已达成共识</div>}
 
-        <div className="msg-content">{renderContent(message.content)}</div>
+        <div className="msg__content">{renderContent(message.content)}</div>
 
         {conflicts.length > 0 && !hasConsensus && (
-          <div className="conflicts">
-            <span className="conflicts__label">⚠️ 发现冲突</span>
+          <div className="conflict-box">
+            <strong>⚠️ 发现冲突</strong>
             <ul>
               {conflicts.map((c, i) => <li key={i}>{c}</li>)}
             </ul>

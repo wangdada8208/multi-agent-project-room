@@ -1,24 +1,24 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import type { Client } from "@xmtp/browser-sdk";
 import { useWebSocket } from "../hooks/useWebSocket";
-import { SidePanel } from "../components/panels/SidePanel";
+import { useNotification } from "../hooks/useNotification";
+import { useAnalytics } from "../hooks/useAnalytics";
+import { ChatMessageItem } from "../components/ChatMessage";
+import { ChatInput } from "../components/ChatInput";
+import { XmtpUnlock } from "../components/XmtpUnlock";
 import { MembersPanel } from "../components/panels/MembersPanel";
 import { TasksPanel } from "../components/panels/TasksPanel";
 import { DialoguePanel } from "../components/panels/DialoguePanel";
 import { FilesPanel } from "../components/panels/FilesPanel";
-import { TeamPanel } from "../components/panels/TeamPanel";
-import { MessageItem } from "../components/chat/MessageItem";
-import { ChatInput } from "../components/chat/ChatInput";
-import { XmtpIdentityUnlock } from "../components/XmtpIdentityUnlock";
-import { useNotification } from "../hooks/useNotification";
-import { useAnalytics } from "../hooks/useAnalytics";
-import { fetchMessages, fetchAgents, fetchTasks, searchMessages, apiFetch } from "../lib/api";
+import { PermissionsPanel } from "../components/panels/PermissionsPanel";
+import {
+  fetchMessages, fetchAgents, fetchTasks, searchMessages, apiFetch,
+} from "../lib/api";
 import { createLocalXmtpClient, inboxAddress } from "../lib/xmtpLocalIdentity";
 import { sendXmtpMessage, toLocalChatMessage } from "../lib/xmtpSend";
 import { describeEnvelope } from "../lib/envelopeView";
-import { memberIdentifier, assertWorkerAddress } from "../lib/xmtpGroup";
 import { formatOwnerNoteAction, visibleOwnerNotes } from "../lib/ownerNotes";
 import { useAuthStore } from "../stores/authStore";
 import { useChatStore } from "../stores/chatStore";
@@ -32,28 +32,40 @@ const CONNECTION_LABEL: Record<string, string> = {
   idle: "等待中",
 };
 
+type TabId = "members" | "tasks" | "dialogue" | "files" | "permissions";
+const TABS: { id: TabId; label: string; icon: string }[] = [
+  { id: "members", label: "成员", icon: "👥" },
+  { id: "tasks", label: "任务", icon: "📋" },
+  { id: "dialogue", label: "对话", icon: "💬" },
+  { id: "files", label: "文件", icon: "📎" },
+  { id: "permissions", label: "权限", icon: "🔒" },
+];
+
 export function RoomPage() {
   const params = useParams();
-  const roomId = params.roomId ?? "demo-room";
+  const navigate = useNavigate();
+  const roomId = params.roomId ?? "";
 
-  // Fetch room info
   const roomQuery = useQuery({
     queryKey: ["rooms", roomId],
     queryFn: async () => {
       const res = await apiFetch(`/api/v1/rooms/${roomId}`);
       if (!res.ok) return null;
-      const data = await res.json();
-      return data.room as Room;
+      return (await res.json()).room as Room;
     },
     enabled: !!roomId,
   });
 
-  const { sendMessage } = useWebSocket(roomId, roomQuery.data?.transport);
+  const room = roomQuery.data;
+  const isEncrypted = room?.transport === "xmtp";
+
+  const { sendMessage } = useWebSocket(roomId, room?.transport);
   const { enabled: notifEnabled, requestPermission: requestNotifPermission } = useNotification(roomId);
   const { track } = useAnalytics();
   const user = useAuthStore((state) => state.user);
+
   const storedMessages = useChatStore((state) => state.messages);
-  const messages = storedMessages.filter(message => message.room_id === roomId);
+  const messages = storedMessages.filter((m) => m.room_id === roomId);
   const setMessages = useChatStore((state) => state.setMessages);
   const addMessage = useChatStore((state) => state.addMessage);
   const connectionStatus = useChatStore((state) => state.connectionStatus);
@@ -66,8 +78,9 @@ export function RoomPage() {
   const [xmtpError, setXmtpError] = useState("");
   const [xmtpConnected, setXmtpConnected] = useState(false);
   const [retryConnection, setRetryConnection] = useState(0);
-  const [myXmtpAddress, setMyXmtpAddress] = useState<string>("");
-  const isEncrypted = roomQuery.data?.transport === "xmtp";
+  const [myXmtpAddress, setMyXmtpAddress] = useState("");
+  const [panelOpen, setPanelOpen] = useState(() => window.innerWidth > 860);
+  const [activeTab, setActiveTab] = useState<TabId>("members");
 
   const permissionsQuery = useQuery({
     queryKey: ["rooms", roomId, "permissions"],
@@ -79,13 +92,13 @@ export function RoomPage() {
     enabled: !!roomId,
   });
 
-  const myRoomRole = permissionsQuery.data?.members?.find((m: any) => m.user_id === user?.id)?.role;
+  const myRoomRole = permissionsQuery.data?.members?.find(
+    (m: any) => m.user_id === user?.id
+  )?.role;
 
   const isObserver = useMemo(() => {
     if (!permissionsQuery.data?.members || !user?.id) return false;
-    const myPerm = permissionsQuery.data.members.find(
-      (m: any) => m.user_id === user.id,
-    );
+    const myPerm = permissionsQuery.data.members.find((m: any) => m.user_id === user.id);
     return myPerm?.role === "viewer" || myPerm?.role === "observer";
   }, [permissionsQuery.data, user]);
 
@@ -93,11 +106,10 @@ export function RoomPage() {
     track("room_enter", roomId);
   }, [roomId, track]);
 
-  // Fetch messages (only for non-xmtp rooms)
   const messagesQuery = useQuery({
     queryKey: ["rooms", roomId, "messages"],
     queryFn: () => fetchMessages(roomId),
-    enabled: !!roomQuery.data && !isEncrypted,
+    enabled: !!room && !isEncrypted,
   });
   useEffect(() => {
     if (messagesQuery.data) setMessages(messagesQuery.data, roomId);
@@ -107,18 +119,16 @@ export function RoomPage() {
     queryKey: ["ownerNotes"],
     queryFn: async () => {
       const res = await fetch("http://127.0.0.1:8787/owner-notes");
-      if (!res.ok) {
-        throw new Error("fail");
-      }
+      if (!res.ok) throw new Error("fail");
       const data = await res.json();
       return visibleOwnerNotes(data.notes || []);
     },
     enabled: isEncrypted,
-    refetchInterval: 3000,
+    refetchInterval: 5000,
     retry: false,
   });
 
-  // A locked identity never starts an XMTP client.
+  // XMTP 客户端：解锁后建立；群绑定交给一键配置向导，这里只负责连接已绑定的群。
   useEffect(() => {
     if (!isEncrypted || !unlockedKey || permissionsQuery.isPending) return;
     let cancelled = false;
@@ -136,36 +146,6 @@ export function RoomPage() {
         }
         activeClient = client;
         setXmtpClient(client);
-
-        if (!roomQuery.data?.xmtp_group_id) {
-          if (myRoomRole !== "owner") {
-            throw new Error("等待房主创建并绑定加密群");
-          }
-          const workerAddress = assertWorkerAddress(
-            import.meta.env.VITE_XMTP_WORKER_ADDRESS as string | undefined,
-          );
-          const group = await client.conversations.createGroup([]);
-          await group.addMembersByIdentifiers([memberIdentifier(workerAddress)]);
-          if (cancelled) return;
-          const token = useAuthStore.getState().token ?? "";
-          const res = await apiFetch(`/api/v1/rooms/${roomId}/xmtp-binding`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify({ xmtp_group_id: group.id }),
-          });
-          if (res.ok) {
-            void roomQuery.refetch();
-          } else if (res.status === 403) {
-            throw new Error("只有房主可以绑定加密群");
-          } else if (res.status === 409) {
-            void roomQuery.refetch();
-          } else {
-            throw new Error("加密群绑定失败，请重试");
-          }
-        }
       } catch (err) {
         if (!cancelled) setXmtpError(err instanceof Error ? err.message : "无法连接加密房间");
       }
@@ -177,15 +157,16 @@ export function RoomPage() {
       activeClient?.close();
       setXmtpClient(null);
     };
-  }, [isEncrypted, unlockedKey, roomId, retryConnection, myRoomRole, permissionsQuery.isPending]);
+  }, [isEncrypted, unlockedKey, roomId, retryConnection, permissionsQuery.isPending]);
 
-  // Subscribe before loading history, then merge by XMTP message ID.
+  // 订阅加密群消息
   useEffect(() => {
-    const targetGroupId = roomQuery.data?.xmtp_group_id;
+    const targetGroupId = room?.xmtp_group_id;
     if (!xmtpClient || !isEncrypted || !targetGroupId) return;
     let cancelled = false;
     let stop: (() => Promise<unknown>) | undefined;
     const client = xmtpClient;
+
     function ingest(message: any) {
       if (cancelled || message.conversationId !== targetGroupId || typeof message.content !== "string") return;
       addMessage(toLocalChatMessage({
@@ -197,6 +178,7 @@ export function RoomPage() {
         createdAt: message.sentAt?.toISOString(),
       }));
     }
+
     async function listen() {
       try {
         const stream = await client.conversations.streamAllMessages();
@@ -216,9 +198,8 @@ export function RoomPage() {
     }
     void listen();
     return () => { cancelled = true; setXmtpConnected(false); void stop?.(); };
-  }, [xmtpClient, isEncrypted, roomQuery.data?.xmtp_group_id, roomId, addMessage]);
+  }, [xmtpClient, isEncrypted, room?.xmtp_group_id, roomId, addMessage]);
 
-  // Fetch tasks
   const tasksQuery = useQuery({
     queryKey: ["rooms", roomId, "tasks"],
     queryFn: () => fetchTasks(roomId),
@@ -229,7 +210,6 @@ export function RoomPage() {
     if (tasksQuery.data) setTasks(tasksQuery.data);
   }, [tasksQuery.data, setTasks]);
 
-  // Fetch agents for mention buttons
   const agentsQuery = useQuery({
     queryKey: ["agents"],
     queryFn: fetchAgents,
@@ -244,7 +224,7 @@ export function RoomPage() {
     return (agentsQuery.data ?? []).map((a) => a.name).slice(0, 4);
   }, [participants, agentsQuery.data]);
 
-    const [searchQuery, setSearchQuery] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
   const [showSearch, setShowSearch] = useState(false);
   const [searchResults, setSearchResults] = useState<typeof messages>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -258,8 +238,8 @@ export function RoomPage() {
     track("message_send", roomId, { sender_type: senderType });
     return sendMessage({
       content,
-      transport: roomQuery.data?.transport,
-      xmtpGroupId: roomQuery.data?.xmtp_group_id,
+      transport: room?.transport,
+      xmtpGroupId: room?.xmtp_group_id,
       sendToXmtp: xmtpClient
         ? (groupId, text) => sendXmtpMessage({ groupId, content: text, client: xmtpClient })
         : undefined,
@@ -276,9 +256,9 @@ export function RoomPage() {
         const data = await res.json();
         const url = `${window.location.origin}${data.share_url}`;
         await navigator.clipboard.writeText(url);
-        alert(`分享链接已复制到剪贴板：\n${url}\n\n有效期 72 小时`);
+        alert(`分享链接已复制：\n${url}\n\n有效期 72 小时`);
       }
-    } catch { /* silent */ }
+    } catch { /* 静默 */ }
   }
 
   async function handleSearch() {
@@ -287,7 +267,6 @@ export function RoomPage() {
     try {
       const results = await searchMessages(roomId, searchQuery.trim());
       setSearchResults(results);
-      setShowSearch(true);
     } catch {
       setSearchResults([]);
     } finally {
@@ -295,85 +274,79 @@ export function RoomPage() {
     }
   }
 
+  if (roomQuery.isError || (roomQuery.isSuccess && !room)) {
+    return (
+      <div className="page-error card">
+        <p>房间不存在或没有访问权限。</p>
+        <Link to="/" className="btn btn-ghost" style={{ marginTop: 12, display: "inline-flex" }}>回首页</Link>
+      </div>
+    );
+  }
+
+  const notes = ownerNotesQuery.data ?? [];
+
   return (
-    <div className="room-layout">
-      {/* ── 聊天区 ── */}
-      <section className="chat-area">
-        <header className="chat-area__header">
-          <Link to="/rooms" className="chat-area__back">←</Link>
-          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-            <span className="chat-area__title">
-              {roomQuery.data?.name || "房间"}
-            </span>
+    <div className="room-shell">
+      <section className="chat-main">
+        <header className="chat-head">
+          <Link to="/" className="chat-head__back">←</Link>
+          <div className="chat-head__title">
+            <span>{room?.name ?? "加载中..."}</span>
             <span
-              style={{
-                fontSize: 11,
-                color: "var(--text-secondary)",
-                cursor: "pointer",
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 4,
-                fontFamily: "monospace",
-              }}
-              title="点击复制完整房间 ID"
-              onClick={async () => {
-                await navigator.clipboard.writeText(roomId);
-                alert(`房间 ID 已复制到剪贴板：\n${roomId}\n\n可直接粘贴至 Agent 启动命令中的 --room-id 参数`);
-              }}
+              className="hint"
+              style={{ fontFamily: "var(--mono)", fontSize: 11, cursor: "pointer" }}
+              title="点击复制房间 ID"
+              onClick={() => navigator.clipboard.writeText(roomId).catch(() => {})}
             >
               ID: {roomId} 📋
             </span>
             {isEncrypted && myXmtpAddress && (
               <span
-                style={{ fontSize: 11, color: "var(--text-secondary)", cursor: "pointer", fontFamily: "monospace" }}
-                title="点击复制本机加密身份地址，填进对方成员进程的 XMTP_ALLOWED_SENDERS"
-                onClick={async () => {
-                  await navigator.clipboard.writeText(myXmtpAddress);
-                }}
+                className="hint"
+                style={{ fontFamily: "var(--mono)", fontSize: 11, cursor: "pointer" }}
+                title="点击复制我的加密地址（对方白名单要用）"
+                onClick={() => navigator.clipboard.writeText(myXmtpAddress).catch(() => {})}
               >
-                我的加密地址: {myXmtpAddress} 📋
+                我的加密地址: {myXmtpAddress.slice(0, 10)}...{myXmtpAddress.slice(-6)} 📋
               </span>
             )}
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: "auto" }}>
+          <div className="chat-head__actions">
             {!notifEnabled && (
-              <button type="button" onClick={requestNotifPermission} title="开启 Agent 回复通知" style={{ fontSize: 16, background: "none", border: "none", cursor: "pointer" }}>
-                🔔
-              </button>
+              <button type="button" className="icon-btn" onClick={requestNotifPermission} title="开启 Agent 回复通知">🔔</button>
             )}
-            <button type="button" className="chat-search-toggle" onClick={() => setShowSearch(!showSearch)} title="搜索消息" disabled={isEncrypted}>
-              🔍
-            </button>
-            <button type="button" className="chat-search-toggle" onClick={handleShare} title="分享房间链接" disabled={isEncrypted}>🔗</button>
-            <span className={`chat-area__status chat-area__status--${connectionStatus}`}>
+            <button type="button" className="icon-btn" onClick={() => setShowSearch(!showSearch)} title="搜索消息" disabled={isEncrypted}>🔍</button>
+            <button type="button" className="icon-btn" onClick={handleShare} title="分享只读链接" disabled={isEncrypted}>🔗</button>
+            <button type="button" className="icon-btn" onClick={() => navigate(`/setup/${roomId}`)} title="一键配置 / 接入 Agent">⚡</button>
+            <button type="button" className="icon-btn" onClick={() => setPanelOpen(!panelOpen)} title="侧栏">☰</button>
+            <span className={`conn-status conn-status--${isEncrypted ? (xmtpConnected ? "open" : "closed") : connectionStatus}`}>
               <span className="dot" />
-              {isEncrypted ? xmtpConnected ? "加密消息已连接" : "加密消息未连接" : CONNECTION_LABEL[connectionStatus]}
+              <span>{isEncrypted ? (xmtpConnected ? "加密消息已连接" : "未连接") : CONNECTION_LABEL[connectionStatus]}</span>
             </span>
           </div>
         </header>
 
         {showSearch && (
-          <div className="chat-search-bar">
+          <div className="search-bar">
             <input
+              className="input"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleSearch()}
               placeholder="搜索消息..."
               autoFocus
             />
-            <button type="button" onClick={handleSearch} disabled={isSearching || !searchQuery.trim()}>
+            <button type="button" className="btn btn-ghost btn-sm" onClick={handleSearch} disabled={isSearching || !searchQuery.trim()}>
               {isSearching ? "搜索中..." : "搜索"}
             </button>
-            <button type="button" className="btn-ghost" onClick={() => { setShowSearch(false); setSearchResults([]); setSearchQuery(""); }}>
-              ✕
-            </button>
+            <button type="button" className="icon-btn" onClick={() => { setShowSearch(false); setSearchResults([]); setSearchQuery(""); }}>✕</button>
           </div>
         )}
         {showSearch && searchResults.length > 0 && (
-          <div className="chat-search-results">
-            <p className="chat-search-results__header">找到 {searchResults.length} 条结果：</p>
+          <div className="search-results">
+            <p className="hint" style={{ marginBottom: 6 }}>找到 {searchResults.length} 条结果：</p>
             {searchResults.map((msg) => (
-              <div key={msg.id} className="chat-search-result-row">
+              <div key={msg.id} className="search-result">
                 <strong>{msg.sender_name ?? msg.sender_id}</strong>
                 <span>{msg.content}</span>
                 <small>{new Date(msg.created_at).toLocaleString("zh-CN")}</small>
@@ -381,81 +354,91 @@ export function RoomPage() {
             ))}
           </div>
         )}
-        {isEncrypted && !unlockedKey && <XmtpIdentityUnlock onUnlock={setUnlockedKey} />}
-        {isEncrypted && xmtpError && <div className="chat-error" role="alert">{xmtpError}
-          <button type="button" onClick={() => setRetryConnection(n => n + 1)}>重新连接</button>
-        </div>}
-        <div className="chat-area__messages" ref={listRef}>
-          {isEncrypted && (
-            <div className="owner-notes-list" style={{ display: "flex", flexDirection: "column", gap: 8, padding: 12 }}>
-              {ownerNotesQuery.isError && (
-                <p className="chat-error">本机成员进程未启动</p>
-              )}
-              {ownerNotesQuery.isLoading && <p className="chat-loading">加载轮次记录...</p>}
-              {!ownerNotesQuery.isLoading && !ownerNotesQuery.isError && ownerNotesQuery.data && ownerNotesQuery.data.length > 0 && (
-                ownerNotesQuery.data.map((note, idx) => (
-                  <div
-                    key={idx}
-                    className="owner-note-row"
-                    style={{
-                      display: "flex",
-                      gap: 16,
-                      padding: "8px 12px",
-                      borderRadius: 6,
-                      background: "var(--bg-secondary, #f8f9fa)",
-                      border: "1px solid var(--border-color, #e5e7eb)",
-                      fontSize: 14,
-                    }}
-                  >
-                    <span>轮次: {note.turns_seen}</span>
-                    <span>动作: {formatOwnerNoteAction(note.action)}</span>
-                    <span>原因: {note.block_reason || "-"}</span>
-                  </div>
-                ))
-              )}
+
+        <div className="chat-messages" ref={listRef}>
+          {isEncrypted && !unlockedKey && <XmtpUnlock onUnlock={setUnlockedKey} />}
+
+          {isEncrypted && unlockedKey && !room?.xmtp_group_id && (
+            <div className="setup-note" style={{ alignSelf: "center", maxWidth: 460 }}>
+              这个房间还没完成加密配置。
+              {myRoomRole === "owner"
+                ? <> 点右上角 <strong>⚡</strong> 或 <Link to={`/setup/${roomId}`}>打开一键配置向导</Link> 完成建群与 Agent 接入。</>
+                : " 请房主先运行「一键配置」。"}
             </div>
           )}
-          {messagesQuery.isLoading && !isEncrypted && <p className="chat-loading">加载消息...</p>}
-          {messagesQuery.isError && !isEncrypted && <p className="chat-error">加载失败，请刷新重试。</p>}
-          {!messagesQuery.isLoading && messages.length === 0 && (
-            <div className="chat-empty">
+
+          {isEncrypted && xmtpError && (
+            <div className="auth-error" role="alert" style={{ alignSelf: "center" }}>
+              {xmtpError}
+              <button type="button" className="btn btn-ghost btn-sm" style={{ marginLeft: 8 }} onClick={() => setRetryConnection(n => n + 1)}>重新连接</button>
+            </div>
+          )}
+
+          {isEncrypted && ownerNotesQuery.isError && (
+            <div className="owner-note">本机成员进程未启动（你的 Agent 暂时不会自动回复）</div>
+          )}
+          {notes.map((note, idx) => (
+            <div key={idx} className="owner-note">
+              <span>轮次: {note.turns_seen}</span>
+              <span>动作: {formatOwnerNoteAction(note.action)}</span>
+              <span>原因: {note.block_reason || "-"}</span>
+            </div>
+          ))}
+
+          {messagesQuery.isLoading && !isEncrypted && <p className="loading-center">加载消息...</p>}
+          {messagesQuery.isError && !isEncrypted && <p className="error-text" style={{ textAlign: "center" }}>加载失败，请刷新重试。</p>}
+
+          {!messagesQuery.isLoading && messages.length === 0 && !isEncrypted && (
+            <div className="home-empty" style={{ alignSelf: "center", marginTop: 40, width: "100%", maxWidth: 420 }}>
               <p>暂无消息</p>
-              <small>发送第一条消息，或 @Agent 开始协作。</small>
+              <p className="hint" style={{ marginTop: 4 }}>发送第一条消息，或 @Agent 开始协作。</p>
             </div>
           )}
+
           {messages.map((msg) => (
-            <MessageItem key={msg.id} message={msg} isOwn={msg.sender_type !== "agent" && msg.sender_id === (user?.id ?? "")} />
+            <ChatMessageItem
+              key={msg.id}
+              message={msg}
+              isOwn={msg.sender_type !== "agent" && msg.sender_id === (user?.id ?? "")}
+            />
           ))}
         </div>
 
         {isObserver ? (
-          <div
-            className="chat-observer-notice"
-            style={{
-              padding: "12px 16px",
-              background: "rgba(255, 255, 255, 0.04)",
-              borderTop: "1px solid var(--border-color, #e5e7eb)",
-              textAlign: "center",
-              color: "var(--text-muted, #888)",
-              fontSize: 14,
-            }}
-          >
-            当前为只读观察者模式，仅可旁听协作过程。
-          </div>
+          <div className="chat-notice">当前为只读观察者模式，仅可旁听协作过程。</div>
         ) : (
-          <ChatInput disabled={isEncrypted ? !xmtpConnected : connectionStatus !== "open"} onlineAgents={onlineAgentNames} onSend={handleSend} />
+          <ChatInput
+            disabled={isEncrypted ? !xmtpConnected : connectionStatus !== "open"}
+            onlineAgents={onlineAgentNames}
+            onSend={handleSend}
+          />
         )}
       </section>
 
-      {/* ── 右侧面板 ── */}
-      <SidePanel
-        roomId={roomId}
-        members={<MembersPanel participants={participants} />}
-        tasks={<TasksPanel tasks={tasks.filter((t) => !t.room_id || t.room_id === roomId)} />}
-        dialogue={<DialoguePanel roomId={roomId} onlineAgents={onlineAgentNames} />}
-        files={<FilesPanel roomId={roomId} />}
-        team={<TeamPanel />}
-      />
+      {panelOpen && (
+      <aside className="side-panel open">
+        <nav className="side-panel__tabs">
+          {TABS.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              className={`side-panel__tab ${activeTab === tab.id ? "side-panel__tab--active" : ""}`}
+              onClick={() => setActiveTab(tab.id)}
+            >
+              <span>{tab.icon}</span>
+              <span>{tab.label}</span>
+            </button>
+          ))}
+        </nav>
+        <div className="side-panel__body">
+          {activeTab === "members" && <MembersPanel participants={participants} />}
+          {activeTab === "tasks" && <TasksPanel tasks={tasks.filter((t) => !t.room_id || t.room_id === roomId)} />}
+          {activeTab === "dialogue" && <DialoguePanel roomId={roomId} onlineAgents={onlineAgentNames} />}
+          {activeTab === "files" && <FilesPanel roomId={roomId} />}
+          {activeTab === "permissions" && <PermissionsPanel roomId={roomId} />}
+        </div>
+      </aside>
+      )}
     </div>
   );
 }

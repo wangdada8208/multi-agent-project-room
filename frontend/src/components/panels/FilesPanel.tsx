@@ -10,17 +10,13 @@ interface RoomFile {
   uploaded_at: string;
 }
 
-interface FilesPanelProps {
-  roomId: string;
-}
-
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-export function FilesPanel({ roomId }: FilesPanelProps) {
+export function FilesPanel({ roomId }: { roomId: string }) {
   const [files, setFiles] = useState<RoomFile[]>([]);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
@@ -33,9 +29,7 @@ export function FilesPanel({ roomId }: FilesPanelProps) {
         const data = await res.json();
         setFiles(data.files ?? []);
       }
-    } catch {
-      // silent
-    }
+    } catch { /* 静默，下轮重试 */ }
   }, [roomId]);
 
   useEffect(() => {
@@ -99,7 +93,7 @@ export function FilesPanel({ roomId }: FilesPanelProps) {
       />
       <button
         type="button"
-        className="btn-primary"
+        className="btn btn-primary"
         onClick={() => inputRef.current?.click()}
         disabled={uploading}
       >
@@ -110,24 +104,16 @@ export function FilesPanel({ roomId }: FilesPanelProps) {
       {files.length === 0 ? (
         <p className="panel-empty">暂无文件</p>
       ) : (
-        <div className="files-list">
-          {files.map((f) => (
-            <button
-              key={f.id}
-              type="button"
-              className="file-row"
-              style={{ background: "none", border: "none", font: "inherit", color: "inherit", width: "100%", textAlign: "left", cursor: "pointer" }}
-              onClick={() => handleDownload(f)}
-            >
-              <span>📄</span>
-              <div className="file-row__info">
-                <span className="file-row__name">{f.filename}</span>
-                <small>{formatSize(f.size)} · {f.uploaded_by}</small>
-              </div>
-              <span className="file-row__download">↓</span>
-            </button>
-          ))}
-        </div>
+        files.map((f) => (
+          <button key={f.id} type="button" className="file-row" onClick={() => handleDownload(f)}>
+            <span>📄</span>
+            <div className="file-row__info">
+              <span className="file-row__name">{f.filename}</span>
+              <small>{formatSize(f.size)} · {f.uploaded_by}</small>
+            </div>
+            <span>↓</span>
+          </button>
+        ))
       )}
     </div>
   );

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { apiFetch } from "../../lib/api";
 
 interface RoomMember {
@@ -10,24 +10,27 @@ interface RoomMember {
   user_type: string;
 }
 
-interface PermissionsPanelProps {
-  roomId: string;
-}
+const ROLE_LABELS: Record<string, string> = {
+  owner: "👑 管理员",
+  member: "👤 成员",
+  viewer: "👁 观察者",
+};
 
-export function PermissionsPanel({ roomId }: PermissionsPanelProps) {
+export function PermissionsPanel({ roomId }: { roomId: string }) {
   const [members, setMembers] = useState<RoomMember[]>([]);
   const [inviteUsername, setInviteUsername] = useState("");
-  const [inviteRole, setInviteRole] = useState<"owner" | "member" | "viewer">("member");
+  const [inviteRole, setInviteRole] = useState<"member" | "viewer">("member");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
 
-  async function fetchPermissions() {
+  const fetchPermissions = useCallback(async () => {
     try {
       const res = await apiFetch(`/api/v1/rooms/${roomId}/permissions`);
       if (res.ok) {
         const data = await res.json();
         setMembers(data.members ?? []);
+        setError("");
       } else if (res.status === 403) {
         setError("无权限查看成员列表");
       }
@@ -36,12 +39,11 @@ export function PermissionsPanel({ roomId }: PermissionsPanelProps) {
     } finally {
       setLoading(false);
     }
-  }
+  }, [roomId]);
 
   useEffect(() => {
-    fetchPermissions();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [roomId]);
+    void fetchPermissions();
+  }, [fetchPermissions]);
 
   async function handleInvite() {
     if (!inviteUsername.trim()) return;
@@ -54,9 +56,9 @@ export function PermissionsPanel({ roomId }: PermissionsPanelProps) {
         body: JSON.stringify({ username: inviteUsername.trim(), role: inviteRole }),
       });
       if (res.ok) {
-        setMessage(`✅ 已邀请 ${inviteUsername} 为 ${inviteRole}`);
+        setMessage(`✅ 已邀请 ${inviteUsername} 为 ${ROLE_LABELS[inviteRole]}`);
         setInviteUsername("");
-        fetchPermissions();
+        void fetchPermissions();
       } else {
         const data = await res.json().catch(() => ({ detail: "邀请失败" }));
         setError(data.detail ?? "邀请失败");
@@ -74,8 +76,8 @@ export function PermissionsPanel({ roomId }: PermissionsPanelProps) {
         method: "PUT",
         body: JSON.stringify({ user_id: userId, role: newRole }),
       });
-      if (res.ok) fetchPermissions();
-    } catch { /* silent */ }
+      if (res.ok) void fetchPermissions();
+    } catch { /* 静默 */ }
   }
 
   async function handleRemove(userId: string) {
@@ -83,65 +85,74 @@ export function PermissionsPanel({ roomId }: PermissionsPanelProps) {
       const res = await apiFetch(`/api/v1/rooms/${roomId}/members/${userId}`, {
         method: "DELETE",
       });
-      if (res.ok) fetchPermissions();
-    } catch { /* silent */ }
+      if (res.ok) void fetchPermissions();
+    } catch { /* 静默 */ }
   }
-
-  const ROLE_LABELS: Record<string, string> = { owner: "👑 管理员", member: "👤 成员", viewer: "👁 观察者" };
 
   return (
     <div className="panel-section">
-      <div className="panel-field">
+      <div className="field">
         <label>邀请成员</label>
         <div style={{ display: "flex", gap: 6 }}>
           <input
+            className="input"
             value={inviteUsername}
             onChange={(e) => setInviteUsername(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleInvite()}
             placeholder="输入用户名..."
           />
-          <select value={inviteRole} onChange={(e) => setInviteRole(e.target.value as typeof inviteRole)} style={{ width: "auto", padding: "6px 8px" }}>
+          <select
+            className="role-select"
+            value={inviteRole}
+            onChange={(e) => setInviteRole(e.target.value as typeof inviteRole)}
+          >
             <option value="member">成员</option>
             <option value="viewer">观察者</option>
           </select>
-          <button type="button" className="btn-primary" style={{ width: "auto", padding: "6px 12px" }} onClick={handleInvite} disabled={!inviteUsername.trim() || loading}>
+          <button
+            type="button"
+            className="btn btn-primary btn-sm"
+            onClick={handleInvite}
+            disabled={!inviteUsername.trim() || loading}
+          >
             邀请
           </button>
         </div>
       </div>
 
       {error && <p className="panel-error">{error}</p>}
-      {message && <p className="panel-hint" style={{ color: "var(--success)" }}>{message}</p>}
+      {message && <p className="ok-text">{message}</p>}
 
-      {!loading && members.length > 0 && (
-        <div className="permissions-list">
-          {members.map((m) => (
-            <div key={m.user_id} className="permission-row">
-              <span className={`msg-avatar msg-avatar--${m.user_type === "agent" ? "agent" : ""}`} style={{ width: 28, height: 28, fontSize: 12 }}>
-                {(m.display_name || m.username).charAt(0).toUpperCase()}
-              </span>
-              <div className="permission-row__info">
-                <strong>{m.display_name || m.username}</strong>
-                <small>@{m.username}</small>
-              </div>
-              <select
-                value={m.role}
-                onChange={(e) => handleRoleChange(m.user_id, e.target.value)}
-                className="permission-role-select"
-              >
-                <option value="owner">{ROLE_LABELS.owner}</option>
-                <option value="member">{ROLE_LABELS.member}</option>
-                <option value="viewer">{ROLE_LABELS.viewer}</option>
-              </select>
-              {m.role !== "owner" && (
-                <button type="button" className="permission-remove" onClick={() => handleRemove(m.user_id)} title="移除">
-                  ✕
-                </button>
-              )}
+      {loading && members.length === 0 && <p className="panel-empty">加载中...</p>}
+      {!loading && members.length === 0 && !error && <p className="panel-empty">暂无成员</p>}
+
+      <div>
+        {members.map((m) => (
+          <div key={m.user_id} className="permission-row">
+            <span className={`msg__avatar ${m.user_type === "agent" ? "msg__avatar--agent" : ""}`} style={{ width: 28, height: 28, fontSize: 12 }}>
+              {(m.display_name || m.username).charAt(0).toUpperCase()}
+            </span>
+            <div className="permission-row__info">
+              <strong>{m.display_name || m.username}</strong>
+              <small>@{m.username}</small>
             </div>
-          ))}
-        </div>
-      )}
+            <select
+              value={m.role}
+              onChange={(e) => handleRoleChange(m.user_id, e.target.value)}
+              className="role-select"
+            >
+              <option value="owner">{ROLE_LABELS.owner}</option>
+              <option value="member">{ROLE_LABELS.member}</option>
+              <option value="viewer">{ROLE_LABELS.viewer}</option>
+            </select>
+            {m.role !== "owner" && (
+              <button type="button" className="icon-btn" style={{ width: 26, height: 26, fontSize: 13 }} onClick={() => handleRemove(m.user_id)} title="移除">
+                ✕
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
