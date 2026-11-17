@@ -314,7 +314,7 @@ export function RoomPage() {
     return (
       <div className="page-error card">
         <p>房间不存在或没有访问权限。</p>
-        <Link to="/" className="btn btn-ghost" style={{ marginTop: 12, display: "inline-flex" }}>回首页</Link>
+        <Link to="/home" className="btn btn-ghost" style={{ marginTop: 12, display: "inline-flex" }}>回首页</Link>
       </div>
     );
   }
@@ -325,7 +325,7 @@ export function RoomPage() {
     <div className="room-shell">
       <section className="chat-main">
         <header className="chat-head">
-          <Link to="/" className="chat-head__back">←</Link>
+          <Link to="/home" className="chat-head__back">←</Link>
           <div className="chat-head__title">
             <span>{room?.name ?? "加载中..."}</span>
             <span

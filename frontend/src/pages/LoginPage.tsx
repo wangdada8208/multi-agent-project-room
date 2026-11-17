@@ -31,7 +31,7 @@ export function LoginPage() {
           })
         : await login({ username: username.trim(), password });
       setSession(payload.user, payload.access_token);
-      navigate("/");
+      navigate("/home");
     } catch (err) {
       setError(err instanceof Error ? err.message : "认证失败，请重试");
     } finally {
