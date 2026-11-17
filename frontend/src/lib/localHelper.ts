@@ -12,6 +12,8 @@
  * 配对、手动加 Agent、删席位属于 owner-write，一律引导用户去本机页面完成。
  */
 
+import { apiFetch } from "./api";
+
 export const HELPER_ORIGIN = "http://127.0.0.1:8790";
 
 /** /api/hello 探测超时：本机回环，1.5 秒足够。 */
@@ -102,6 +104,19 @@ export interface HelperDevice {
   revoked: boolean;
 }
 
+export interface RoomInviteView {
+  token: string;
+  room_id: string;
+  created_by: string;
+  proposed_scopes: string[];
+  expires_at: string;
+  is_expired?: boolean;
+  is_used?: boolean;
+  used_at: string | null;
+  redeemed_by_address: string | null;
+  created_at: string;
+}
+
 // ── 本机助手（127.0.0.1:8790） ──
 
 function isHelperHello(value: unknown): value is HelperHello {
@@ -112,14 +127,15 @@ function isHelperHello(value: unknown): value is HelperHello {
   );
 }
 
-/** 本机接口的错误回包可能是 {detail} 或 {error}；长度截断，防刷屏。 */
-function localErrorMessage(body: unknown, fallback: string): string {
+/** 本机接口的错误回包可能是 {reason}、{detail} 或 {error}；长度截断，防刷屏。 */
+export function localErrorMessage(body: unknown, fallback: string): string {
   const detail =
     typeof body === "object" && body !== null
-      ? (body as { detail?: unknown; error?: unknown }).detail ??
+      ? (body as { reason?: unknown; detail?: unknown; error?: unknown }).reason ??
+        (body as { detail?: unknown; error?: unknown }).detail ??
         (body as { error?: unknown }).error
       : undefined;
-  const text = typeof detail === "string" ? detail : fallback;
+  const text = typeof detail === "string" && detail.trim() ? detail : fallback;
   return text.slice(0, 200);
 }
 
@@ -136,13 +152,6 @@ async function readLocalJson(res: Response, fallback: string): Promise<unknown> 
 
 /**
  * GET /api/hello，1.5 秒超时。
- *
- * 结果分类：
- * - 200 且 app="mapr-helper" → running。
- * - 其他状态码、返回别的内容、超时中止 → not-running（没装、没启动或端口上是别的程序）。
- * - fetch 抛 TypeError → blocked。浏览器把连接被拒和「本地网络访问被拦」都报成
- *   TypeError: Failed to fetch，两者无法区分，统一按被拦处理（界面同时给出
- *   「打开本机助手」和安装命令两条路）。
  */
 export async function probeHelper(fetchImpl: typeof fetch = fetch): Promise<HelperProbe> {
   let res: Response;
@@ -187,9 +196,6 @@ export async function listLocalSeats(fetchImpl: typeof fetch = fetch): Promise<S
 
 /**
  * POST /api/seats，body = {via:"ticket", ticket, agent_key}。
- * 网站只能走票据这条路；room_id 由 Hub 核销票据时取自票据本身，
- * 本机助手不相信网站传来的房间号。
- * 浏览器若拦截请求会抛 TypeError，由调用方决定改用 helperHandoffUrl 跳转。
  */
 export async function joinViaTicket(
   ticket: string,
@@ -206,39 +212,66 @@ export async function joinViaTicket(
   return body as SeatViewLocal;
 }
 
-/** 浏览器拦截时的后备：本机页面读取地址里 # 后面的内容并自己完成配对或加入。 */
-export function helperHandoffUrl(action: { pair: string } | { ticket: string; agentKey: string }): string {
+export type HelperHandoffAction =
+  | { pair: string }
+  | { ticket: string; agentKey: string }
+  | { preset: string; roomId?: string; pairCode?: string };
+
+/** 浏览器拦截时的后备：本机页面读取地址里 # 后面的内容并自己完成配对、预设展开或加入。 */
+export function helperHandoffUrl(action: HelperHandoffAction): string {
   if ("pair" in action) {
     return `${HELPER_ORIGIN}/#pair=${encodeURIComponent(action.pair)}`;
+  }
+  if ("preset" in action) {
+    const params = new URLSearchParams();
+    if (action.pairCode && action.pairCode.trim()) {
+      params.set("pair", action.pairCode.trim());
+    }
+    params.set("preset", action.preset);
+    if (action.roomId && action.roomId.trim()) {
+      params.set("room", action.roomId.trim());
+    }
+    return `${HELPER_ORIGIN}/#${params.toString()}`;
   }
   const params = new URLSearchParams({ ticket: action.ticket, agent: action.agentKey });
   return `${HELPER_ORIGIN}/#${params.toString()}`;
 }
 
 /** 顶层跳转去本机页面。跳转会离开本站，调用前先把必要状态展示给用户。 */
-export function openHelperPage(action?: { pair: string } | { ticket: string; agentKey: string }): void {
+export function openHelperPage(action?: HelperHandoffAction): void {
   window.location.href = action ? helperHandoffUrl(action) : `${HELPER_ORIGIN}/`;
+}
+
+/** 生成 Windows PowerShell 一键安装并配对本机助手命令。 */
+export function powershellInstallCommand(code: string, hubOrigin?: string): string {
+  const origin = (hubOrigin ?? window.location.origin).replace(/\/+$/, "");
+  return `iex "& { $(irm ${origin}/install.ps1 -UseBasicParsing) } -Pair ${code} -Hub ${origin}"`;
 }
 
 // ── Hub（需要人类登录态，走 apiFetch 统一带令牌与请求编号） ──
 
-/**
- * apiFetch 走动态导入：./api 链路会在模块加载期读 localStorage（authStore），
- * 而本文件要在无 DOM 的测试环境也能 import。
- */
-async function hubFetch(input: string, init?: RequestInit): Promise<Response> {
-  const { apiFetch } = await import("./api");
+function hubFetch(input: string, init?: RequestInit): Promise<Response> {
   return apiFetch(input, init);
+}
+
+export class HubHttpError extends Error {
+  status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "HubHttpError";
+    this.status = status;
+  }
 }
 
 async function readHubJson(res: Response, fallback: string): Promise<unknown> {
   if (!res.ok) {
     let detail: unknown;
     try {
-      const body = (await res.json()) as { detail?: unknown };
-      detail = body?.detail;
+      const body = (await res.json()) as { detail?: unknown; reason?: unknown };
+      detail = body?.detail ?? body?.reason;
     } catch { /* 忽略非 JSON 回包 */ }
-    throw new Error(typeof detail === "string" ? detail.slice(0, 200) : fallback);
+    throw new HubHttpError(typeof detail === "string" ? detail.slice(0, 200) : fallback, res.status);
   }
   return res.json();
 }
@@ -260,7 +293,7 @@ export async function listMyHelpers(): Promise<HelperDevice[]> {
   return Array.isArray(body) ? (body as HelperDevice[]) : [];
 }
 
-/** DELETE /api/v1/helpers/{helper_id}：吊销一台本机助手（它的全部席位同时移除）。 */
+/** DELETE /api/v1/helpers/{helper_id}：吊销一台本机助手（它的全部席位同时移出）。 */
 export async function revokeHelper(helperId: string): Promise<void> {
   const res = await hubFetch(`/api/v1/helpers/${encodeURIComponent(helperId)}`, { method: "DELETE" });
   if (!res.ok) {
@@ -308,6 +341,68 @@ export async function removeRoomSeat(roomId: string, seatId: string): Promise<vo
     { method: "DELETE" },
   );
   if (!res.ok) {
-    await readHubJson(res, "移除席位失败，请重试");
+    await readHubJson(res, "移出席位失败，请重试");
   }
+}
+
+/** POST /api/v1/rooms/{room_id}/invites：房主生成加密入群邀请令牌。 */
+export async function createRoomInvite(roomId: string, expiresHours = 72): Promise<RoomInviteView> {
+  const res = await hubFetch(`/api/v1/rooms/${encodeURIComponent(roomId)}/invites`, {
+    method: "POST",
+    body: JSON.stringify({ proposed_scopes: [], expires_hours: expiresHours }),
+  });
+  const body = (await readHubJson(res, "生成加密入群邀请链接失败，请重试")) as { invite: RoomInviteView };
+  return body.invite;
+}
+
+/** GET /api/v1/rooms/{room_id}/invites：房主读取房间内邀请记录（含已核销地址）。 */
+export async function listRoomInvites(roomId: string): Promise<RoomInviteView[]> {
+  const res = await hubFetch(`/api/v1/rooms/${encodeURIComponent(roomId)}/invites`);
+  const body = (await readHubJson(res, "读取房间邀请记录失败")) as { invites?: RoomInviteView[] };
+  return body.invites ?? [];
+}
+
+/** POST /api/v1/invites/{token}/accept：协作者登录后凭邀请令牌自动获得房间成员权限（幂等）。 */
+export async function acceptRoomInvite(
+  token: string,
+): Promise<{ room_id: string; role: string }> {
+  const res = await hubFetch(`/api/v1/invites/${encodeURIComponent(token)}/accept`, {
+    method: "POST",
+  });
+  return (await readHubJson(res, "接受房间入群邀请失败")) as {
+    room_id: string;
+    role: string;
+  };
+}
+
+/** 将 acceptRoomInvite 抛出的状态码与后端错误文案转换为清晰的中文提示。 */
+export function formatInviteAcceptError(err: unknown): string {
+  const status = (err as { status?: number } | null)?.status;
+  const rawMessage = err instanceof Error ? err.message : "";
+  const lower = rawMessage.toLowerCase();
+  if (status === 409 || lower.includes("already redeemed")) {
+    return "该入群邀请链接已被使用，请向房主索取新的邀请链接。";
+  }
+  if (status === 410 || lower.includes("expired")) {
+    return "该入群邀请链接已过期，请向房主索取新的邀请链接。";
+  }
+  if (status === 404 || lower.includes("not found")) {
+    return "入群邀请链接无效或不存在。";
+  }
+  return rawMessage.trim() || "接受房间入群邀请失败";
+}
+
+/** POST /api/v1/invites/{token}/redeem：协作者提交本机 XMTP 地址核销邀请令牌。 */
+export async function redeemRoomInvite(
+  token: string,
+  xmtpAddress: string,
+): Promise<{ room_id: string; xmtp_group_id: string | null }> {
+  const res = await hubFetch(`/api/v1/invites/${encodeURIComponent(token)}/redeem`, {
+    method: "POST",
+    body: JSON.stringify({ xmtp_address: xmtpAddress }),
+  });
+  return (await readHubJson(res, "核销加密入群邀请失败")) as {
+    room_id: string;
+    xmtp_group_id: string | null;
+  };
 }

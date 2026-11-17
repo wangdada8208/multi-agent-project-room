@@ -1,15 +1,43 @@
 name: Publish Download Assets
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - "workers/xmtp-member/**"
+      - "scripts/pack-xmtp-member.sh"
+      - ".github/workflows/publish-downloads.yml"
   workflow_dispatch:
     inputs:
       source_base_url:
-        description: "Temporary HTTP base URL containing the files"
-        required: true
+        description: "Optional HTTP(S) base URL containing a prebuilt release tarball (leave empty to build from repo)"
+        required: false
+        default: ""
+        type: string
+      tarball_name:
+        description: "Tarball filename under source_base_url (ignored when building from repo)"
+        required: false
+        default: "xmtp-member-0.1.0.tar.gz"
+        type: string
+      expected_sha256:
+        description: "Expected 64-char SHA-256 hex digest when downloading from source_base_url"
+        required: false
+        default: ""
+        type: string
+      latest_alias:
+        description: "Stable alias filename exposed under /downloads/ (leave empty to skip)"
+        required: false
+        default: "xmtp-member-latest.tar.gz"
+        type: string
       target_slug:
-        description: "Subdirectory under /downloads/"
-        required: true
-        default: "skills-20260629"
+        description: "Optional subdirectory under /downloads/ (empty publishes directly under /downloads/)"
+        required: false
+        default: ""
+        type: string
+
+concurrency:
+  group: publish-downloads
+  cancel-in-progress: false
 
 jobs:
   publish:
@@ -17,23 +45,42 @@ jobs:
     timeout-minutes: 60
 
     steps:
-      - name: Download, verify, and expose files
+      - uses: actions/checkout@v6
+
+      - name: Build or download, verify SHA256, and expose release tarball
         env:
+          EVENT_NAME: ${{ github.event_name }}
           SOURCE_BASE_URL: ${{ inputs.source_base_url }}
+          INPUT_TARBALL_NAME: ${{ inputs.tarball_name }}
+          EXPECTED_SHA256: ${{ inputs.expected_sha256 }}
+          INPUT_LATEST_ALIAS: ${{ inputs.latest_alias }}
           TARGET_SLUG: ${{ inputs.target_slug }}
-          PACKAGE_NAME: wangdada-all-user-skills-20260629.tar.gz
-          PACKAGE_SHA256: 0625b3e16600c9c770a825bddd7c45fd03c2a20a1a0aaeafb7ee209469edddef
-          CLASSIFICATION_NAME: skill-classification-20260629.md
-          CLASSIFICATION_SHA256: bc186c66af1601dfd1be1face1c90d544335fe69afec81409c60616a1f808617
         run: |
           set -euo pipefail
 
-          case "$TARGET_SLUG" in
-            *[!A-Za-z0-9._-]*|"")
-              echo "Invalid target slug: $TARGET_SLUG" >&2
-              exit 2
-              ;;
-          esac
+          validate_filename() {
+            local label="$1"
+            local val="$2"
+            case "$val" in
+              *[!A-Za-z0-9._-]*|""|"."|"..")
+                echo "Invalid $label: $val" >&2
+                exit 2
+                ;;
+            esac
+          }
+
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            LATEST_ALIAS="$INPUT_LATEST_ALIAS"
+          else
+            LATEST_ALIAS="xmtp-member-latest.tar.gz"
+          fi
+
+          if [ -n "$LATEST_ALIAS" ]; then
+            validate_filename "latest_alias" "$LATEST_ALIAS"
+          fi
+          if [ -n "$TARGET_SLUG" ]; then
+            validate_filename "target_slug" "$TARGET_SLUG"
+          fi
 
           if [ "$(id -u)" -eq 0 ]; then
             SUDO=""
@@ -41,59 +88,89 @@ jobs:
             SUDO="sudo -n"
           fi
 
-          BASE_URL="${SOURCE_BASE_URL%/}"
-          ROOT="/var/www/hub-downloads"
-          DEST="$ROOT/$TARGET_SLUG"
-          TMP="$DEST.tmp"
+          if [ -d "/www/migrated/hub-downloads" ]; then
+            ROOT="/www/migrated/hub-downloads"
+          else
+            ROOT="/var/www/hub-downloads"
+          fi
+          echo "Using downloads root: $ROOT"
 
-          $SUDO rm -rf "$TMP"
-          $SUDO mkdir -p "$TMP"
-          $SUDO chown "$(id -u):$(id -g)" "$TMP"
+          if [ -n "$TARGET_SLUG" ]; then
+            DEST_DIR="$ROOT/$TARGET_SLUG"
+            PUBLIC_PREFIX="https://hub.wangdada8208.xyz/downloads/$TARGET_SLUG"
+          else
+            DEST_DIR="$ROOT"
+            PUBLIC_PREFIX="https://hub.wangdada8208.xyz/downloads"
+          fi
 
-          curl --fail --location --retry 5 --retry-delay 5 \
-            --output "$TMP/$CLASSIFICATION_NAME" \
-            "$BASE_URL/$CLASSIFICATION_NAME"
-          curl --fail --location --retry 5 --retry-delay 5 \
-            --output "$TMP/$PACKAGE_NAME" \
-            "$BASE_URL/$PACKAGE_NAME"
+          STAGE="$(mktemp -d "${TMPDIR:-/tmp}/mapr-publish.XXXXXX")"
+          trap 'rm -rf "$STAGE"' EXIT
 
-          printf "%s  %s\n" "$CLASSIFICATION_SHA256" "$TMP/$CLASSIFICATION_NAME" | sha256sum -c -
-          printf "%s  %s\n" "$PACKAGE_SHA256" "$TMP/$PACKAGE_NAME" | sha256sum -c -
+          if [ -n "$SOURCE_BASE_URL" ]; then
+            TARBALL_NAME="$INPUT_TARBALL_NAME"
+            validate_filename "tarball_name" "$TARBALL_NAME"
 
-          cat > "$TMP/README.txt" <<EOF
-          Skill handoff downloads
+            SHA_NORM="$(printf '%s' "$EXPECTED_SHA256" | tr 'A-F' 'a-f')"
+            if [[ ! "$SHA_NORM" =~ ^[0-9a-f]{64}$ ]]; then
+              echo "Invalid expected_sha256 (must be 64 hex chars): $EXPECTED_SHA256" >&2
+              exit 2
+            fi
 
-          Package:
-            $PACKAGE_NAME
-            sha256 $PACKAGE_SHA256
+            BASE_URL="${SOURCE_BASE_URL%/}"
+            curl --fail --location --retry 5 --retry-delay 5 \
+              --output "$STAGE/$TARBALL_NAME" \
+              "$BASE_URL/$TARBALL_NAME"
 
-          Classification:
-            $CLASSIFICATION_NAME
-            sha256 $CLASSIFICATION_SHA256
-          EOF
+            printf "%s  %s\n" "$SHA_NORM" "$STAGE/$TARBALL_NAME" | sha256sum -c -
+          else
+            sh scripts/pack-xmtp-member.sh
+            BUILT_TARBALL="$(ls dist/xmtp-member-*.tar.gz 2>/dev/null | head -n 1)"
+            if [ -z "$BUILT_TARBALL" ] || [ ! -f "$BUILT_TARBALL" ]; then
+              echo "pack-xmtp-member.sh did not produce dist/xmtp-member-*.tar.gz" >&2
+              exit 2
+            fi
+            TARBALL_NAME="$(basename "$BUILT_TARBALL")"
+            validate_filename "tarball_name" "$TARBALL_NAME"
+            cp "$BUILT_TARBALL" "$STAGE/$TARBALL_NAME"
+            SHA_NORM="$(sha256sum "$STAGE/$TARBALL_NAME" | awk '{print tolower($1)}')"
+          fi
 
-          $SUDO mkdir -p "$ROOT"
-          $SUDO rm -rf "$DEST"
-          $SUDO mv "$TMP" "$DEST"
-          $SUDO find "$DEST" -type d -exec chmod 755 {} \;
-          $SUDO find "$DEST" -type f -exec chmod 644 {} \;
+          printf "%s  %s\n" "$SHA_NORM" "$TARBALL_NAME" > "$STAGE/$TARBALL_NAME.sha256"
 
-          $SUDO python3 - <<'PY'
+          $SUDO mkdir -p "$DEST_DIR"
+          $SUDO chmod 755 "$ROOT" "$DEST_DIR"
+
+          $SUDO install -m 0644 "$STAGE/$TARBALL_NAME" "$DEST_DIR/.tmp.$TARBALL_NAME"
+          $SUDO install -m 0644 "$STAGE/$TARBALL_NAME.sha256" "$DEST_DIR/.tmp.$TARBALL_NAME.sha256"
+          $SUDO mv -f "$DEST_DIR/.tmp.$TARBALL_NAME" "$DEST_DIR/$TARBALL_NAME"
+          $SUDO mv -f "$DEST_DIR/.tmp.$TARBALL_NAME.sha256" "$DEST_DIR/$TARBALL_NAME.sha256"
+
+          if [ -n "$LATEST_ALIAS" ] && [ "$LATEST_ALIAS" != "$TARBALL_NAME" ]; then
+            printf "%s  %s\n" "$SHA_NORM" "$LATEST_ALIAS" > "$STAGE/$LATEST_ALIAS.sha256"
+            $SUDO install -m 0644 "$STAGE/$TARBALL_NAME" "$DEST_DIR/.tmp.$LATEST_ALIAS"
+            $SUDO install -m 0644 "$STAGE/$LATEST_ALIAS.sha256" "$DEST_DIR/.tmp.$LATEST_ALIAS.sha256"
+            $SUDO mv -f "$DEST_DIR/.tmp.$LATEST_ALIAS" "$DEST_DIR/$LATEST_ALIAS"
+            $SUDO mv -f "$DEST_DIR/.tmp.$LATEST_ALIAS.sha256" "$DEST_DIR/$LATEST_ALIAS.sha256"
+          fi
+
+          $SUDO env DOWNLOADS_ROOT="$ROOT" python3 - <<'PY'
           from __future__ import annotations
 
+          import os
           import re
           import shutil
           import subprocess
-          from datetime import datetime
+          from datetime import datetime, timezone
           from pathlib import Path
 
+          downloads_root = os.environ["DOWNLOADS_ROOT"].rstrip("/") + "/"
           marker = "location ^~ /downloads/"
-          location = """
-              location ^~ /downloads/ {
-                  alias /var/www/hub-downloads/;
+          location = f"""
+              location ^~ /downloads/ {{
+                  alias {downloads_root};
                   autoindex off;
                   add_header X-Content-Type-Options "nosniff" always;
-              }
+              }}
           """
 
           dump = subprocess.run(
@@ -146,7 +223,7 @@ jobs:
               if not inserts:
                   continue
 
-              stamp = datetime.utcnow().strftime("%Y%m%d%H%M%S")
+              stamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
               shutil.copy2(path, f"{path}.bak-downloads-{stamp}")
               for pos, snippet in sorted(inserts, reverse=True):
                   text = text[:pos] + snippet + text[pos:]
@@ -165,26 +242,7 @@ jobs:
             $SUDO nginx -s reload
           fi
 
-          curl --fail --head --location \
-            "https://hub.wangdada8208.xyz/downloads/$TARGET_SLUG/$CLASSIFICATION_NAME"
-          curl --fail --head --location \
-            "https://hub.wangdada8208.xyz/downloads/$TARGET_SLUG/$PACKAGE_NAME"
-
-# ── WP6 可选挂载点：xmtp-member 发布包 ─────────────────────────────
-# install.sh 的默认发布包地址是
-#   {hub_origin}/downloads/xmtp-member-latest.tar.gz
-# 要正式发布本机助手时，先跑 scripts/pack-xmtp-member.sh 得到
-# dist/xmtp-member-<version>.tar.gz，然后任选其一：
-#   a) 直接把 tar.gz 放到生产机 /var/www/hub-downloads/xmtp-member-latest.tar.gz；
-#   b) 复用本工作流：把产物挂到一个临时 HTTP 地址，workflow_dispatch 填
-#      source_base_url=<该地址>、target_slug=mapr，并把下面这段注释掉的步骤
-#      按需改写（当前工作流的 PACKAGE_NAME/SHA256 是为技能包硬编码的，
-#      复用时需把 env 参数化，或照上面 a) 手动放文件更省事）。
-# 示例（需先把 PACKAGE_NAME/PACKAGE_SHA256 参数化后再启用）：
-#   - name: Publish xmtp-member package
-#     env:
-#       PACKAGE_NAME: xmtp-member-latest.tar.gz
-#       PACKAGE_SHA256: <pack 脚本输出的 .sha256 内容>
-#     run: |
-#       curl --fail --location --output "$TMP/$PACKAGE_NAME" "$BASE_URL/$PACKAGE_NAME"
-#       printf "%s  %s\n" "$PACKAGE_SHA256" "$TMP/$PACKAGE_NAME" | sha256sum -c -
+          curl --fail --head --location "$PUBLIC_PREFIX/$TARBALL_NAME?v=$SHA_NORM"
+          if [ -n "$LATEST_ALIAS" ]; then
+            curl --fail --head --location "$PUBLIC_PREFIX/$LATEST_ALIAS?v=$SHA_NORM"
+          fi

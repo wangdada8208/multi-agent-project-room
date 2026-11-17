@@ -1,13 +1,21 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { mkdtemp, rm, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import vm from "node:vm";
 import { HubError, type HubClient } from "./hubClient.ts";
 import { createSeatStore, SEAT_PORT_BASE, type SeatStore, type SeatSupervisor } from "./seats.ts";
-import { createHelperServer, handleCreateSeat, type HelperServerDeps } from "./server.ts";
+import {
+  createHelperServer,
+  handleCreateSeat,
+  HelperHttpError,
+  HELPER_PAGE_HTML,
+  type HelperServerDeps,
+} from "./server.ts";
 import type { HelperConfig, LocalAgent, SeatGrant, SeatRecord, SeatView } from "./types.ts";
 
 async function withTmp(fn: (dir: string) => Promise<void>): Promise<void> {
@@ -418,4 +426,346 @@ test("helper server：pair 是 owner-write，未配对时 rooms 返回 401", asy
       assert.equal(pair.status, 403);
     });
   });
+});
+
+test("helper server：DELETE /api/agents/manual/:key 与 POST /api/agents/:key/test 强制 owner-write 并正确分发", async () => {
+  await withTmp(async (root) => {
+    const store = createSeatStore(root);
+    const sup = fakeSupervisor(store);
+
+    // 1. 未注入实现时返回 501，且无 X-MAPR-Owner 或来自 hubOrigin 一律 403
+    await withServer(fakeDeps(store, sup.supervisor, fakeHub()), async (port) => {
+      const noOwnerDel = await rawRequest(port, {
+        method: "DELETE",
+        path: "/api/agents/manual/manual%3Aabc",
+      });
+      assert.equal(noOwnerDel.status, 403);
+
+      const hubOriginTest = await rawRequest(port, {
+        method: "POST",
+        path: "/api/agents/claude-code/test",
+        headers: { Origin: "https://hub.example", "X-MAPR-Owner": "1" },
+        body: {},
+      });
+      assert.equal(hubOriginTest.status, 403);
+
+      const missingDel = await rawRequest(port, {
+        method: "DELETE",
+        path: "/api/agents/manual/manual%3Aabc",
+        headers: { "X-MAPR-Owner": "1" },
+      });
+      assert.equal(missingDel.status, 501);
+
+      const missingTest = await rawRequest(port, {
+        method: "POST",
+        path: "/api/agents/claude-code/test",
+        headers: { "X-MAPR-Owner": "1" },
+        body: {},
+      });
+      assert.equal(missingTest.status, 501);
+    });
+
+    // 2. 注入实现后正确 URL 解码并返回业务状态码
+    const removedKeys: string[] = [];
+    const testedKeys: string[] = [];
+    const depsWithHandlers: HelperServerDeps = {
+      ...fakeDeps(store, sup.supervisor, fakeHub()),
+      removeManualAgent: async (key) => {
+        if (key === "manual:busy") throw new HelperHttpError(409, "agent_has_active_seats");
+        removedKeys.push(key);
+      },
+      testAgent: async (key) => {
+        testedKeys.push(key);
+        return { ok: true, latencyMs: 12, detail: "连接就绪" };
+      },
+    };
+
+    await withServer(depsWithHandlers, async (port) => {
+      const delOk = await rawRequest(port, {
+        method: "DELETE",
+        path: "/api/agents/manual/manual%3Aabc-1",
+        headers: { Origin: "http://127.0.0.1:8790", "X-MAPR-Owner": "1" },
+      });
+      assert.equal(delOk.status, 200);
+      assert.deepEqual(delOk.body, { ok: true });
+      assert.deepEqual(removedKeys, ["manual:abc-1"]);
+
+      const delBusy = await rawRequest(port, {
+        method: "DELETE",
+        path: "/api/agents/manual/manual%3Abusy",
+        headers: { "X-MAPR-Owner": "1" },
+      });
+      assert.equal(delBusy.status, 409);
+      assert.equal(delBusy.body.reason, "agent_has_active_seats");
+
+      const probeOk = await rawRequest(port, {
+        method: "POST",
+        path: "/api/agents/manual%3Aabc-1/test",
+        headers: { Origin: "http://127.0.0.1:8790", "X-MAPR-Owner": "1" },
+        body: {},
+      });
+      assert.equal(probeOk.status, 200);
+      assert.equal(probeOk.body.ok, true);
+      assert.equal(probeOk.body.latencyMs, 12);
+      assert.deepEqual(testedKeys, ["manual:abc-1"]);
+    });
+  });
+});
+
+test("HELPER_PAGE_HTML：单 script 块 CSP 哈希一致、JS 语法合法、零 Emoji、包含全部 10 个预设与入座引导", async () => {
+  // 1. 零 Emoji
+  assert.equal(
+    /\p{Extended_Pictographic}/u.test(HELPER_PAGE_HTML),
+    false,
+    "HELPER_PAGE_HTML must not contain any emoji"
+  );
+
+  // 2. Apple 纯白极简色板与圆角
+  assert.match(HELPER_PAGE_HTML, /#ffffff/i);
+  assert.match(HELPER_PAGE_HTML, /#f5f5f7/i);
+  assert.match(HELPER_PAGE_HTML, /#1d1d1f/i);
+  assert.match(HELPER_PAGE_HTML, /#0071e3/i);
+
+  // 3. 单一 <script> 块，语法可通过 vm.Script 解析，且与 GET / 的 CSP sha256 完全一致
+  const scriptMatches = [...HELPER_PAGE_HTML.matchAll(/<script>([\s\S]*?)<\/script>/g)];
+  assert.equal(scriptMatches.length, 1, "HELPER_PAGE_HTML must contain exactly one <script> block");
+  const scriptContent = scriptMatches[0][1];
+  assert.doesNotThrow(() => new vm.Script(scriptContent), "inline <script> must be valid JavaScript");
+  const expectedSha256 = createHash("sha256").update(scriptContent, "utf8").digest("base64");
+
+  await withTmp(async (root) => {
+    const store = createSeatStore(root);
+    const sup = fakeSupervisor(store);
+    await withServer(fakeDeps(store, sup.supervisor, fakeHub()), async (port) => {
+      const page = await rawRequest(port, { path: "/" });
+      assert.equal(page.status, 200);
+      const csp = String(page.headers["content-security-policy"] ?? "");
+      assert.ok(
+        csp.includes(`'sha256-${expectedSha256}'`),
+        `CSP header (${csp}) must contain script sha256-${expectedSha256}`
+      );
+    });
+  });
+
+  // 4. 覆盖全部 10 个主流 Agent 预设 ID 与入座返回横幅文案
+  const requiredPresetIds = [
+    "grok",
+    "grokbot-webhook",
+    "muse",
+    "muse-webhook",
+    "openai",
+    "claude-api",
+    "gemini-api",
+    "deepseek",
+    "ollama",
+    "webhook",
+  ];
+  for (const id of requiredPresetIds) {
+    assert.ok(
+      scriptContent.includes(`id: "${id}"`),
+      `missing preset id "${id}" in HELPER_PAGE_HTML`
+    );
+  }
+  assert.ok(HELPER_PAGE_HTML.includes("已将席位加入房间"));
+  assert.ok(HELPER_PAGE_HTML.includes("返回线上房间继续协作"));
+  assert.ok(HELPER_PAGE_HTML.includes("x-mapr-signature"));
+
+  // 5. 安全与交互体验打磨校验：零 alert()、零 0600 术语、色彩徽章、空房间引导与 safeHttpOrigin / trustTierInfo 行为验证
+  assert.equal(/\balert\s*\(/.test(scriptContent), false, "must not use blocking alert()");
+  assert.equal(HELPER_PAGE_HTML.includes("0600"), false, "must replace 0600 jargon");
+  assert.ok(
+    HELPER_PAGE_HTML.includes("只保存在你自己的电脑里（仅当前系统账号可读），绝不上传平台服务器"),
+    "must show friendly local-only secret storage copy"
+  );
+  assert.ok(HELPER_PAGE_HTML.includes('id="m-apikey"'), "must expose #m-apikey input");
+  assert.ok(
+    HELPER_PAGE_HTML.includes("请先完成配对，配对后将自动把所选智能体带入房间"),
+    "must include unpaired ticket handoff banner copy"
+  );
+  assert.ok(
+    HELPER_PAGE_HTML.includes("预设 — 填入密钥并点击保存即可接入"),
+    "must include preset confirmation banner copy"
+  );
+  assert.ok(
+    HELPER_PAGE_HTML.includes("还没有协作房间？前往网页端新建房间 →"),
+    "must include empty rooms subtle link"
+  );
+  for (const token of ["#eaf7ee", "#1d7a3c", "#eef5ff", "#0066cc", "#fff6e5", "#a35c00"]) {
+    assert.ok(
+      HELPER_PAGE_HTML.toLowerCase().includes(token),
+      `expected badge-tier color token ${token} in HELPER_PAGE_HTML`
+    );
+  }
+
+  // Extract pure helper functions from scriptContent to verify runtime behavior in vm
+  const fnProbeSource = [
+    scriptContent.match(/function safeHttpOrigin\([\s\S]*?\n\}/)?.[0] ?? "",
+    scriptContent.match(/function isLoopbackUrl\([\s\S]*?\n\}/)?.[0] ?? "",
+    scriptContent.match(/function trustTierInfo\([\s\S]*?\n\}/)?.[0] ?? "",
+    "globalThis.__exported = { safeHttpOrigin, trustTierInfo };",
+  ].join("\n");
+  const sandbox: Record<string, any> = { URL };
+  sandbox.globalThis = sandbox;
+  vm.runInNewContext(fnProbeSource, sandbox);
+  const { safeHttpOrigin, trustTierInfo } = sandbox.__exported;
+  assert.equal(safeHttpOrigin("https://hub.example/foo?bar=1"), "https://hub.example");
+  assert.equal(safeHttpOrigin("http://127.0.0.1:5173/"), "http://127.0.0.1:5173");
+  assert.equal(safeHttpOrigin("javascript:alert(1)"), "");
+  assert.equal(safeHttpOrigin("data:text/html,hi"), "");
+  assert.equal(safeHttpOrigin("not a url"), "");
+
+  assert.deepEqual({ ...trustTierInfo({ kind: "codex" }) }, {
+    text: "本机",
+    cls: "badge-tier badge-tier-local",
+  });
+  assert.deepEqual(
+    { ...trustTierInfo({ kind: "openai-compatible", baseUrl: "http://127.0.0.1:11434/v1", displayName: "Ollama" }) },
+    { text: "本机", cls: "badge-tier badge-tier-local" }
+  );
+  assert.deepEqual(
+    { ...trustTierInfo({ kind: "openai-compatible", baseUrl: "http://localhost:8080/v1", displayName: "Local vLLM" }) },
+    { text: "本机", cls: "badge-tier badge-tier-local" }
+  );
+  assert.deepEqual(
+    { ...trustTierInfo({ kind: "openai-compatible", baseUrl: "https://api.deepseek.com/v1", displayName: "DeepSeek" }) },
+    { text: "云端接口", cls: "badge-tier badge-tier-cloud" }
+  );
+  assert.deepEqual({ ...trustTierInfo({ kind: "webhook", displayName: "Hook" }) }, {
+    text: "自定义接口",
+    cls: "badge-tier badge-tier-custom",
+  });
+});
+
+test("HELPER_PAGE_HTML：已配对助手打开 #pair=mpc_old&preset=grok&room=r1 时绝不重配对，正常刷新列表并预填 Grok 与房间", async () => {
+  const scriptContent = HELPER_PAGE_HTML.match(/<script>([\s\S]*?)<\/script>/)?.[1] ?? "";
+  assert.ok(scriptContent.length > 0);
+
+  function makeElement(tag = "div") {
+    const children: any[] = [];
+    return {
+      tagName: tag.toUpperCase(),
+      value: "",
+      textContent: "",
+      className: "",
+      disabled: false,
+      href: "",
+      target: "",
+      rel: "",
+      type: "",
+      onclick: null,
+      onchange: null,
+      dataset: {} as Record<string, string>,
+      style: {} as Record<string, string>,
+      children,
+      get options() {
+        return children;
+      },
+      append(...nodes: any[]) {
+        children.push(...nodes);
+      },
+      replaceChildren(...nodes: any[]) {
+        children.length = 0;
+        children.push(...nodes);
+      },
+      querySelectorAll(sel: string) {
+        return sel === "button" ? children.filter((c) => c.tagName === "BUTTON") : [];
+      },
+      classList: {
+        toggle() {},
+      },
+      focus() {},
+      scrollIntoView() {},
+    };
+  }
+
+  const elements = new Map<string, ReturnType<typeof makeElement>>();
+  const getEl = (id: string) => {
+    let el = elements.get(id);
+    if (!el) {
+      el = makeElement(id === "m-room" || id === "m-kind" ? "select" : "div");
+      elements.set(id, el);
+    }
+    return el;
+  };
+
+  const requests: string[] = [];
+  const locationObj = {
+    pathname: "/",
+    search: "",
+    hash: "#pair=mpc_old&preset=grok&room=r1",
+  };
+
+  const sandbox: Record<string, any> = {
+    URL,
+    URLSearchParams,
+    document: {
+      getElementById: (id: string) => getEl(id),
+      createElement: (tag: string) => makeElement(tag),
+    },
+    location: locationObj,
+    history: {
+      replaceState(_state: unknown, _title: string, nextUrl: string) {
+        locationObj.hash = "";
+        locationObj.pathname = nextUrl;
+      },
+    },
+    navigator: {
+      clipboard: { writeText: async () => {} },
+    },
+    confirm: () => true,
+    setInterval: () => 0,
+    setTimeout: () => 0,
+    fetch: async (url: string, init?: { method?: string }) => {
+      const method = (init?.method ?? "GET").toUpperCase();
+      requests.push(`${method} ${url}`);
+      if (url === "/api/hello") {
+        // 清空初始值以确认后续是由配对态分支调用 applyPresetFromHash("grok") 填入
+        getEl("m-name").value = "";
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            app: "mapr-helper",
+            version: "0.1.0",
+            paired: true,
+            hub_origin: "https://hub.example",
+            owner_display_name: "主人",
+          }),
+        };
+      }
+      if (url === "/api/rooms") {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => [{ id: "r1", name: "Room 1", role: "owner" }],
+        };
+      }
+      if (url === "/api/agents" || url === "/api/seats") {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => [],
+        };
+      }
+      throw new Error(`unexpected request: ${method} ${url}`);
+    },
+  };
+  sandbox.globalThis = sandbox;
+
+  await vm.runInNewContext(scriptContent, sandbox);
+
+  assert.equal(
+    requests.some((r) => r.includes("/api/pair")),
+    false,
+    `paired helper must NEVER call /api/pair, saw: ${requests.join(", ")}`
+  );
+  assert.deepEqual(requests, [
+    "GET /api/hello",
+    "GET /api/rooms",
+    "GET /api/agents",
+    "GET /api/seats",
+  ]);
+  assert.equal(getEl("m-name").value, "Grok");
+  assert.equal(getEl("m-room").value, "r1");
+  assert.equal(locationObj.hash, "");
 });

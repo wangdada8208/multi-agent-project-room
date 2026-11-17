@@ -63,35 +63,37 @@ function splitList(raw: string | undefined): string[] {
     .filter(Boolean);
 }
 
-export function loadConfigFromEnv(): MemberConfig {
-  const participants = splitList(process.env.XMTP_PARTICIPANTS);
-  const approvedDays = splitList(process.env.XMTP_APPROVED_DAYS);
-  const sensitiveKeywords = splitList(process.env.XMTP_SENSITIVE_KEYWORDS);
+export function loadConfigFromEnv(env: NodeJS.ProcessEnv = process.env): MemberConfig {
+  const rawParticipants = (env.XMTP_PARTICIPANTS || "").trim();
+  const participants = splitList(rawParticipants);
+  const mentionOnly = env.XMTP_MENTION_ONLY === "1" && !rawParticipants;
+  const approvedDays = splitList(env.XMTP_APPROVED_DAYS);
+  const sensitiveKeywords = splitList(env.XMTP_SENSITIVE_KEYWORDS);
 
   const defaultStatePath = existsSync("workers/xmtp-member")
     ? path.resolve("workers/xmtp-member/.state/loop.json")
     : path.resolve(".state/loop.json");
 
   return {
-    selfName: process.env.XMTP_SELF_NAME || "Codex",
-    participants: participants.length > 0 ? participants : ["Codex", "Claude"],
-    xmtpWalletKey: process.env.XMTP_WALLET_KEY,
-    xmtpDbEncryptionKey: process.env.XMTP_DB_ENCRYPTION_KEY,
-    xmtpEnv: process.env.XMTP_ENV || "dev",
-    xmtpPeerAddresses: splitList(process.env.XMTP_PEER_ADDRESSES).map((s) => s.toLowerCase()),
-    xmtpGroupId: process.env.XMTP_GROUP_ID || undefined,
-    allowedSenders: parseAllowedSenders(process.env.XMTP_ALLOWED_SENDERS),
-    hubBaseUrl: process.env.HUB_BASE_URL,
-    hubToken: process.env.HUB_TOKEN,
-    hubRoomId: process.env.HUB_ROOM_ID,
-    loopStatePath: process.env.XMTP_LOOP_STATE_PATH || defaultStatePath,
-    memberModelApiKey: process.env.MEMBER_MODEL_API_KEY,
-    memberModelUrl: process.env.MEMBER_MODEL_URL,
+    selfName: env.XMTP_SELF_NAME || "Codex",
+    participants: participants.length > 0 ? participants : mentionOnly ? [] : ["Codex", "Claude"],
+    xmtpWalletKey: env.XMTP_WALLET_KEY,
+    xmtpDbEncryptionKey: env.XMTP_DB_ENCRYPTION_KEY,
+    xmtpEnv: env.XMTP_ENV || "dev",
+    xmtpPeerAddresses: splitList(env.XMTP_PEER_ADDRESSES).map((s) => s.toLowerCase()),
+    xmtpGroupId: env.XMTP_GROUP_ID || undefined,
+    allowedSenders: parseAllowedSenders(env.XMTP_ALLOWED_SENDERS),
+    hubBaseUrl: env.HUB_BASE_URL,
+    hubToken: env.HUB_TOKEN,
+    hubRoomId: env.HUB_ROOM_ID,
+    loopStatePath: env.XMTP_LOOP_STATE_PATH || defaultStatePath,
+    memberModelApiKey: env.MEMBER_MODEL_API_KEY,
+    memberModelUrl: env.MEMBER_MODEL_URL,
     approvedDays: approvedDays.length > 0 ? approvedDays : undefined,
     sensitiveKeywords: sensitiveKeywords.length > 0 ? sensitiveKeywords : undefined,
-    ownerNotesPort: process.env.OWNER_NOTES_PORT,
-    calendarFile: process.env.MAPR_CALENDAR_FILE || undefined,
-    role: process.env.XMTP_ROLE || "member",
+    ownerNotesPort: env.OWNER_NOTES_PORT,
+    calendarFile: env.MAPR_CALENDAR_FILE || undefined,
+    role: env.XMTP_ROLE || "member",
   };
 }
 
@@ -178,9 +180,12 @@ export async function startMember(): Promise<void> {
   let loopState: LocalLoopState;
   if (existsSync(statePath)) {
     loopState = await loadLoopState(statePath);
+    if (process.env.XMTP_MENTION_ONLY === "1" && !(process.env.XMTP_PARTICIPANTS || "").trim()) {
+      loopState = { ...loopState, participants: [] };
+    }
   } else {
     loopState = createLocalLoop({
-      participants: config.participants || ["Codex", "Claude"],
+      participants: config.participants ?? ["Codex", "Claude"],
       selfName: config.selfName || "Codex",
     });
   }
@@ -324,6 +329,7 @@ export async function startMember(): Promise<void> {
   // 本房其他席位的 XMTP 地址（连环护栏区分人/Agent 发言）。Hub 连不上时为空——
   // 全部发送者按人类处理，护栏不起作用，行为与旧版一致。
   const seatPeerAddresses = new Set<string>();
+  let seatPeerNames: string[] = [];
   const loopGuardLimit = (() => {
     const n = Number.parseInt(process.env.XMTP_LOOP_GUARD_LIMIT || "", 10);
     return Number.isFinite(n) ? n : undefined;
@@ -371,6 +377,7 @@ export async function startMember(): Promise<void> {
         state: loopState,
         text,
         senderIsAgent: seatPeerAddresses.has(sender),
+        peerNames: seatPeerNames,
         guardLimit: loopGuardLimit,
         complete,
         approvedDays: config.approvedDays,
@@ -413,6 +420,7 @@ export async function startMember(): Promise<void> {
           const addr = p.xmtp_address.toLowerCase();
           if (addr !== selfAddress) seatPeerAddresses.add(addr);
         }
+        seatPeerNames = peers.map((p) => p.agent_display_name.trim()).filter(Boolean);
       } catch {
         // 网络抖动不致命，下一轮再试。
       }

@@ -18,15 +18,20 @@ interface AuthState {
   logout: () => void;
 }
 
-let storedToken = localStorage.getItem("mapr-auth-token");
-const storedUser = localStorage.getItem("mapr-auth-user");
+const safeStorage =
+  typeof localStorage !== "undefined" && typeof localStorage?.getItem === "function"
+    ? localStorage
+    : null;
+
+let storedToken = safeStorage?.getItem("mapr-auth-token") ?? null;
+const storedUser = safeStorage?.getItem("mapr-auth-user") ?? null;
 let initialUser: AuthUser | null = null;
 if (storedUser) {
   try {
     initialUser = JSON.parse(storedUser) as AuthUser;
   } catch {
-    localStorage.removeItem("mapr-auth-user");
-    localStorage.removeItem("mapr-auth-token");
+    safeStorage?.removeItem("mapr-auth-user");
+    safeStorage?.removeItem("mapr-auth-token");
     storedToken = null;
   }
 }
@@ -38,8 +43,8 @@ export const useAuthStore = create<AuthState>((set) => ({
   userType: initialUser?.user_type ?? "human",
   isAuthenticated: Boolean(storedToken && initialUser),
   setSession: (user, token) => {
-    localStorage.setItem("mapr-auth-token", token);
-    localStorage.setItem("mapr-auth-user", JSON.stringify(user));
+    safeStorage?.setItem("mapr-auth-token", token);
+    safeStorage?.setItem("mapr-auth-user", JSON.stringify(user));
     set({
       user,
       token,
@@ -49,8 +54,8 @@ export const useAuthStore = create<AuthState>((set) => ({
     });
   },
   logout: () => {
-    localStorage.removeItem("mapr-auth-token");
-    localStorage.removeItem("mapr-auth-user");
+    safeStorage?.removeItem("mapr-auth-token");
+    safeStorage?.removeItem("mapr-auth-user");
     set({
       user: null,
       token: null,

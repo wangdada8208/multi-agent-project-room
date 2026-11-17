@@ -124,7 +124,7 @@ function MemberId({ name, target, landed }: { name: string; target?: string; lan
   )
 }
 
-export function HelperIntroDemo() {
+export function HelperIntroDemo({ accent = '#0071e3' }: { accent?: string } = {}) {
   return (
     <div className="helper-intro">
       <Stage<S>
@@ -134,8 +134,8 @@ export function HelperIntroDemo() {
         initial={INITIAL}
         poster={POSTER}
         script={script}
-        accent="#4f46e5"
-        tokens={{ '--ss-success': '#059669' }}
+        accent={accent}
+        tokens={{ '--ss-success': '#1d8348', '--ss-surface': '#ffffff' }}
         cursor={{ at: { wide: GEO.wide.rest, compact: GEO.compact.rest }, style: 'real', ripple: true }}
         className="hid"
       >

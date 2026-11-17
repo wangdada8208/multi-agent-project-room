@@ -4,10 +4,30 @@ import type { EngineConfig, ReplyEngine, ReplyRequest } from "./types.ts";
 
 type HttpConfig<K extends "openai-compatible" | "webhook" | "http-model"> = Extract<EngineConfig, { kind: K }>;
 
+const LOOPBACK_OPENAI_HTTP_RE = /^http:\/\/(127\.0\.0\.1|localhost|\[::1\])(:|\/|$)/i;
+
 /**
- * OpenAI 兼容接口（xAI Grok、以及任何兼容 /chat/completions 的云端 Agent）。
+ * 校验 OpenAI 兼容接口的基础地址：
+ * 公网地址强制要求 https://（防止 API Key 明文传输），同时放行本机回环 http://（Ollama、vLLM、Muse 本地网关等）。
+ */
+export function isAllowedOpenAiBaseUrl(rawUrl: string): boolean {
+  const trimmed = rawUrl.trim();
+  if (!trimmed) return false;
+  try {
+    const parsed = new URL(trimmed);
+    if (!parsed.hostname || parsed.username || parsed.password) return false;
+    if (parsed.protocol === "https:") return /^https:\/\//i.test(trimmed);
+    if (parsed.protocol === "http:") return LOOPBACK_OPENAI_HTTP_RE.test(trimmed);
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * OpenAI 兼容接口（xAI Grok、Ollama 本机网关、以及任何兼容 /chat/completions 的 Agent）。
  * POST {baseUrl}/chat/completions，messages=[{role:"user",content:prompt}]，取 choices[0].message.content。
- * 出站地址必须是 https；错误信息里不得带上 apiKey 或响应原文。
+ * 出站地址必须是 https 或本机回环 http；错误信息里不得带上 apiKey 或响应原文。
  */
 export function openAiCompatibleEngine(
   config: HttpConfig<"openai-compatible">,
@@ -16,10 +36,11 @@ export function openAiCompatibleEngine(
   return {
     kind: "openai-compatible",
     async reply(req: ReplyRequest): Promise<string> {
-      const url = `${config.baseUrl.replace(/\/+$/, "")}/chat/completions`;
-      if (!url.startsWith("https://")) {
-        throw new Error("openai-compatible baseUrl must be https");
+      const base = config.baseUrl.trim().replace(/\/+$/, "");
+      if (!isAllowedOpenAiBaseUrl(base)) {
+        throw new Error("openai-compatible baseUrl must be https or loopback http");
       }
+      const url = `${base}/chat/completions`;
       const res = await fetchImpl(url, {
         method: "POST",
         headers: {
@@ -107,3 +128,5 @@ export function httpModelEngine(
     },
   };
 }
+
+export const openaiCompatibleEngine = openAiCompatibleEngine;

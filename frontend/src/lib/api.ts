@@ -122,7 +122,10 @@ export async function apiFetch(input: RequestInfo | URL, init: RequestInit = {})
   // Auto-logout on expired/invalid token
   if (response.status === 401 && token) {
     useAuthStore.getState().logout();
-    window.location.href = "/login";
+    if (typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {
+      const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+      window.location.href = `/login?next=${encodeURIComponent(current)}`;
+    }
   }
 
   return response;

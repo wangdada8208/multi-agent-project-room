@@ -130,6 +130,8 @@ export function seatEnv(
   env.XMTP_ALLOWED_SENDERS = seat.allowedSenders.join(",");
   // 决定 D3：同一加密群里的成员都算允许的发送者；群外私信仍按白名单。
   env.XMTP_ALLOW_GROUP_MEMBERS = "1";
+  // 本机助手管理的席位默认严格按 @席位名 或 @all / @全体 唤醒，避免偶数轮无故抢答。
+  env.XMTP_MENTION_ONLY = "1";
   if (seat.xmtpGroupId) env.XMTP_GROUP_ID = seat.xmtpGroupId;
   env.HUB_BASE_URL = helper.hubOrigin;
   env.HUB_ROOM_ID = seat.roomId;

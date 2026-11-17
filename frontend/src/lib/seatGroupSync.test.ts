@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import type { Identifier } from "@xmtp/browser-sdk";
-import { syncPendingSeatsToGroup } from "./seatGroupSync";
+import {
+  addAddressToXmtpGroup,
+  syncPendingSeatsToGroup,
+  syncRedeemedInvitesToGroup,
+} from "./seatGroupSync";
 import type { XmtpClientLike } from "./seatGroupSync";
 import type { HubSeatView } from "./localHelper";
 
@@ -23,10 +27,6 @@ function seat(partial: Partial<HubSeatView>): HubSeatView {
   };
 }
 
-/**
- * 带状态的群假实现：addMembers 会真的把地址加进成员表，
- * 模拟真实 XMTP 群「上一轮加的人下一轮能查到」的行为。
- */
 function fakeGroup(initialMembers: string[] = []) {
   const memberAddrs = [...initialMembers];
   const addCalls: string[][] = [];
@@ -97,7 +97,6 @@ describe("syncPendingSeatsToGroup", () => {
   });
 
   it("地址已在群里时不重复加人，但仍补一次上报", async () => {
-    // 群成员里存的是校验和大小写地址，比对要做大小写归一。
     const { group, addCalls } = fakeGroup([`0x${ADDR_A.slice(2).toUpperCase()}`]);
     const { run, markAdded } = syncWith({
       client: fakeClient(group),
@@ -130,7 +129,6 @@ describe("syncPendingSeatsToGroup", () => {
     expect(first.reported).toEqual([]);
 
     const second = await run();
-    // 群成员列表是真状态：地址已在群里，所以不再调 addMembers，只重试上报。
     expect(addCalls).toEqual([[ADDR_A]]);
     expect(markCalls).toBe(2);
     expect(second.reported).toEqual(["seat-1"]);
@@ -194,5 +192,74 @@ describe("syncPendingSeatsToGroup", () => {
     expect(outcome.added).toEqual(["seat-b"]);
     expect(markAdded).toHaveBeenCalledTimes(1);
     expect(markAdded).toHaveBeenCalledWith("room-1", "seat-b");
+  });
+});
+
+describe("syncRedeemedInvitesToGroup", () => {
+  it("deduplicates valid redeemed addresses, skips existing members, and adds new ones sequentially", async () => {
+    const { group, addCalls } = fakeGroup([ADDR_A]);
+    const listInvites = vi.fn(async () => [
+      { redeemed_by_address: null },
+      { redeemed_by_address: "invalid" },
+      { redeemed_by_address: ADDR_A.toUpperCase().replace("0X", "0x") },
+      { redeemed_by_address: `0x${ADDR_B.slice(2).toUpperCase()}` },
+      { redeemed_by_address: ADDR_B },
+    ]);
+
+    const outcome = await syncRedeemedInvitesToGroup({
+      client: fakeClient(group),
+      roomId: "room-1",
+      groupId: "group-1",
+      listInvites,
+    });
+
+    expect(outcome.addedAddresses).toEqual([ADDR_B]);
+    expect(addCalls).toEqual([[ADDR_B]]);
+  });
+
+  it("skips addresses without an activated XMTP inbox yet", async () => {
+    const { group, addCalls } = fakeGroup();
+    const outcome = await syncRedeemedInvitesToGroup({
+      client: fakeClient(group, { inboxId: null }),
+      roomId: "room-1",
+      groupId: "group-1",
+      listInvites: async () => [{ redeemed_by_address: ADDR_A }],
+    });
+    expect(outcome.addedAddresses).toEqual([]);
+    expect(addCalls).toEqual([]);
+  });
+});
+
+describe("addAddressToXmtpGroup", () => {
+  it("throws friendly Chinese error when address format is invalid", async () => {
+    const { group } = fakeGroup();
+    await expect(addAddressToXmtpGroup(fakeClient(group), "group-1", "bad-addr")).rejects.toThrow(
+      "请输入有效的 0x 开头 42 位加密身份地址",
+    );
+  });
+
+  it("returns already-member when address is already in XMTP group", async () => {
+    const { group, addCalls } = fakeGroup([ADDR_A]);
+    const res = await addAddressToXmtpGroup(
+      fakeClient(group),
+      "group-1",
+      `  0x${ADDR_A.slice(2).toUpperCase()}  `,
+    );
+    expect(res).toBe("already-member");
+    expect(addCalls).toEqual([]);
+  });
+
+  it("throws friendly Chinese error when address has not registered XMTP inbox yet", async () => {
+    const { group } = fakeGroup();
+    await expect(
+      addAddressToXmtpGroup(fakeClient(group, { inboxId: null }), "group-1", ADDR_B),
+    ).rejects.toThrow("该地址尚未在浏览器中解锁激活加密身份，请让对方先打开房间解锁一次");
+  });
+
+  it("adds valid registered address and returns added", async () => {
+    const { group, addCalls } = fakeGroup();
+    const res = await addAddressToXmtpGroup(fakeClient(group), "group-1", ADDR_B);
+    expect(res).toBe("added");
+    expect(addCalls).toEqual([[ADDR_B]]);
   });
 });

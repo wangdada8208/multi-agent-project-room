@@ -1,61 +1,220 @@
+import { useState } from "react";
+import { Link } from "react-router-dom";
+import { ArrowUpRight, Bot, Cpu, Globe, Plus, Trash2, User, Webhook } from "lucide-react";
 import type { PresenceParticipant } from "../../types/chat";
-import { TRUST_TIER_LABEL, trustTierOf, type HubSeatView } from "../../lib/localHelper";
+import {
+  removeRoomSeat,
+  TRUST_TIER_LABEL,
+  trustTierOf,
+  type HubSeatView,
+  type TrustTier,
+} from "../../lib/localHelper";
+import { useAuthStore } from "../../stores/authStore";
+
+const TIER_TITLE: Record<TrustTier, string> = {
+  "local-cli": "在成员本机终端运行，聊天内容不出本机",
+  "cloud-api": "回话时会将上下文发送至对应云端或兼容模型接口",
+  "custom-webhook": "回话时会将消息转发至主人配置的自定义接口",
+};
+
+const GROUP_STATUS_TEXT: Record<HubSeatView["group_status"], string> = {
+  added: "已入群",
+  pending: "待入群",
+  removed: "已移除",
+};
+
+function SeatKindIcon({ tier }: { tier: TrustTier }) {
+  if (tier === "local-cli") return <Cpu size={15} strokeWidth={1.75} />;
+  if (tier === "cloud-api") return <Globe size={15} strokeWidth={1.75} />;
+  return <Webhook size={15} strokeWidth={1.75} />;
+}
+
+export interface MembersPanelProps {
+  participants: PresenceParticipant[];
+  seats?: HubSeatView[];
+  roomId?: string;
+  currentUserId?: string;
+  isOwner?: boolean;
+  onSeatRemoved?: () => void;
+}
 
 export function MembersPanel({
   participants,
   seats,
-}: {
-  participants: PresenceParticipant[];
-  seats?: HubSeatView[];
-}) {
+  roomId,
+  currentUserId,
+  isOwner,
+  onSeatRemoved,
+}: MembersPanelProps) {
+  const storeUserId = useAuthStore((s) => s.user?.id);
+  const effectiveUserId = currentUserId ?? storeUserId;
+
+  const [removingId, setRemovingId] = useState<string | null>(null);
+  const [removeError, setRemoveError] = useState("");
+
+  const activeSeats = (seats ?? []).filter((s) => s.group_status !== "removed");
+  const seatNames = new Set(activeSeats.map((s) => s.agent_display_name));
+  const legacyAgents = participants.filter(
+    (p) => p.sender_type === "agent" && !seatNames.has(p.sender_name || p.sender_id),
+  );
   const humans = participants.filter((p) => p.sender_type === "human");
-  const agents = participants.filter((p) => p.sender_type === "agent");
+
+  const agentsTargetUrl = roomId ? `/agents?room=${encodeURIComponent(roomId)}` : "/agents";
+
+  async function handleRemoveSeat(seat: HubSeatView) {
+    setRemovingId(seat.seat_id);
+    setRemoveError("");
+    try {
+      await removeRoomSeat(seat.room_id, seat.seat_id);
+      onSeatRemoved?.();
+    } catch (err) {
+      setRemoveError(err instanceof Error ? err.message : "移出席位失败");
+    } finally {
+      setRemovingId(null);
+    }
+  }
 
   return (
-    <div className="panel-section">
-      <p className="panel-heading">人类 ({humans.length})</p>
-      {humans.length === 0 && <p className="panel-empty">暂无</p>}
-      {humans.map((p) => (
-        <div key={p.sender_id} className="member-row">
-          <span className="member-dot" />
-          <span>{p.sender_name || p.sender_id.slice(0, 8)}</span>
+    <div className="panel-section" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      {/* ── 加密群 Agent 席位 ── */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <p className="panel-heading" style={{ color: "#1d1d1f", fontSize: 13, fontWeight: 600 }}>
+            加密群 Agent 席位 ({activeSeats.length + legacyAgents.length})
+          </p>
         </div>
-      ))}
 
-      <p className="panel-heading" style={{ marginTop: 8 }}>Agent ({agents.length})</p>
-      {agents.length === 0 && (
-        <p className="panel-empty">暂无 Agent 在线。<br /><span className="panel-hint">运行「一键配置」接入你的 Agent。</span></p>
-      )}
-      {agents.map((p) => (
-        <div key={p.sender_id} className="member-row">
-          <span className="member-dot member-dot--agent" />
-          <span>🤖 {p.sender_name || p.sender_id}</span>
-        </div>
-      ))}
+        {activeSeats.length === 0 && legacyAgents.length === 0 && (
+          <div className="panel-card" style={{ fontSize: 13, color: "#6e6e73", lineHeight: 1.5 }}>
+            当前房间尚无 Agent 席位。可一键接入 Claude Code、Codex、Grok、Muse 等智能体。
+          </div>
+        )}
 
-      {seats && seats.length > 0 && (
-        <>
-          <p className="panel-heading" style={{ marginTop: 8 }}>席位 ({seats.length})</p>
-          {seats.map((s) => {
-            const tier = s.trust_tier ?? trustTierOf(s.kind);
-            return (
-              <div key={s.seat_id} className="member-row">
-                <span className="member-dot member-dot--agent" />
-                <span>💺 {s.agent_display_name}</span>
-                <span className={`tier-badge tier-badge--${tier}`} title={TIER_TITLE[tier]}>
-                  {TRUST_TIER_LABEL[tier]}
-                </span>
+        {activeSeats.map((s) => {
+          const tier = s.trust_tier ?? trustTierOf(s.kind);
+          const isCollaboratorSeat = Boolean(
+            effectiveUserId && s.owner_user_id && s.owner_user_id !== effectiveUserId,
+          );
+          const canRemove = Boolean(
+            isOwner || (effectiveUserId && s.owner_user_id === effectiveUserId),
+          );
+          return (
+            <div key={s.seat_id} className="member-row member-row--card">
+              <span className="agent-row__icon" style={{ width: 28, height: 28, borderRadius: 8 }}>
+                <SeatKindIcon tier={tier} />
+              </span>
+              <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                  <strong
+                    style={{
+                      fontSize: 13,
+                      fontWeight: 600,
+                      color: "#1d1d1f",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {s.agent_display_name}
+                  </strong>
+                  <span
+                    className={`trust-badge trust-badge--${tier} tier-badge tier-badge--${tier}`}
+                    title={TIER_TITLE[tier]}
+                    style={{ marginLeft: 0 }}
+                  >
+                    {TRUST_TIER_LABEL[tier]}
+                  </span>
+                </div>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 5,
+                    flexWrap: "wrap",
+                    fontSize: 11,
+                    color: "#6e6e73",
+                  }}
+                >
+                  <span
+                    style={{
+                      color: s.group_status === "added" ? "#1d7a3c" : "#6e6e73",
+                      fontWeight: 500,
+                    }}
+                  >
+                    {GROUP_STATUS_TEXT[s.group_status]}
+                  </span>
+                  <span>·</span>
+                  <span style={{ fontFamily: "var(--mono)" }}>
+                    {s.xmtp_address.slice(0, 6)}…{s.xmtp_address.slice(-4)}
+                  </span>
+                  {isCollaboratorSeat && (
+                    <span className="collaborator-seat-badge">· 协作者席位</span>
+                  )}
+                </div>
               </div>
-            );
-          })}
-        </>
-      )}
+              {canRemove && (
+                <button
+                  type="button"
+                  className="icon-btn"
+                  disabled={removingId === s.seat_id}
+                  onClick={() => void handleRemoveSeat(s)}
+                  title="移出房间"
+                  style={{ width: 28, height: 28 }}
+                >
+                  <Trash2 size={14} strokeWidth={1.75} />
+                </button>
+              )}
+            </div>
+          );
+        })}
+
+        {legacyAgents.map((p) => (
+          <div key={p.sender_id} className="member-row member-row--card">
+            <Bot size={15} strokeWidth={1.75} style={{ color: "#1d1d1f", flexShrink: 0 }} />
+            <span style={{ fontSize: 13, fontWeight: 500, color: "#1d1d1f" }}>
+              {p.sender_name || p.sender_id}
+            </span>
+          </div>
+        ))}
+
+        {removeError && <p className="panel-error">{removeError}</p>}
+
+        <Link to={agentsTargetUrl} className="btn btn-ghost btn-sm" style={{ marginTop: 4 }}>
+          <Plus size={14} strokeWidth={2} />
+          <span>一键接入更多 Agent</span>
+          <ArrowUpRight size={13} strokeWidth={2} />
+        </Link>
+      </div>
+
+      {/* ── 在线人类协作者 ── */}
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: 8,
+          paddingTop: 12,
+          borderTop: "1px solid rgba(0, 0, 0, 0.08)",
+        }}
+      >
+        <p className="panel-heading" style={{ color: "#1d1d1f", fontSize: 13, fontWeight: 600 }}>
+          在线人类协作者 {humans.length > 0 ? `(${humans.length})` : ""}
+        </p>
+        {humans.length === 0 ? (
+          <p className="panel-hint" style={{ fontSize: 12, color: "#6e6e73", lineHeight: 1.5 }}>
+            当前暂无在线人类协作者。如需邀请协作者进入加密群，请前往「权限」面板生成入群邀请链接。
+          </p>
+        ) : (
+          humans.map((p) => (
+            <div key={p.sender_id} className="member-row member-row--card">
+              <User size={14} strokeWidth={1.75} style={{ color: "#6e6e73", flexShrink: 0 }} />
+              <span style={{ fontSize: 13, color: "#1d1d1f", flex: 1, minWidth: 0 }}>
+                {p.sender_name || p.sender_id.slice(0, 8)}
+              </span>
+              <span className="member-dot" />
+            </div>
+          ))
+        )}
+      </div>
     </div>
   );
 }
-
-const TIER_TITLE: Record<string, string> = {
-  "local-cli": "在你自己的电脑上运行，聊天内容不出本机",
-  "cloud-api": "回话时要把消息发给第三方云端接口",
-  "custom-webhook": "回话时要把消息发给主人自己配置的地址",
-};

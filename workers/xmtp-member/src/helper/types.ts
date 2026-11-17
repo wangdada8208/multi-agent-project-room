@@ -29,6 +29,7 @@ export interface LocalAgent {
   source: AgentSource;
   binaryPath?: string;
   version?: string;
+  baseUrl?: string;
   loginState: LoginState;
 }
 

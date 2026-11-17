@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Download, FileText, Upload } from "lucide-react";
 import { apiFetch } from "../../lib/api";
 
 interface RoomFile {
@@ -97,7 +98,8 @@ export function FilesPanel({ roomId }: { roomId: string }) {
         onClick={() => inputRef.current?.click()}
         disabled={uploading}
       >
-        {uploading ? "上传中..." : "📎 上传文件"}
+        <Upload size={15} strokeWidth={1.9} />
+        <span>{uploading ? "上传中..." : "上传文件"}</span>
       </button>
       {error && <p className="panel-error">{error}</p>}
 
@@ -106,12 +108,12 @@ export function FilesPanel({ roomId }: { roomId: string }) {
       ) : (
         files.map((f) => (
           <button key={f.id} type="button" className="file-row" onClick={() => handleDownload(f)}>
-            <span>📄</span>
+            <FileText size={16} strokeWidth={1.8} style={{ color: "var(--text-secondary)", flexShrink: 0 }} />
             <div className="file-row__info">
               <span className="file-row__name">{f.filename}</span>
               <small>{formatSize(f.size)} · {f.uploaded_by}</small>
             </div>
-            <span>↓</span>
+            <Download size={15} strokeWidth={1.85} style={{ color: "var(--text-muted)", flexShrink: 0 }} />
           </button>
         ))
       )}

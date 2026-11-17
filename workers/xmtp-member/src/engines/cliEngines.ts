@@ -1,8 +1,10 @@
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { accessSync, closeSync, constants, existsSync, openSync, readdirSync, readSync, realpathSync } from "node:fs";
-import { readFile, rm } from "node:fs/promises";
+import { mkdir, readFile, rm } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
+import { buildExpandedPath } from "../helper/knownAgents.ts";
 import type { EngineConfig, ReplyEngine, ReplyRequest } from "./types.ts";
 import { MAX_REPLY_BYTES } from "./types.ts";
 
@@ -124,6 +126,64 @@ const CHILD_ENV_KEYS: Record<"claude-code" | "codex" | "gemini-cli", readonly st
   "gemini-cli": ["PATH", "HOME", "LANG", "TERM", "GEMINI_API_KEY"],
 };
 
+const MINIMAL_ENV_PASSTHROUGH = ["HOME", "USER", "LOGNAME", "LANG", "LC_ALL", "TERM", "TMPDIR"] as const;
+const POSIX_SYSTEM_PATHS = ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin"] as const;
+
+/**
+ * 极简安全子进程环境：仅透传基础非敏感系统变量并补齐可执行文件目录与常见包管理器 PATH，
+ * 确保 systemd / launchd 极简环境下 `#!/usr/bin/env node` 始终可用，且绝不泄露宿主机 API Key。
+ */
+export function minimalEnv(
+  parent: NodeJS.ProcessEnv = process.env,
+  binaryPath?: string,
+  platform: NodeJS.Platform = process.platform
+): NodeJS.ProcessEnv {
+  const out: NodeJS.ProcessEnv = {};
+  for (const key of MINIMAL_ENV_PASSTHROUGH) {
+    const value = parent[key];
+    if (value !== undefined) out[key] = value;
+  }
+
+  if (platform === "win32") {
+    const parts: string[] = [];
+    if (binaryPath) parts.push(path.win32.dirname(binaryPath));
+    const rawPath = parent.PATH ?? parent.Path ?? "";
+    if (rawPath) parts.push(rawPath);
+    if (parts.length > 0) out.PATH = parts.join(";");
+    for (const winKey of ["SystemRoot", "USERPROFILE", "APPDATA", "LOCALAPPDATA", "PATHEXT"] as const) {
+      if (parent[winKey] !== undefined) out[winKey] = parent[winKey];
+    }
+    return out;
+  }
+
+  const seen = new Set<string>();
+  const dirs: string[] = [];
+  const add = (dir: string | undefined) => {
+    const cleaned = (dir || "").trim();
+    if (!cleaned || seen.has(cleaned)) return;
+    seen.add(cleaned);
+    dirs.push(cleaned);
+  };
+
+  if (binaryPath) {
+    add(path.posix.dirname(binaryPath));
+  }
+  if (parent.HOME) {
+    for (const d of buildExpandedPath(parent, parent.HOME, platform).split(":")) {
+      add(d);
+    }
+  } else {
+    for (const d of (parent.PATH || "").split(":")) {
+      add(d);
+    }
+  }
+  for (const d of POSIX_SYSTEM_PATHS) {
+    add(d);
+  }
+  out.PATH = dirs.join(":");
+  return out;
+}
+
 export function childEnv(kind: "claude-code" | "codex" | "gemini-cli", parent: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   const out: NodeJS.ProcessEnv = {};
   for (const key of CHILD_ENV_KEYS[kind]) {
@@ -187,12 +247,13 @@ export function claudeCodeEngine(config: CliConfig<"claude-code">): ReplyEngine 
   return {
     kind: "claude-code",
     async reply(req: ReplyRequest): Promise<string> {
+      const base = minimalEnv(process.env, config.binaryPath);
       const result = await runCli({
         argv: claudeArgv(config),
         stdin: req.prompt,
         cwd: config.sandboxDir,
         signal: req.signal,
-        env: childEnv("claude-code", process.env),
+        env: { ...childEnv("claude-code", process.env), PATH: base.PATH },
         maxOutputBytes: MAX_REPLY_BYTES,
       });
       let data: any = null;
@@ -414,8 +475,217 @@ export function findBwrap(): string | null {
   return null;
 }
 
-export function codexEngine(config: CliConfig<"codex">): ReplyEngine {
-  const bwrap = findBwrap();
+export const DARWIN_SANDBOX_EXEC = "/usr/bin/sandbox-exec";
+
+const DARWIN_SENSITIVE_HOME_SUBDIRS = [
+  ".mapr",
+  ".ssh",
+  ".aws",
+  ".gnupg",
+  ".config/gcloud",
+] as const;
+
+export function escapeSbplString(value: string): string {
+  if (/[\x00-\x1f\x7f]/.test(value)) {
+    throw new Error("invalid path for sandbox profile");
+  }
+  return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+}
+
+/**
+ * macOS Seatbelt 沙箱规则（/usr/bin/sandbox-exec -p）：
+ * - 允许 codex 所需的基础读取、进程与网络能力；
+ * - 拒绝读取主目录敏感配置/密钥目录（.mapr / .ssh / .aws / .gnupg / .config/gcloud，不拦截 .codex / .claude / .gemini），
+ *   随后显式放行 sandboxDir（含 realpath）与 extraRwDirs（含 realpath）读取，确保 ~/.mapr/sandbox/<seatId> 可读写而 ~/.mapr 其他密钥文件不可读；
+ * - 全局拒绝 file-write*，仅放行 sandboxDir、extraRwDirs、系统临时目录与 /dev/null。
+ */
+export function buildDarwinSeatbeltProfile(
+  sandboxDir: string,
+  realSandboxDir?: string,
+  extraRwDirs: readonly string[] = [],
+  homeDir?: string,
+  realpathFn?: (target: string) => string
+): string {
+  const resolveRealpath =
+    realpathFn ??
+    ((target: string) => {
+      try {
+        return realpathSync(target);
+      } catch {
+        return target;
+      }
+    });
+
+  const addUnique = (list: string[], seen: Set<string>, dir: string | undefined) => {
+    if (!dir || dir.trim().length === 0 || seen.has(dir)) return;
+    seen.add(dir);
+    list.push(dir);
+  };
+
+  const rawHome = homeDir !== undefined ? homeDir : os.homedir();
+  const realHome = rawHome && rawHome.trim().length > 0 ? resolveRealpath(rawHome) : "";
+  const homeRoots: string[] = [];
+  const seenHomes = new Set<string>();
+  addUnique(homeRoots, seenHomes, rawHome);
+  addUnique(homeRoots, seenHomes, realHome);
+
+  const deniedReadSubpaths: string[] = [];
+  const seenDeniedRead = new Set<string>();
+  for (const h of homeRoots) {
+    for (const rel of DARWIN_SENSITIVE_HOME_SUBDIRS) {
+      const candidate = path.join(h, rel);
+      addUnique(deniedReadSubpaths, seenDeniedRead, candidate);
+      addUnique(deniedReadSubpaths, seenDeniedRead, resolveRealpath(candidate));
+    }
+  }
+
+  const allowedReadSubpaths: string[] = [];
+  const seenAllowedRead = new Set<string>();
+  const addReadSubpathWithRealpath = (dir: string | undefined) => {
+    if (!dir || dir.trim().length === 0) return;
+    addUnique(allowedReadSubpaths, seenAllowedRead, dir);
+    addUnique(allowedReadSubpaths, seenAllowedRead, resolveRealpath(dir));
+  };
+
+  addReadSubpathWithRealpath(sandboxDir);
+  addUnique(allowedReadSubpaths, seenAllowedRead, realSandboxDir);
+
+  const expandedExtraRwDirs: string[] = [];
+  for (const rawEntry of extraRwDirs) {
+    if (!rawEntry) continue;
+    for (const seg of rawEntry.split(":")) {
+      if (seg.trim().length === 0) continue;
+      expandedExtraRwDirs.push(seg);
+    }
+  }
+  for (const extra of expandedExtraRwDirs) {
+    addReadSubpathWithRealpath(extra);
+  }
+
+  const writableSubpaths: string[] = [];
+  const seenWritable = new Set<string>();
+  const addWritable = (dir: string | undefined) => addUnique(writableSubpaths, seenWritable, dir);
+
+  addWritable(sandboxDir);
+  if (sandboxDir && sandboxDir.trim().length > 0) {
+    addWritable(resolveRealpath(sandboxDir));
+  }
+  addWritable(realSandboxDir);
+  addWritable("/tmp");
+  addWritable("/private/tmp");
+  addWritable("/var/folders");
+  addWritable("/private/var/folders");
+  for (const extra of expandedExtraRwDirs) {
+    addWritable(extra);
+    addWritable(resolveRealpath(extra));
+  }
+
+  const lines: string[] = [
+    "(version 1)",
+    "(allow default)",
+    "(allow file-read* process* network*)",
+  ];
+
+  if (deniedReadSubpaths.length > 0) {
+    lines.push(
+      "(deny file-read*",
+      ...deniedReadSubpaths.map((dir) => `  (subpath "${escapeSbplString(dir)}")`),
+      ")"
+    );
+  }
+
+  if (allowedReadSubpaths.length > 0) {
+    lines.push(
+      "(allow file-read*",
+      ...allowedReadSubpaths.map((dir) => `  (subpath "${escapeSbplString(dir)}")`),
+      ")"
+    );
+  }
+
+  lines.push(
+    "(deny file-write*)",
+    "(allow file-write*",
+    '  (literal "/dev/null")',
+    ...writableSubpaths.map((dir) => `  (subpath "${escapeSbplString(dir)}")`),
+    ")"
+  );
+
+  return lines.join("\n");
+}
+
+export interface CodexEngineDeps {
+  platform?: NodeJS.Platform;
+  accessImpl?: (filePath: string, mode?: number) => void;
+  realpathImpl?: (filePath: string) => string;
+  runCliImpl?: typeof runCli;
+  findBwrapImpl?: () => string | null;
+  env?: NodeJS.ProcessEnv;
+}
+
+export function codexEngine(config: CliConfig<"codex">, deps?: CodexEngineDeps): ReplyEngine {
+  const platform = deps?.platform ?? process.platform;
+  const accessFn = deps?.accessImpl ?? accessSync;
+  const realpathFn =
+    deps?.realpathImpl ??
+    ((target: string) => {
+      try {
+        return realpathSync(target);
+      } catch {
+        return target;
+      }
+    });
+  const runCliFn = deps?.runCliImpl ?? runCli;
+  const envSrc = deps?.env ?? process.env;
+
+  if (platform === "darwin") {
+    try {
+      accessFn(DARWIN_SANDBOX_EXEC, constants.X_OK);
+    } catch {
+      throw new Error(
+        "codex engine requires /usr/bin/sandbox-exec on macOS for filesystem isolation"
+      );
+    }
+    return {
+      kind: "codex",
+      async reply(req: ReplyRequest): Promise<string> {
+        const realSandboxDir = realpathFn(config.sandboxDir);
+        const outFile = path.join(config.sandboxDir, `codex-last-${randomUUID()}.txt`);
+        const inner = codexArgv(config, outFile);
+        const profile = buildDarwinSeatbeltProfile(
+          config.sandboxDir,
+          realSandboxDir,
+          config.bwrapRwDirs,
+          envSrc.HOME || os.homedir(),
+          realpathFn
+        );
+        const argv = [DARWIN_SANDBOX_EXEC, "-p", profile, ...inner];
+        const base = minimalEnv(envSrc, config.binaryPath, platform);
+        const result = await runCliFn({
+          argv,
+          stdin: req.prompt,
+          cwd: config.sandboxDir,
+          signal: req.signal,
+          env: { ...childEnv("codex", envSrc), PATH: base.PATH },
+          maxOutputBytes: MAX_REPLY_BYTES,
+        });
+        if (result.code !== 0) {
+          await rm(outFile, { force: true });
+          throw new Error(`codex exited with code ${result.code}${stderrTail(result.stderr)}`);
+        }
+        let text: string;
+        try {
+          text = await readFile(outFile, "utf8");
+        } catch {
+          throw new Error("codex did not write an output file");
+        } finally {
+          await rm(outFile, { force: true });
+        }
+        return text.trimEnd();
+      },
+    };
+  }
+
+  const bwrap = (deps?.findBwrapImpl ?? findBwrap)();
   if (!bwrap) {
     // S3 实测：codex 的 read-only 沙箱读得到家目录，不加系统级隔离就是泄密。
     // 没有 bubblewrap 时拒绝启动这个引擎，绝不裸跑。
@@ -432,17 +702,18 @@ export function codexEngine(config: CliConfig<"codex">): ReplyEngine {
         bwrapPath: bwrap,
         binaryPath: config.binaryPath,
         sandboxDir: config.sandboxDir,
-        codexHome: process.env.CODEX_HOME || (process.env.HOME ? path.join(process.env.HOME, ".codex") : null),
-        homeDir: process.env.HOME || null,
+        codexHome: envSrc.CODEX_HOME || (envSrc.HOME ? path.join(envSrc.HOME, ".codex") : null),
+        homeDir: envSrc.HOME || null,
         extraRoDirs: config.bwrapRoDirs,
         extraRwDirs: config.bwrapRwDirs,
       });
-      const result = await runCli({
+      const base = minimalEnv(envSrc, config.binaryPath, platform);
+      const result = await runCliFn({
         argv,
         stdin: req.prompt,
         cwd: config.sandboxDir,
         signal: req.signal,
-        env: childEnv("codex", process.env),
+        env: { ...childEnv("codex", envSrc), PATH: base.PATH },
         maxOutputBytes: MAX_REPLY_BYTES,
       });
       if (result.code !== 0) {
@@ -462,16 +733,37 @@ export function codexEngine(config: CliConfig<"codex">): ReplyEngine {
   };
 }
 
-export function geminiCliEngine(config: CliConfig<"gemini-cli">): ReplyEngine {
+export const createCodexEngine = codexEngine;
+
+export interface GeminiCliEngineDeps {
+  runCliImpl?: typeof runCli;
+  env?: NodeJS.ProcessEnv;
+}
+
+export function geminiCliEngine(
+  config: CliConfig<"gemini-cli">,
+  deps?: GeminiCliEngineDeps
+): ReplyEngine {
+  const runCliFn = deps?.runCliImpl ?? runCli;
+  const envSrc = deps?.env ?? process.env;
   return {
     kind: "gemini-cli",
     async reply(req: ReplyRequest): Promise<string> {
-      const result = await runCli({
+      const hasSandbox = Boolean(config.sandboxDir && config.sandboxDir.trim().length > 0);
+      let cwd: string;
+      if (hasSandbox) {
+        await mkdir(config.sandboxDir, { recursive: true, mode: 0o700 });
+        cwd = config.sandboxDir;
+      } else {
+        cwd = os.tmpdir();
+      }
+      const base = minimalEnv(envSrc, config.binaryPath);
+      const result = await runCliFn({
         argv: geminiArgv(config, req.prompt),
         stdin: "",
-        cwd: config.sandboxDir,
+        cwd,
         signal: req.signal,
-        env: childEnv("gemini-cli", process.env),
+        env: { ...childEnv("gemini-cli", envSrc), PATH: base.PATH },
         maxOutputBytes: MAX_REPLY_BYTES,
       });
       if (result.code !== 0) {

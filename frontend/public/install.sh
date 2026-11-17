@@ -78,7 +78,7 @@ done
 
 HUB="${HUB:-${MAPR_HUB_ORIGIN:-$DEFAULT_HUB}}"
 HUB="${HUB%/}"
-PKG_URL="${MAPR_PKG_URL:-$HUB/downloads/xmtp-member-latest.tar.gz}"
+PKG_URL="${MAPR_PKG_URL:-$HUB/downloads/xmtp-member-latest.tar.gz?t=$(date +%s)}"
 
 # ── 卸载 / 清除：委托给安装时落盘的 ~/.mapr/uninstall.sh ──
 
@@ -247,6 +247,13 @@ PLIST="$HOME/Library/LaunchAgents/xyz.mapr.helper.plist"
 UNIT="$HOME/.config/systemd/user/mapr-helper.service"
 DESKTOP="$HOME/.config/autostart/mapr-helper.desktop"
 
+NODE_BIN_DIR=$(dirname "$(command -v node)")
+BASE_SERVICE_PATH="$HOME/.local/bin:$HOME/.npm-global/bin:$HOME/.volta/bin:$HOME/.bun/bin:$HOME/.cargo/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+case ":$BASE_SERVICE_PATH:" in
+  *":$NODE_BIN_DIR:"*) SERVICE_PATH="$BASE_SERVICE_PATH" ;;
+  *) SERVICE_PATH="$NODE_BIN_DIR:$BASE_SERVICE_PATH" ;;
+esac
+
 systemd_user_ok() {
   command -v systemctl >/dev/null 2>&1 || return 1
   systemctl --user show-environment >/dev/null 2>&1
@@ -261,6 +268,7 @@ After=network-online.target
 
 [Service]
 Type=simple
+Environment="PATH=$SERVICE_PATH"
 ExecStart="$MAPR_ROOT/bin/mapr" up --hub "$HUB"
 Restart=on-failure
 RestartSec=5
@@ -293,6 +301,11 @@ write_launchagent() {
 <dict>
   <key>Label</key>
   <string>xyz.mapr.helper</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>$SERVICE_PATH</string>
+  </dict>
   <key>ProgramArguments</key>
   <array>
     <string>$MAPR_ROOT/bin/mapr</string>
@@ -330,24 +343,27 @@ setup_autostart() {
   fi
 }
 
-# 让服务管理器从现在起接管（systemd start / launchctl bootstrap）。
+# 让服务管理器从现在起接管（升级时 restart 以加载新包体）。
 start_managed() {
   case "$AUTOSTART_KIND" in
     systemd)
-      systemctl --user start mapr-helper.service >/dev/null 2>&1 || return 1
+      systemctl --user restart mapr-helper.service >/dev/null 2>&1 || return 1
       # 注销后仍在跑（需要 loginctl，部分发行版会弹授权；失败不致命）
       loginctl enable-linger >/dev/null 2>&1 || true
       return 0 ;;
     launchd)
       launchctl bootout "gui/$(id -u)/xyz.mapr.helper" >/dev/null 2>&1 || true
-      launchctl bootstrap "gui/$(id -u)" "$PLIST" >/dev/null 2>&1 && return 0
+      if launchctl bootstrap "gui/$(id -u)" "$PLIST" >/dev/null 2>&1; then
+        launchctl kickstart -k "gui/$(id -u)/xyz.mapr.helper" >/dev/null 2>&1 || true
+        return 0
+      fi
       launchctl load -w "$PLIST" >/dev/null 2>&1 && return 0
       return 1 ;;
     *) return 1 ;;
   esac
 }
 
-# ── 本机接口探测 ────────────────────────────────────────────────
+# ── 本机接口探测与本地配对 ────────────────────────────────────────
 
 probe_hello() {
   curl -fsS --max-time 2 "http://127.0.0.1:$HELPER_PORT/api/hello" 2>/dev/null
@@ -355,6 +371,13 @@ probe_hello() {
 
 hello_paired() {
   probe_hello | grep -q '"paired"[ ]*:[ ]*true'
+}
+
+pair_running_helper() {
+  p_escaped=$(printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g')
+  curl -fsS --max-time 8 -X POST "http://127.0.0.1:$HELPER_PORT/api/pair" \
+    -H 'Content-Type: application/json' -H 'X-MAPR-Owner: 1' \
+    -d "{\"code\":\"$p_escaped\"}" >/dev/null 2>&1
 }
 
 # 手动启动一次（无管理器兜底，或先跑配对）。
@@ -378,7 +401,32 @@ wait_hello() {   # 最多等 15 秒；进程提前死掉返回 2
 
 # ── 主流程 ──────────────────────────────────────────────────────
 
+PAIR_CODE="${PAIR_CODE:-${MAPR_PAIR_CODE:-${MAPR_PAIR:-}}}"
+
 setup_autostart
+
+MANAGED_OK="na"
+if [ "$AUTOSTART_KIND" != "desktop" ] && [ "$AUTOSTART_KIND" != "none" ]; then
+  if pkill -f "$MAPR_ROOT/pkg/src/cli.ts" 2>/dev/null; then
+    sleep 0.5 2>/dev/null || sleep 1
+  fi
+  if start_managed; then
+    w_i=0
+    while [ "$w_i" -lt 20 ]; do
+      if probe_hello >/dev/null 2>&1; then break; fi
+      sleep 0.5 2>/dev/null || sleep 1
+      w_i=$((w_i + 1))
+    done
+    if probe_hello >/dev/null 2>&1; then MANAGED_OK=1; else MANAGED_OK=0; fi
+  else
+    MANAGED_OK=0
+  fi
+else
+  # 无服务管理器（如桌面会话或容器）：若存在旧版从 $MAPR_ROOT/pkg 拉起的手动进程，先停掉以便加载新代码
+  if pkill -f "$MAPR_ROOT/pkg/src/cli.ts" 2>/dev/null; then
+    sleep 0.5 2>/dev/null || sleep 1
+  fi
+fi
 
 PAIR_STATE="not-requested"
 if [ -n "$PAIR_CODE" ]; then
@@ -387,11 +435,9 @@ if [ -n "$PAIR_CODE" ]; then
     *) warn "配对码长得不像 mpc_... ，仍继续尝试" ;;
   esac
   if probe_hello >/dev/null 2>&1; then
-    # 已有一个本机助手在跑：走本地接口配对（合约 POST /api/pair {code}）
+    # 已有运行中的本机助手（含刚由 systemd/launchd 重启的新服务）：走本地接口配对（POST /api/pair {code}）
     say "检测到本机助手已在运行，直接通过本地接口配对…"
-    if curl -fsS --max-time 8 -X POST "http://127.0.0.1:$HELPER_PORT/api/pair" \
-        -H 'Content-Type: application/json' -H 'X-MAPR-Owner: 1' \
-        -d "{\"code\":\"$PAIR_CODE\"}" >/dev/null 2>&1; then
+    if pair_running_helper "$PAIR_CODE"; then
       PAIR_STATE="paired"
     else
       PAIR_STATE="pair-failed"
@@ -408,34 +454,11 @@ if [ -n "$PAIR_CODE" ]; then
       PAIR_STATE="pair-pending"
     fi
   fi
-
-  # 配对完交给服务管理器（崩溃可自动重启）；桌面自启项无管理器，保留手动进程。
-  # 已存在的旧进程也一起停掉：升级包体后由管理器以新代码重启。
-  if [ "$PAIR_STATE" != "process-died" ] && [ "$AUTOSTART_KIND" != "desktop" ]; then
-    pkill -f "$MAPR_ROOT/pkg/src/cli.ts" 2>/dev/null || true
-    if [ -n "$HELPER_PID" ]; then sleep 1; fi
-    if start_managed; then
-      HELPER_PID=""
-      w_i=0
-      while [ "$w_i" -lt 20 ]; do
-        if probe_hello >/dev/null 2>&1; then break; fi
-        sleep 0.5 2>/dev/null || sleep 1
-        w_i=$((w_i + 1))
-      done
-      if probe_hello >/dev/null 2>&1; then MANAGED_OK=1; else MANAGED_OK=0; fi
-    else
-      MANAGED_OK=0
-    fi
-  else
-    MANAGED_OK="na"
-  fi
 else
-  # 无配对码：直接由管理器启动；没有管理器就手动拉起一次。
-  if start_managed; then
-    MANAGED_OK=1
+  # 无配对码：若服务管理器已接管则已就绪；否则手动拉起一次。
+  if [ "$MANAGED_OK" = "1" ]; then
     say "本机助手已通过后台服务启动。"
-  else
-    MANAGED_OK=0
+  elif ! probe_hello >/dev/null 2>&1; then
     say "正在手动启动本机助手（本次会话内有效；开机自启项已注册）…"
     launch_helper
     wait_hello >/dev/null 2>&1 || true
@@ -475,7 +498,11 @@ if [ -n "$PAIR_CODE" ]; then
 else
   hello=$(probe_hello 2>/dev/null || true)
   if [ -n "$hello" ]; then
-    say "本机助手运行中: http://127.0.0.1:$HELPER_PORT/ （未配对；去网站拿配对码）"
+    if printf '%s' "$hello" | grep -q '"paired"[ ]*:[ ]*true'; then
+      say "本机助手运行中: http://127.0.0.1:$HELPER_PORT/ （已配对）"
+    else
+      say "本机助手运行中: http://127.0.0.1:$HELPER_PORT/ （未配对；去网站拿配对码）"
+    fi
   else
     warn "本机助手暂未起来。看日志 $MAPR_ROOT/helper.log，或手动运行 $MAPR_ROOT/bin/mapr up --hub $HUB"
   fi
