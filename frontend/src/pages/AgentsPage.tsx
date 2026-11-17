@@ -20,6 +20,7 @@ import {
 } from "../lib/localHelper";
 import { inboxAddress } from "../lib/xmtpLocalIdentity";
 import { CopyButton } from "../components/CopyButton";
+import { HelperIntroDemo } from "../components/HelperIntroDemo";
 import { XmtpUnlock } from "../components/XmtpUnlock";
 import { useAuthStore } from "../stores/authStore";
 import type { Room } from "../types/chat";
@@ -79,6 +80,7 @@ function InstallPanel({
       <p className="hint">
         你的 Agent 跑在你自己的电脑上，密钥不出本机。把下面这条命令粘进终端运行一次即可，之后开机自动启动。
       </p>
+      <HelperIntroDemo />
       {pairing ? (
         <>
           <div className="code-block">
@@ -341,6 +343,7 @@ export function AgentJoinSection({ roomId, roomName, ownerXmtpAddress, onJoined 
         <p className="hint">
           网页直接调用本机助手需要浏览器允许「本地网络访问」。如果被拦，可以跳到本机页面完成同样的操作。
         </p>
+        <HelperIntroDemo />
         <div className="agent-panel__actions">
           <button type="button" className="btn btn-primary" onClick={() => openHelperPage()}>
             打开本机助手 ↗

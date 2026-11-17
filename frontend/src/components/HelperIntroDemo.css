@@ -1,0 +1,166 @@
+/* 本机助手演示的样式：只在 .helper-intro 里生效，跟随 stageshow 令牌的浅色产品风。
+   面板里的空状态用 .helper-intro__frame 给它一个安静的边框；布局由 demo 几何定。 */
+
+.helper-intro {
+  /* 空状态是说明性区域：让这段演示看起来像「装好之后的样子」的一张剧照 */
+  margin: 14px auto 4px;
+  max-width: 700px;
+}
+
+.helper-intro .ss-fit {
+  border-radius: 12px;
+}
+
+/* 场景画布：一个浅色产品地台（不是 macOS 壁纸）。窗口直接落在地台上。
+   .hid 是 Stage 的 .ss-fit 外层，给它底色和裁切，舞台本身就是透明的 */
+.hid {
+  background: #f6f6f9;
+  border-radius: 12px;
+  border: 1px solid #e7e5e4;
+  overflow: hidden;
+  box-shadow: inset 0 1px 0 #fff, 0 1px 2px rgb(0 0 0 / 4%);
+}
+
+/* ── 左侧：本机助手窗口 ── */
+
+.hid .hid-agents {
+  position: absolute;
+  box-shadow: var(--ss-shadow-ground);
+}
+
+.hid-agents__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px 8px;
+}
+
+.hid-sec {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ss-text);
+  letter-spacing: 0.02em;
+}
+
+.hid-agents__list {
+  border-top: 1px solid var(--ss-line-faint);
+}
+
+.hid-ico {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  background: var(--ss-ink-2);
+  display: grid;
+  place-items: center;
+  color: var(--ss-icon);
+  flex-shrink: 0;
+}
+
+.hid-sub {
+  font-size: 10px;
+  color: var(--ss-text-faint);
+}
+
+/* 加入按钮的三种状态：加入 → 加入中… → 已加入（成功色） */
+.hid-join[data-state="done"] {
+  background: var(--ss-success);
+  color: #fff;
+}
+
+.hid-join[data-state="busy"] {
+  opacity: 0.75;
+}
+
+/* ── 右侧：加密房间成员卡片 ── */
+
+.hid-card {
+  position: absolute;
+  background: var(--ss-surface);
+  border-radius: var(--ss-radius-lg);
+  box-shadow: var(--ss-shadow-ground);
+  overflow: hidden;
+}
+
+.hid-card__head {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--ss-line-faint);
+}
+
+.hid-lock {
+  color: var(--ss-success);
+  flex-shrink: 0;
+}
+
+.hid-room-name {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--ss-text-strong);
+}
+
+.hid-room-side {
+  margin-left: auto;
+  font-size: 9.5px;
+  color: var(--ss-text-faint);
+}
+
+/* ── 成员名块：点 + 名 + Agent 小牌（飞行克隆与落地行共用） ── */
+
+.hid-mid {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--ss-text-strong);
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 0.16s ease;
+}
+
+.hid-mid[data-landed] {
+  opacity: 1;
+}
+
+.hid-mid--fly {
+  /* 飞行态：和落地的名字块一模一样（Fly 要求克隆与终点同尺寸），
+     只加一点点投影，读得出「正在移动」 */
+  opacity: 1;
+  filter: drop-shadow(0 4px 10px rgb(50 50 93 / 22%));
+}
+
+.hid-mid b {
+  font-weight: 550;
+}
+
+.hid-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ss-success);
+  flex-shrink: 0;
+}
+
+.hid-dot[data-kind="agent"] {
+  background: var(--ss-accent);
+}
+
+.hid-tag {
+  font-size: 9px;
+  font-weight: 600;
+  font-style: normal;
+  line-height: 1;
+  padding: 3px 6px;
+  border-radius: 999px;
+  background: var(--ss-accent-soft);
+  color: var(--ss-accent-text);
+}
+
+/* 窄布局（手机宽度）：上下叠放，成员列表从成员行顶部往下载切。
+   data-layout 在 .ss-stage 上，不在 .hid 外层 */
+.hid .ss-stage[data-layout="compact"] .hid-agents__head {
+  padding: 9px 12px 7px;
+}
