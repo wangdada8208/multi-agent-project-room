@@ -153,36 +153,37 @@ jobs:
             $SUDO mv -f "$DEST_DIR/.tmp.$LATEST_ALIAS.sha256" "$DEST_DIR/$LATEST_ALIAS.sha256"
           fi
 
-          $SUDO env DOWNLOADS_ROOT="$ROOT" python3 - <<'PY'
-          from __future__ import annotations
-
+          if $SUDO nginx -T 2>&1 | grep -q 'location ^~ /downloads/'; then
+            echo "Nginx /downloads/ location already configured; skipping patch"
+          else
+            $SUDO env DOWNLOADS_ROOT="$ROOT" python3 - <<'PY'
           import os
           import re
           import shutil
           import subprocess
-          from datetime import datetime, timezone
+          from datetime import datetime
           from pathlib import Path
 
           downloads_root = os.environ["DOWNLOADS_ROOT"].rstrip("/") + "/"
           marker = "location ^~ /downloads/"
-          location = f"""
-              location ^~ /downloads/ {{
-                  alias {downloads_root};
-                  autoindex off;
-                  add_header X-Content-Type-Options "nosniff" always;
-              }}
-          """
+          location = (
+              "\n    location ^~ /downloads/ {\n"
+              "        alias " + downloads_root + ";\n"
+              "        autoindex off;\n"
+              "        add_header X-Content-Type-Options \"nosniff\" always;\n"
+              "    }\n"
+          )
 
           dump = subprocess.run(
               ["nginx", "-T"],
               check=True,
               stdout=subprocess.PIPE,
               stderr=subprocess.STDOUT,
-              text=True,
+              universal_newlines=True,
           ).stdout
 
-          current_file: Path | None = None
-          candidates: set[Path] = set()
+          current_file = None
+          candidates = set()
           for line in dump.splitlines():
               match = re.match(r"# configuration file ([^:]+):", line)
               if match:
@@ -200,7 +201,7 @@ jobs:
               if marker in text:
                   continue
 
-              inserts: list[tuple[int, str]] = []
+              inserts = []
               for match in re.finditer(r"server\s*\{", text):
                   start = match.start()
                   depth = 0
@@ -223,23 +224,22 @@ jobs:
               if not inserts:
                   continue
 
-              stamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
-              shutil.copy2(path, f"{path}.bak-downloads-{stamp}")
+              stamp = datetime.utcnow().strftime("%Y%m%d%H%M%S")
+              shutil.copy2(str(path), str(path) + ".bak-downloads-" + stamp)
               for pos, snippet in sorted(inserts, reverse=True):
                   text = text[:pos] + snippet + text[pos:]
               path.write_text(text)
               changed = True
-              print(f"Patched {path}")
+              print("Patched {}".format(path))
 
-          if not changed:
-              print("Nginx downloads location already present")
+          if changed:
+              subprocess.run(["nginx", "-t"], check=True)
           PY
-
-          $SUDO nginx -t
-          if command -v systemctl >/dev/null 2>&1; then
-            $SUDO systemctl reload nginx
-          else
-            $SUDO nginx -s reload
+            if command -v systemctl >/dev/null 2>&1; then
+              $SUDO systemctl reload nginx
+            else
+              $SUDO nginx -s reload
+            fi
           fi
 
           curl --fail --head --location "$PUBLIC_PREFIX/$TARBALL_NAME?v=$SHA_NORM"
