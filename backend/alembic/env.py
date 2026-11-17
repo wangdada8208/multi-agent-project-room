@@ -30,6 +30,7 @@ import app.models.analytics  # noqa: F401
 import app.models.room_permission  # noqa: F401
 import app.models.room_share  # noqa: F401
 import app.models.room_template  # noqa: F401
+import app.helper.models  # noqa: F401
 
 config = context.config
 
