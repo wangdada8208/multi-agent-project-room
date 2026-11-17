@@ -246,6 +246,12 @@ export function RoomPage() {
     refetchInterval: 30000,
   });
 
+  const roomSeatsQuery = useQuery({
+    queryKey: ["rooms", roomId, "seats"],
+    queryFn: () => listRoomSeats(roomId),
+    refetchInterval: 15000,
+  });
+
   const onlineAgentNames = useMemo(() => {
     const wsAgents = participants
       .filter((p) => p.sender_type === "agent")
@@ -461,7 +467,7 @@ export function RoomPage() {
           ))}
         </nav>
         <div className="side-panel__body">
-          {activeTab === "members" && <MembersPanel participants={participants} />}
+          {activeTab === "members" && <MembersPanel participants={participants} seats={roomSeatsQuery.data} />}
           {activeTab === "tasks" && <TasksPanel tasks={tasks.filter((t) => !t.room_id || t.room_id === roomId)} />}
           {activeTab === "dialogue" && <DialoguePanel roomId={roomId} onlineAgents={onlineAgentNames} />}
           {activeTab === "files" && <FilesPanel roomId={roomId} />}

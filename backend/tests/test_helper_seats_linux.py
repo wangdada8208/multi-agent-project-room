@@ -344,3 +344,50 @@ async def test_no_secrets_in_logs_or_error_responses(client, db, room_owner, cap
     assert deny.status_code == 401
     for secret in (ticket, paired["helper_token"], grant["agent_token"]):
         assert secret not in replay.text + deny.text + caplog.text
+
+
+@pytest.mark.asyncio
+async def test_seat_peers_agent_and_human_access(client, db, room_owner, room_member):
+    """seat-peers：本房席位的 Agent 账号可读；人类需成员身份；外人双方皆拒。"""
+    owner, room = room_owner
+    paired = await _paired_helper(client, owner)
+    grant = (await client.post(f"{BASE}/me/seats", headers=_helper_headers(paired),
+                               json=_seat_via_local(room.id))).json()
+
+    # 席位自己的 agent_token 可读同伴名单，且带信任分级
+    peers = (await client.get(f"{ROOMS}/{room.id}/seat-peers",
+                              headers={"Authorization": f"Bearer {grant['agent_token']}"})).json()
+    assert [p["xmtp_address"] for p in peers] == [ADDR_SEAT]
+    assert peers[0]["agent_display_name"] == "Codex"
+    assert peers[0]["trust_tier"] == "local-cli"
+
+    # 房间人类成员也可读
+    human = await client.get(f"{ROOMS}/{room.id}/seat-peers", headers=headers(room_member))
+    assert human.status_code == 200
+
+    # 非成员人类与无席位 Agent 皆拒
+    stranger = User(username="peerstranger", display_name="S", user_type="human")
+    db.add(stranger)
+    outsider_agent = User(username="peeragent", display_name="A", user_type="agent")
+    db.add(outsider_agent)
+    await db.commit()
+    assert (await client.get(f"{ROOMS}/{room.id}/seat-peers",
+                             headers=headers(stranger))).status_code == 403
+    assert (await client.get(f"{ROOMS}/{room.id}/seat-peers",
+                             headers=headers(outsider_agent))).status_code == 403
+
+    # 席位被移除后，它的 Agent 账号立即失去读取权
+    await client.delete(f"{BASE}/me/seats/{grant['seat_id']}", headers=_helper_headers(paired))
+    assert (await client.get(f"{ROOMS}/{room.id}/seat-peers",
+                             headers={"Authorization": f"Bearer {grant['agent_token']}"})).status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_seat_view_carries_trust_tier(client, db, room_owner):
+    """SeatView 带 trust_tier：webhook/openai-compatible 与本地 CLI 分级不同。"""
+    owner, room = room_owner
+    paired = await _paired_helper(client, owner)
+    await client.post(f"{BASE}/me/seats", headers=_helper_headers(paired),
+                      json=_seat_via_local(room.id))
+    seats = (await client.get(f"{ROOMS}/{room.id}/seats", headers=headers(owner))).json()
+    assert seats[0]["trust_tier"] == "local-cli"

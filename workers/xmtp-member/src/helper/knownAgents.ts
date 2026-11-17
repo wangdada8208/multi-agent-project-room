@@ -15,7 +15,10 @@ export const KNOWN_CLI_AGENTS: readonly KnownCliAgent[] = [
     displayName: "Claude Code",
     binaries: ["claude"],
     versionArgs: ["--version"],
-    loginMarkers: [".claude.json", ".claude"],
+    // .claude 目录和 .claude.json 都是首次启动就自动创建的，不算登录。
+    // 唯一可靠标记是 OAuth 凭证文件；空壳/截断文件（实测 15B 残桩）按未登录处理。
+    // 纯 API key 用户会被标 needs-login——这只是提示不是门禁，见 AgentsPage 的 loginHint。
+    loginMarkers: [{ path: ".claude/.credentials.json", minBytes: 32 }],
   },
   {
     kind: "codex",
@@ -38,8 +41,8 @@ export interface DetectDeps {
   findOnPath: (binary: string) => Promise<string | null>;
   /** 运行 `<binary> --version`，3 秒超时，返回首行或 null。 */
   readVersion: (binaryPath: string, args: string[]) => Promise<string | null>;
-  /** 只判断存在与否，不读内容。 */
-  exists: (pathFromHome: string) => Promise<boolean>;
+  /** 判断存在与否，不读内容；minBytes 时文件还需达到最小字节数。 */
+  exists: (pathFromHome: string, minBytes?: number) => Promise<boolean>;
 }
 
 /**
@@ -66,7 +69,9 @@ export async function detectLocalAgents(
 
     let loginState: LoginState = "needs-login";
     for (const marker of spec.loginMarkers) {
-      if (await deps.exists(marker)) {
+      const markerPath = typeof marker === "string" ? marker : marker.path;
+      const markerMin = typeof marker === "string" ? undefined : marker.minBytes;
+      if (await deps.exists(markerPath, markerMin)) {
         loginState = "likely-ready";
         break;
       }
@@ -168,9 +173,10 @@ export function defaultDetectDeps(): DetectDeps {
         });
       });
     },
-    async exists(pathFromHome) {
+    async exists(pathFromHome, minBytes) {
       try {
-        await stat(path.join(home, pathFromHome));
+        const st = await stat(path.join(home, pathFromHome));
+        if (minBytes !== undefined && st.isFile()) return st.size >= minBytes;
         return true;
       } catch {
         return false;

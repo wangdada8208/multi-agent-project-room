@@ -16,6 +16,34 @@ export function resolveGroupPlan(input: {
   return { action: "none" };
 }
 
+export interface SeatPeer {
+  agent_display_name: string;
+  kind: string;
+  trust_tier: string;
+  xmtp_address: string;
+}
+
+/** 拉取本房席位名单（连环护栏用于区分人/Agent 发言者）。Hub 无此接口或失败时返回 null，调用方保持旧名单。 */
+export async function fetchHubSeatPeers(input: {
+  hubBaseUrl: string;
+  hubRoomId: string;
+  hubToken: string;
+  fetchImpl?: typeof fetch;
+}): Promise<SeatPeer[] | null> {
+  const fetchFn = input.fetchImpl ?? fetch;
+  const url = `${input.hubBaseUrl.replace(/\/$/, "")}/api/v1/rooms/${input.hubRoomId}/seat-peers`;
+  const resp = await fetchFn(url, {
+    headers: { Authorization: `Bearer ${input.hubToken}` },
+  });
+  if (!resp.ok) return null;
+  const data: any = await resp.json();
+  if (!Array.isArray(data)) return null;
+  return data.filter(
+    (p): p is SeatPeer =>
+      p && typeof p.xmtp_address === "string" && typeof p.agent_display_name === "string"
+  );
+}
+
 export async function fetchHubGroupId(input: {
   hubBaseUrl: string;
   hubRoomId: string;

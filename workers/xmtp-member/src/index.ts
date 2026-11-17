@@ -9,7 +9,7 @@ import { approveConsent, denyConsent, expireDue, type ConsentActionDeps } from "
 import { ConsentQueue } from "./consentQueue.ts";
 import { decodeEnvelope, encodeEnvelope, ENVELOPE_PREFIX, isAddress, type TaskEnvelope } from "./envelope.ts";
 import { missingMembers } from "./groupMembers.ts";
-import { fetchHubGroupId, resolveGroupPlan } from "./groupPlan.ts";
+import { fetchHubGroupId, fetchHubSeatPeers, resolveGroupPlan } from "./groupPlan.ts";
 import { handleEnvelope, type HandleEnvelopeDeps } from "./handleEnvelope.ts";
 import { appendInboxOnce, readInbox } from "./inbox.ts";
 import { appendLedger, buildLedgerEntry, readLedger, type LedgerEntry } from "./ledger.ts";
@@ -321,6 +321,13 @@ export async function startMember(): Promise<void> {
 
   const groupMembers = new GroupMemberCache();
   const allowGroupMembers = process.env.XMTP_ALLOW_GROUP_MEMBERS === "1";
+  // 本房其他席位的 XMTP 地址（连环护栏区分人/Agent 发言）。Hub 连不上时为空——
+  // 全部发送者按人类处理，护栏不起作用，行为与旧版一致。
+  const seatPeerAddresses = new Set<string>();
+  const loopGuardLimit = (() => {
+    const n = Number.parseInt(process.env.XMTP_LOOP_GUARD_LIMIT || "", 10);
+    return Number.isFinite(n) ? n : undefined;
+  })();
 
   agent.on("text", async (ctx: any) => {
     const sender = ((await ctx.getSenderAddress()) || "").toLowerCase();
@@ -363,6 +370,8 @@ export async function startMember(): Promise<void> {
       loopState = await onInboundText({
         state: loopState,
         text,
+        senderIsAgent: seatPeerAddresses.has(sender),
+        guardLimit: loopGuardLimit,
         complete,
         approvedDays: config.approvedDays,
         sensitiveKeywords: config.sensitiveKeywords,
@@ -389,6 +398,29 @@ export async function startMember(): Promise<void> {
         hubToken: config.hubToken!,
       })
     : null;
+
+  if (hubConfigured) {
+    const refreshSeatPeers = async () => {
+      try {
+        const peers = await fetchHubSeatPeers({
+          hubBaseUrl: config.hubBaseUrl!,
+          hubRoomId: config.hubRoomId!,
+          hubToken: config.hubToken!,
+        });
+        if (peers === null) return; // 旧版 Hub 没有此接口或暂时失败，保留上一份名单
+        seatPeerAddresses.clear();
+        for (const p of peers) {
+          const addr = p.xmtp_address.toLowerCase();
+          if (addr !== selfAddress) seatPeerAddresses.add(addr);
+        }
+      } catch {
+        // 网络抖动不致命，下一轮再试。
+      }
+    };
+    await refreshSeatPeers();
+    const peerTimer = setInterval(refreshSeatPeers, 60_000);
+    peerTimer.unref();
+  }
 
   const plan = resolveGroupPlan({
     envGroupId: config.xmtpGroupId,

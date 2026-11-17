@@ -1,4 +1,4 @@
-export type OwnerNoteAction = "sent" | "blocked" | "silent";
+export type OwnerNoteAction = "sent" | "blocked" | "silent" | "guard";
 
 export interface BuildOwnerNoteInput {
   selfName: string;

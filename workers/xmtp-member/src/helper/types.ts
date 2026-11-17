@@ -38,8 +38,8 @@ export interface KnownCliAgent {
   /** 在 PATH 里查找的命令名，按顺序尝试。 */
   binaries: string[];
   versionArgs: string[];
-  /** 相对家目录的路径；任一存在即视为 likely-ready。 */
-  loginMarkers: string[];
+  /** 相对家目录的路径；任一存在即视为 likely-ready。带 minBytes 时文件还需达到最小字节数。 */
+  loginMarkers: (string | { path: string; minBytes?: number })[];
 }
 
 export interface ManualAgent {
