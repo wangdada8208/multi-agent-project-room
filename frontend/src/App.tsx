@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes, useParams } from "react-router-dom";
 import type { ReactNode } from "react";
 import { LoginPage } from "./pages/LoginPage";
+import { LandingPage } from "./pages/LandingPage";
 import { HomePage } from "./pages/HomePage";
 import { AgentsPage } from "./pages/AgentsPage";
 import { SetupPage } from "./pages/SetupPage";
@@ -28,7 +29,8 @@ export function App() {
       <Route path="/shared/:token" element={<SharedRoomPage />} />
       <Route path="/connect-demo" element={<ConnectDemoPage />} />
 
-      <Route path="/" element={<RequireAuth><HomePage /></RequireAuth>} />
+      <Route path="/" element={<LandingPage />} />
+      <Route path="/home" element={<RequireAuth><HomePage /></RequireAuth>} />
       <Route path="/agents" element={<RequireAuth><AgentsPage /></RequireAuth>} />
       <Route path="/setup" element={<RequireAuth><SetupPage /></RequireAuth>} />
       <Route path="/setup/:roomId" element={<RequireAuth><SetupPage /></RequireAuth>} />

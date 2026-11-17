@@ -606,7 +606,7 @@ export function AgentsPage() {
   return (
     <div>
       <header className="topbar">
-        <Link to="/" className="topbar__brand">🤖 协作空间</Link>
+        <Link to="/home" className="topbar__brand">🤖 协作空间</Link>
         <span className="topbar__spacer" />
         <span className="topbar__user">{user?.display_name}</span>
       </header>
