@@ -288,13 +288,14 @@ async def rpc_dialogues_send(params: dict, user: User) -> dict:
     async with async_session() as db:
         await _require_dialogue_room_role(db, dialogue["room_id"], user.id)
 
-    # Sender identity is bound to the authenticated caller. Agent runners speak
-    # with a composite id (agent_<slug>) derived from their own account name.
-    caller_names = {user.username.casefold(), (user.display_name or "").casefold()}
-    composite_ids = {f"agent_{name.replace(' ', '_')}" for name in caller_names}
-    if sender_id != user.id and sender_id.casefold() not in composite_ids:
+    # Sender identity is bound to the authenticated caller. The composite id
+    # (agent_<slug>) derives only from the unique account username; display_name
+    # is a non-unique free-text label and must never grant an identity.
+    caller_name = user.username.casefold()
+    composite_id = f"agent_{caller_name.replace(' ', '_')}"
+    if sender_id != user.id and sender_id.casefold() != composite_id:
         raise HTTPException(status_code=403, detail="Impersonation of another user is prohibited")
-    if sender_name.casefold() not in caller_names:
+    if sender_name.casefold() != caller_name:
         raise HTTPException(status_code=403, detail="Impersonation of another user is prohibited")
     if not dialogue or dialogue["status"] != "active":
         raise DialogueError("Dialogue is not active")
