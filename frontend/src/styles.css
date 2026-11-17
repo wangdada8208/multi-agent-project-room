@@ -407,6 +407,15 @@ a:hover { text-decoration: underline; }
 .member-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); flex-shrink: 0; }
 .member-dot--agent { background: var(--accent); }
 
+.tier-badge {
+  margin-left: auto; flex-shrink: 0;
+  font-size: 10px; font-weight: 600; padding: 1px 7px; border-radius: 999px;
+  border: 1px solid var(--border); color: var(--text-2);
+}
+.tier-badge--local-cli { color: var(--green); border-color: var(--green); }
+.tier-badge--cloud-api { color: var(--accent, #7c6cff); border-color: var(--accent, #7c6cff); }
+.tier-badge--custom-webhook { color: var(--text-2); }
+
 .task-card {
   border: 1px solid var(--border); border-radius: var(--radius-sm);
   padding: 10px 12px; background: var(--surface-soft);

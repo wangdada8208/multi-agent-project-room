@@ -45,8 +45,10 @@ from app.helper.schemas import (
     PairingCodeResponse,
     PairResponse,
     SeatGrant,
+    SeatPeer,
     SeatStatusResponse,
     SeatView,
+    trust_tier,
 )
 from app.models.room import Room
 from app.models.room_permission import RoomPermission
@@ -228,6 +230,7 @@ def _seat_view(seat: AgentSeat, owner_user_id: str, agent_display_name: str) -> 
         agent_display_name=agent_display_name,
         owner_user_id=owner_user_id,
         kind=seat.kind,
+        trust_tier=trust_tier(seat.kind),
         xmtp_address=seat.xmtp_address,
         group_status="removed" if seat.removed_at is not None else seat.group_status,
     )
@@ -326,6 +329,31 @@ async def list_room_seats(db: AsyncSession, user: User, room_id: str) -> list[Se
         .order_by(AgentSeat.created_at, AgentSeat.id))).all()
     return [_seat_view(seat, owner_user_id, display_name)
             for seat, owner_user_id, display_name in rows]
+
+
+async def list_seat_peers(db: AsyncSession, user: User, room_id: str) -> list[SeatPeer]:
+    """席位互相认人的最小名单：名字、类型、信任分级、XMTP 地址。
+
+    人类按房间成员身份放行（viewer 及以上）；Agent 账号须自己在本房有活跃席位。
+    成员进程据此区分「发消息的是人还是 Agent」（连环护栏用），地址本就群成员互见。
+    """
+    if user.user_type == "agent":
+        own = await db.scalar(select(func.count()).select_from(AgentSeat).where(
+            AgentSeat.room_id == room_id,
+            AgentSeat.agent_user_id == user.id,
+            AgentSeat.removed_at.is_(None)))
+        if not own:
+            raise HTTPException(403, "Agent seat required in this room")
+    else:
+        await require_role(room_id, user, db, min_role="viewer")
+    rows = (await db.execute(
+        select(AgentSeat, User.display_name)
+        .join(User, AgentSeat.agent_user_id == User.id)
+        .where(AgentSeat.room_id == room_id, AgentSeat.removed_at.is_(None))
+        .order_by(AgentSeat.created_at, AgentSeat.id))).all()
+    return [SeatPeer(agent_display_name=display_name, kind=seat.kind,
+                     trust_tier=trust_tier(seat.kind), xmtp_address=seat.xmtp_address)
+            for seat, display_name in rows]
 
 
 async def mark_group_added(db: AsyncSession, user: User, room_id: str, seat_id: str) -> None:

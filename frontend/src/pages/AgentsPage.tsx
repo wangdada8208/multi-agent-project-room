@@ -12,6 +12,8 @@ import {
   probeHelper,
   removeRoomSeat,
   revokeHelper,
+  TRUST_TIER_LABEL,
+  trustTierOf,
   type AgentKind,
   type HelperDevice,
   type HelperProbe,
@@ -479,6 +481,15 @@ export function AgentJoinSection({ roomId, roomName, ownerXmtpAddress, onJoined 
                         <span className={`task-badge ${SEAT_STATUS_CLASS[seat.status]}`}>
                           {SEAT_STATUS_LABEL[seat.status]}
                         </span>
+                        {(() => {
+                          const kind = agents.find((a) => a.key === seat.agentKey)?.kind;
+                          const tier = kind ? trustTierOf(kind) : "custom-webhook";
+                          return (
+                            <span className={`tier-badge tier-badge--${tier}`}>
+                              {TRUST_TIER_LABEL[tier]}
+                            </span>
+                          );
+                        })()}
                       </strong>
                       <small>
                         {seat.xmtpAddress.slice(0, 10)}…{seat.xmtpAddress.slice(-4)}

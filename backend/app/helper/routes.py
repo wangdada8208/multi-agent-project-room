@@ -32,6 +32,7 @@ from app.helper.schemas import (
     PairRequest,
     PairResponse,
     SeatGrant,
+    SeatPeer,
     SeatStatusResponse,
     SeatView,
 )
@@ -126,6 +127,13 @@ async def create_join_ticket(helper_id: str, payload: JoinTicketRequest, respons
 @_database_errors
 async def room_seats(room_id: str, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_human)):
     return await service.list_room_seats(db, user, room_id)
+
+
+@router.get("/api/v1/rooms/{room_id}/seat-peers", response_model=list[SeatPeer])
+@_database_errors
+async def seat_peers(room_id: str, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+    """人类成员与本房席位 Agent 均可读的最小同伴名单（连环护栏用）。"""
+    return await service.list_seat_peers(db, user, room_id)
 
 
 @router.post("/api/v1/rooms/{room_id}/seats/{seat_id}/group-added", status_code=204)

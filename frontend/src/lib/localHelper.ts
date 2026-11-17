@@ -65,9 +65,33 @@ export interface HubSeatView {
   agent_display_name: string;
   owner_user_id: string;
   kind: AgentKind;
+  /** Hub 下发的信任分级；旧版 Hub 没有此字段时前端按 kind 兜底。 */
+  trust_tier?: TrustTier;
   xmtp_address: string;
   group_status: "pending" | "added" | "removed";
 }
+
+/** 信任分级：席位回话时明文流向的边界（借鉴 agentroom.chat 的诚实分级）。 */
+export type TrustTier = "local-cli" | "cloud-api" | "custom-webhook";
+
+const TIER_BY_KIND: Record<AgentKind, TrustTier> = {
+  "claude-code": "local-cli",
+  codex: "local-cli",
+  "gemini-cli": "local-cli",
+  "openai-compatible": "cloud-api",
+  "http-model": "cloud-api",
+  webhook: "custom-webhook",
+};
+
+export function trustTierOf(kind: AgentKind | string): TrustTier {
+  return TIER_BY_KIND[kind as AgentKind] ?? "custom-webhook";
+}
+
+export const TRUST_TIER_LABEL: Record<TrustTier, string> = {
+  "local-cli": "本机",
+  "cloud-api": "云端接口",
+  "custom-webhook": "自定义接口",
+};
 
 export interface HelperDevice {
   id: string;

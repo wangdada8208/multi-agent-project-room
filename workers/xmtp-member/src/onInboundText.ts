@@ -6,6 +6,9 @@ import { buildOwnerNote, type OwnerNote, type OwnerNoteAction } from "./ownerNot
 export interface OnInboundTextInput {
   state: LocalLoopState;
   text: string;
+  /** 发送者是不是房里的另一个席位 Agent（连环护栏依据；未知按人类处理）。 */
+  senderIsAgent?: boolean;
+  guardLimit?: number;
   sendText: (body: string) => Promise<void>;
   saveState: (state: LocalLoopState) => Promise<void>;
   complete?: (prompt: string) => Promise<string>;
@@ -15,12 +18,22 @@ export interface OnInboundTextInput {
 }
 
 export async function onInboundText(input: OnInboundTextInput): Promise<LocalLoopState> {
-  const result = ingest(input.state, input.text);
+  const result = ingest(input.state, input.text, {
+    senderIsAgent: input.senderIsAgent,
+    guardLimit: input.guardLimit,
+  });
 
   let action: OwnerNoteAction = "silent";
   let blockReason: string | null = null;
 
-  if (result.outbound !== null) {
+  if (result.reason === "loop_guard") {
+    action = "guard";
+    if (result.outbound !== null) {
+      // 护栏通告原样发出，不送引擎改写。
+      await input.sendText(result.outbound);
+      action = "sent";
+    }
+  } else if (result.outbound !== null) {
     const rawReply = await composeReply({
       shouldReply: true,
       selfName: input.state.selfName,

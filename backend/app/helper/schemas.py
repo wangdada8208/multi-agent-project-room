@@ -12,6 +12,22 @@ from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator
 AgentKind = Literal["claude-code", "codex", "gemini-cli", "openai-compatible", "webhook", "http-model"]
 GroupStatus = Literal["pending", "added", "removed"]
 SeatStatus = Literal["starting", "running", "crashed", "stopped", "revoked"]
+# 信任分级（借鉴 agentroom.chat 的诚实分级）：席位回话时明文会流向的边界。
+# local-cli=只在本机；cloud-api=发给第三方云接口；custom-webhook=发给用户自配地址。
+TrustTier = Literal["local-cli", "cloud-api", "custom-webhook"]
+
+TRUST_TIER_BY_KIND: dict[str, TrustTier] = {
+    "claude-code": "local-cli",
+    "codex": "local-cli",
+    "gemini-cli": "local-cli",
+    "openai-compatible": "cloud-api",
+    "http-model": "cloud-api",
+    "webhook": "custom-webhook",
+}
+
+
+def trust_tier(kind: str) -> TrustTier:
+    return TRUST_TIER_BY_KIND.get(kind, "custom-webhook")
 
 _ADDRESS = re.compile(r"^0x[0-9a-fA-F]{40}$")
 _AGENT_KEY = re.compile(r"^(claude-code|codex|gemini-cli|manual:[0-9a-f-]{36})$")
@@ -71,8 +87,18 @@ class SeatView(_Strict):
     agent_display_name: str
     owner_user_id: str
     kind: AgentKind
+    trust_tier: TrustTier
     xmtp_address: str
     group_status: GroupStatus
+
+
+class SeatPeer(_Strict):
+    """房间里某个席位的最小公开信息；同群成员本来就能看到彼此的 XMTP 地址。"""
+
+    agent_display_name: str
+    kind: AgentKind
+    trust_tier: TrustTier
+    xmtp_address: str
 
 
 # ── helper (Bearer helper token) ──
