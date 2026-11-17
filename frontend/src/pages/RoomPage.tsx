@@ -18,6 +18,8 @@ import {
 } from "../lib/api";
 import { createLocalXmtpClient, inboxAddress } from "../lib/xmtpLocalIdentity";
 import { sendXmtpMessage, toLocalChatMessage } from "../lib/xmtpSend";
+import { listRoomSeats, markSeatGroupAdded } from "../lib/localHelper";
+import { syncPendingSeatsToGroup } from "../lib/seatGroupSync";
 import { describeEnvelope } from "../lib/envelopeView";
 import { formatOwnerNoteAction, visibleOwnerNotes } from "../lib/ownerNotes";
 import { useAuthStore } from "../stores/authStore";
@@ -199,6 +201,34 @@ export function RoomPage() {
     void listen();
     return () => { cancelled = true; setXmtpConnected(false); void stop?.(); };
   }, [xmtpClient, isEncrypted, room?.xmtp_group_id, roomId, addMessage]);
+
+  // 席位入群同步：本机助手创建的席位在 Hub 里是 pending，要由「已经在群里的成员」
+  // 拉进 XMTP 群。打开这个页面的用户如果是群成员，就用 TA 的客户端完成拉人；
+  // 只处理 owner 是自己的席位（见 seatGroupSync.ts）。10 秒一轮，失败下一轮重试。
+  useEffect(() => {
+    const targetGroupId = room?.xmtp_group_id;
+    if (!xmtpClient || !isEncrypted || !targetGroupId || !user?.id) return;
+    const currentUserId = user.id;
+    let cancelled = false;
+    let running = false;
+    const tick = async () => {
+      if (cancelled || running) return; // 上一轮还没结束时跳过，避免并发写 XMTP 群
+      running = true;
+      try {
+        await syncPendingSeatsToGroup({
+          client: xmtpClient,
+          roomId,
+          groupId: targetGroupId,
+          currentUserId,
+          deps: { listSeats: listRoomSeats, markAdded: markSeatGroupAdded },
+        });
+      } catch { /* 整轮失败（Hub 不可达等）留给下一轮重试 */ }
+      finally { running = false; }
+    };
+    void tick();
+    const timer = window.setInterval(tick, 10000);
+    return () => { cancelled = true; window.clearInterval(timer); };
+  }, [xmtpClient, isEncrypted, room?.xmtp_group_id, roomId, user?.id]);
 
   const tasksQuery = useQuery({
     queryKey: ["rooms", roomId, "tasks"],
