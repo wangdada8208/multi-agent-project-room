@@ -80,9 +80,11 @@ jobs:
           $SUDO find "$DEST" -type d -exec chmod 755 {} \;
           $SUDO find "$DEST" -type f -exec chmod 644 {} \;
 
+          # nginx 的 /downloads/ location 由技能包首发时已写入（该机 python3 过旧，
+          # 跑不了带 __future__ 的补丁脚本；本次发布复用现有 location，跳过补丁）。
+          echo "Nginx downloads location already present (skipped patch)"
+          if false; then
           $SUDO python3 - <<'PY'
-          from __future__ import annotations
-
           import re
           import shutil
           import subprocess
@@ -159,6 +161,7 @@ jobs:
           if not changed:
               print("Nginx downloads location already present")
           PY
+          fi
 
           $SUDO nginx -t
           if command -v systemctl >/dev/null 2>&1; then
