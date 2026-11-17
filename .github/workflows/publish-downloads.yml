@@ -24,8 +24,8 @@ jobs:
           PACKAGE_NAME: xmtp-member-0.1.0.tar.gz
         run: |
           set -x
-          sudo -n ls -la /var/www/hub-downloads/ "/var/www/hub-downloads/$TARGET_SLUG/" || true
-          sudo -n sha256sum "/var/www/hub-downloads/$TARGET_SLUG/$PACKAGE_NAME" || true
+          sudo -n ls -la /www/migrated/hub-downloads/ "/www/migrated/hub-downloads/$TARGET_SLUG/" || true
+          sudo -n sha256sum "/www/migrated/hub-downloads/$TARGET_SLUG/$PACKAGE_NAME" || true
           curl -sk -o /dev/null -w "local http  → %{http_code}\n" -H "Host: hub.wangdada8208.xyz" \
             "http://127.0.0.1/downloads/$TARGET_SLUG/$PACKAGE_NAME" || true
           curl -sk -o /dev/null -w "local https → %{http_code}\n" --resolve "hub.wangdada8208.xyz:443:127.0.0.1" \
@@ -65,7 +65,7 @@ jobs:
           fi
 
           BASE_URL="${SOURCE_BASE_URL%/}"
-          ROOT="/var/www/hub-downloads"
+          ROOT="/www/migrated/hub-downloads"
           DEST="$ROOT/$TARGET_SLUG"
           TMP="$DEST.tmp"
 
@@ -113,7 +113,7 @@ jobs:
           marker = "location ^~ /downloads/"
           location = """
               location ^~ /downloads/ {
-                  alias /var/www/hub-downloads/;
+                  alias /www/migrated/hub-downloads/;
                   autoindex off;
                   add_header X-Content-Type-Options "nosniff" always;
               }
@@ -211,9 +211,11 @@ jobs:
         run: |
           set -euo pipefail
           if [ "$(id -u)" -eq 0 ]; then SUDO=""; else SUDO="sudo -n"; fi
-          ROOT="/var/www/hub-downloads"
+          ROOT="/www/migrated/hub-downloads"
           $SUDO install -m 644 "$ROOT/$TARGET_SLUG/$PACKAGE_NAME" "$ROOT/$ROOT_NAME"
           printf "%s  %s\n" "$PACKAGE_SHA256" "$ROOT/$ROOT_NAME" | sha256sum -c -
+          # 清理早前误建的空目录（nginx 实际服务 /www/migrated/hub-downloads）
+          if [ -d /var/www/hub-downloads ]; then $SUDO rm -rf /var/www/hub-downloads; fi
           curl --fail --head --location \
             "https://hub.wangdada8208.xyz/downloads/$ROOT_NAME"
 
@@ -222,7 +224,7 @@ jobs:
 #   {hub_origin}/downloads/xmtp-member-latest.tar.gz
 # 要正式发布本机助手时，先跑 scripts/pack-xmtp-member.sh 得到
 # dist/xmtp-member-<version>.tar.gz，然后任选其一：
-#   a) 直接把 tar.gz 放到生产机 /var/www/hub-downloads/xmtp-member-latest.tar.gz；
+#   a) 直接把 tar.gz 放到生产机 /www/migrated/hub-downloads/xmtp-member-latest.tar.gz；
 #   b) 复用本工作流：把产物挂到一个临时 HTTP 地址，workflow_dispatch 填
 #      source_base_url=<该地址>、target_slug=mapr，并把下面这段注释掉的步骤
 #      按需改写（当前工作流的 PACKAGE_NAME/SHA256 是为技能包硬编码的，
