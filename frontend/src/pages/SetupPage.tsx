@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import type { Client } from "@xmtp/browser-sdk";
@@ -121,9 +121,16 @@ export function SetupPage() {
   const [progress, setProgress] = useState<{ label: string; state: SubState }[]>([
     { label: "解锁本机加密身份", state: "idle" },
     { label: "创建加密群", state: "idle" },
-    { label: "邀请成员进程入群", state: "idle" },
     { label: "绑定到房间", state: "idle" },
   ]);
+
+  // 客户端跨步骤保留：成员的加密身份要等其进程首次启动后才注册到网络，
+  // 邀请只能在注册之后发出（在「完成」步轮询补发）。
+  const clientRef = useRef<Client<any> | null>(null);
+  useEffect(() => () => {
+    clientRef.current?.close();
+    clientRef.current = null;
+  }, []);
 
   const setStage = (index: number, state: SubState) =>
     setProgress((prev) => prev.map((p, i) => (i === index ? { ...p, state } : p)));
@@ -149,28 +156,16 @@ export function SetupPage() {
         setStage(1, "done");
 
         setStage(2, "running");
-        await group.addMembersByIdentifiers([memberIdentifier(credentials.workerAddress)]);
-        setStage(2, "done");
-
-        setStage(3, "running");
         await bindXmtpGroup(room.id, boundGroupId);
-        setStage(3, "done");
+        setStage(2, "done");
         setRoom({ ...room, xmtp_group_id: boundGroupId });
       } else {
         setStage(1, "done");
-        // 群已绑定：尽量把本次生成的成员进程地址加进群
-        setStage(2, "running");
-        try {
-          await client.conversations.syncAll();
-          const group = await client.conversations.getConversationById(boundGroupId);
-          await (group as any)?.addMembersByIdentifiers?.([memberIdentifier(credentials.workerAddress)]);
-          setStage(2, "done");
-        } catch {
-          setStage(2, "done");
-        }
-        setStage(3, "done");
+        setStage(2, "done");
       }
       setGroupId(boundGroupId);
+      clientRef.current = client;
+      client = null;
       setStep(2);
     } catch (err) {
       setCryptoError(err instanceof Error ? err.message : "配置失败，请重试");
@@ -225,20 +220,51 @@ export function SetupPage() {
     URL.revokeObjectURL(url);
   }
 
-  // ── Step 3: 检测成员进程 ──
+  // ── Step 3: 检测成员进程 + 补发入群邀请 ──
   const [memberOnline, setMemberOnline] = useState(false);
+  const [memberInvited, setMemberInvited] = useState(false);
+
+  // 成员进程的 XMTP 身份在它第一次启动时才注册到网络；可解析后再邀请入群。
+  async function inviteMember(): Promise<boolean> {
+    const client = clientRef.current;
+    if (!client || !groupId || !credentials) return false;
+    try {
+      const inboxId = await client.fetchInboxIdByIdentifier(
+        memberIdentifier(credentials.workerAddress),
+      );
+      if (!inboxId) return false;
+      await client.conversations.syncAll();
+      const group = await client.conversations.getConversationById(groupId);
+      if (!group) return false;
+      const members = await (group as any).members?.() ?? [];
+      const present = members.flatMap(
+        (m: any) => m.accountIdentifiers?.map((i: any) => String(i.identifier).toLowerCase()) ?? [],
+      );
+      if (!present.includes(credentials.workerAddress.toLowerCase())) {
+        await (group as any).addMembersByIdentifiers([memberIdentifier(credentials.workerAddress)]);
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   useEffect(() => {
-    if (step !== 3 || memberOnline) return;
+    if (step !== 3) return;
     let cancelled = false;
     const tick = async () => {
-      if (await memberProcessAlive()) {
-        if (!cancelled) setMemberOnline(true);
+      if (!memberOnline && (await memberProcessAlive()) && !cancelled) {
+        setMemberOnline(true);
+      }
+      if (!memberInvited && (await inviteMember()) && !cancelled) {
+        setMemberInvited(true);
       }
     };
     void tick();
-    const timer = window.setInterval(tick, 3000);
+    const timer = window.setInterval(tick, 4000);
     return () => { cancelled = true; window.clearInterval(timer); };
-  }, [step, memberOnline]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, memberOnline, memberInvited, groupId, credentials]);
 
   const dot = (i: number) =>
     `setup-step-dot ${i < step ? "done" : i === step ? "current" : ""}`;
@@ -334,8 +360,8 @@ export function SetupPage() {
             <p className="setup-desc">
               房间 <strong>「{room.name}」</strong> 已建好。
               {creatingVault
-                ? "这台电脑还没有加密身份，设置一个口令（至少 10 位），系统会自动创建加密群并邀请你的成员进程。"
-                : "输入你的加密口令，系统会自动创建加密群并邀请你的成员进程。"}
+                ? "这台电脑还没有加密身份，设置一个口令（至少 10 位），系统会自动创建加密群并绑定到房间。"
+                : "输入你的加密口令，系统会自动创建加密群并绑定到房间。"}
             </p>
             <div className="setup-body">
               <div className="field">
@@ -436,16 +462,20 @@ export function SetupPage() {
         {/* ── Step 3 检测与完成 ── */}
         {step === 3 && room && (
           <div className="card setup-card">
-            <h2>{memberOnline ? "🎉 配置完成" : "⏳ 等待成员进程启动"}</h2>
+            <h2>{memberInvited ? "🎉 配置完成" : "⏳ 等待成员进程启动"}</h2>
             <p className="setup-desc">
-              {memberOnline
-                ? "已经检测到你电脑上的成员进程在运行。"
-                : "正在检测本机成员进程（127.0.0.1:8787）。在你的终端里完成上一步命令后，这里会自动变绿。"}
+              {memberInvited
+                ? "成员进程已连接并已加入加密群，协作空间就绪。"
+                : "正在检测本机成员进程（127.0.0.1:8787）。在你的终端里完成上一步命令后，这里会自动变绿，成员会被自动邀请进加密群。"}
             </p>
             <div className="setup-body">
               <CheckRow
                 label={memberOnline ? "成员进程已连接" : "等待成员进程启动…"}
                 state={memberOnline ? "done" : "running"}
+              />
+              <CheckRow
+                label={memberInvited ? "成员已加入加密群" : "等待成员身份注册，就绪后自动邀请入群…"}
+                state={memberInvited ? "done" : "running"}
               />
               <div className="setup-info">
                 💡 对方的 Agent 也要接入时，把房间 ID <code>{room.id}</code> 发给 TA，
@@ -456,9 +486,13 @@ export function SetupPage() {
               <button
                 type="button"
                 className="btn btn-primary btn-lg"
-                onClick={() => navigate(`/rooms/${room.id}`)}
+                onClick={() => {
+                  clientRef.current?.close();
+                  clientRef.current = null;
+                  navigate(`/rooms/${room.id}`);
+                }}
               >
-                {memberOnline ? "进入房间 🚀" : "先进入房间看看 →"}
+                {memberInvited ? "进入房间 🚀" : "先进入房间看看 →"}
               </button>
               <Link to="/" className="hint setup-skip">回首页</Link>
             </div>
