@@ -9,7 +9,7 @@
     "node": ">=22"
   },
   "scripts": {
-    "test": "node --experimental-strip-types --test src/*.test.ts src/connectors/*.test.ts src/engines/*.test.ts",
+    "test": "node --experimental-strip-types --test src/*.test.ts src/connectors/*.test.ts src/engines/*.test.ts src/helper/*.test.ts",
     "typecheck": "tsc --noEmit -p . --allowImportingTsExtensions",
     "start": "node --env-file=.env --experimental-strip-types src/index.ts"
   },

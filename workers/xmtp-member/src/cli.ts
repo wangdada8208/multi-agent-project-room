@@ -2,8 +2,10 @@
 import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
+import { parseUpArgs, runHelper } from "./helper/up.ts";
 
 export interface CliIO {
   stdout: (msg: string) => void;
@@ -152,6 +154,13 @@ export async function runCli(args: string[], io: CliIO = { stdout: (m) => consol
       const data = await res.json();
       io.stdout(JSON.stringify(data));
       return res.ok ? 0 : 1;
+    }
+
+    if (command === "up") {
+      // 本机助手是长驻进程：runHelper 直到收到 SIGINT/SIGTERM 才返回。
+      const options = parseUpArgs(flags, process.env, os.homedir());
+      io.stdout(JSON.stringify({ ok: true, helper: "starting", hub: options.hubOrigin, dir: options.rootDir }));
+      return await runHelper(options);
     }
 
     io.stderr(JSON.stringify({ ok: false, reason: "unknown_command", command }));

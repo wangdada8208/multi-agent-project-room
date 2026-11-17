@@ -128,7 +128,9 @@ export async function bindGroupToHub(
 
 export async function startMember(): Promise<void> {
   const config = loadConfigFromEnv();
-  if (config.allowedSenders.length === 0) {
+  // 白名单为空时，只有 XMTP_ALLOW_GROUP_MEMBERS=1 才能启动：席位走 via=local 建座时
+  // Hub 返回空 allowed_senders，群成员放行本来就交给群成员缓存（决定 D3）。
+  if (config.allowedSenders.length === 0 && process.env.XMTP_ALLOW_GROUP_MEMBERS !== "1") {
     throw new Error("XMTP_ALLOWED_SENDERS is empty; refusing to start");
   }
   if (!config.xmtpWalletKey) {
