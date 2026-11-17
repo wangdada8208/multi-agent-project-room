@@ -48,8 +48,8 @@ if (-not $HubOrigin) { $HubOrigin = $env:MAPR_HUB_ORIGIN }
 if (-not $HubOrigin) { $HubOrigin = 'https://hub.wangdada8208.xyz' }
 $HubOrigin = $HubOrigin.TrimEnd('/')
 $PkgUrl = $env:MAPR_PKG_URL
-if (-not $PkgUrl) { $PkgUrl = "$HubOrigin/downloads/xmtp-member-latest.tar.gz" }
-if (-not $Pair) { $Pair = $env:MAPR_PAIR_CODE }
+if (-not $PkgUrl) { $PkgUrl = "$HubOrigin/downloads/xmtp-member-latest.tar.gz?t=$([DateTimeOffset]::UtcNow.ToUnixTimeSeconds())" }
+if (-not $Pair) { $Pair = if ($env:MAPR_PAIR_CODE) { $env:MAPR_PAIR_CODE } else { $env:MAPR_PAIR } }
 
 function Warn([string]$m) { Write-Host "警告: $m" -ForegroundColor Yellow }
 function Die([string]$m) { Write-Host "错误: $m" -ForegroundColor Red; exit 1 }
@@ -124,6 +124,17 @@ try {
     Remove-Item -Recurse -Force $pkgNew -ErrorAction SilentlyContinue
     Die "npm install 失败（网络问题或依赖源不可用）。原有安装未受影响。"
   }
+
+  # 替换 $PkgDir 前先优雅结束命令行引用 $Root 的旧 mapr node.exe 进程，避免 Windows NTFS 锁定原生 .node/DLL 导致升级失败
+  $stoppedRunning = $false
+  Get-CimInstance Win32_Process -Filter "Name='node.exe'" -ErrorAction SilentlyContinue |
+    Where-Object { $_.CommandLine -and $_.CommandLine.IndexOf($Root, [System.StringComparison]::OrdinalIgnoreCase) -ge 0 } |
+    ForEach-Object {
+      $stoppedRunning = $true
+      Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
+    }
+  if ($stoppedRunning) { Start-Sleep -Milliseconds 600 }
+
   $pkgOld = Join-Path $Root 'pkg.old'
   if (Test-Path $pkgOld) { Remove-Item -Recurse -Force $pkgOld }
   if (Test-Path $PkgDir) { Move-Item $PkgDir $pkgOld }
@@ -215,6 +226,12 @@ Write-Host "已写入开机自启：$StartupLnk（当前用户登录时生效，
 # ── 本机接口探测与配对 ──
 function Test-Hello { try { return Invoke-RestMethod -Uri "http://127.0.0.1:$Port/api/hello" -TimeoutSec 2 } catch { return $null } }
 
+function Invoke-PairRunningHelper {
+  Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:$Port/api/pair" `
+    -Headers @{ 'X-MAPR-Owner' = '1'; 'Content-Type' = 'application/json' } `
+    -Body (@{ code = $Pair } | ConvertTo-Json) -TimeoutSec 8 | Out-Null
+}
+
 $pairState = 'not-requested'
 if ($Pair) {
   if ($Pair -notmatch '^mpc_.+\..+') { Warn "配对码长得不像 mpc_... ，仍继续尝试" }
@@ -222,9 +239,7 @@ if ($Pair) {
   if ($null -ne $hello) {
     Write-Host "检测到本机助手已在运行，直接通过本地接口配对…"
     try {
-      Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:$Port/api/pair" `
-        -Headers @{ 'X-MAPR-Owner' = '1' } -ContentType 'application/json' `
-        -Body (@{ code = $Pair } | ConvertTo-Json) -TimeoutSec 8 | Out-Null
+      Invoke-PairRunningHelper
       $pairState = 'paired'
     } catch { $pairState = 'pair-failed' }
   } else {

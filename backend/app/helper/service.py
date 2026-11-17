@@ -176,6 +176,9 @@ async def _get_or_create_agent_user(db: AsyncSession, owner_id: str, agent_key: 
     if existing is not None:
         if existing.user_type != "agent" or existing.owner_user_id != owner_id:
             raise HTTPException(409, "Agent identity conflict")
+        if existing.display_name != display_name:
+            existing.display_name = display_name
+            await db.flush()
         return existing
     agent = User(
         username=username,
@@ -195,6 +198,9 @@ async def _get_or_create_agent_user(db: AsyncSession, owner_id: str, agent_key: 
         existing = (await db.execute(select(User).where(User.username == username))).scalar_one_or_none()
         if existing is None or existing.user_type != "agent" or existing.owner_user_id != owner_id:
             raise HTTPException(409, "Agent identity conflict") from None
+        if existing.display_name != display_name:
+            existing.display_name = display_name
+            await db.flush()
         return existing
     return agent
 

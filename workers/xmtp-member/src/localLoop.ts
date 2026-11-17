@@ -33,7 +33,7 @@ export function createLocalLoop(input: {
 export function ingest(
   state: LocalLoopState,
   text: string,
-  opts?: { senderIsAgent?: boolean; guardLimit?: number }
+  opts?: { senderIsAgent?: boolean; guardLimit?: number; peerNames?: string[] }
 ): {
   state: LocalLoopState;
   outbound: string | null;
@@ -49,6 +49,7 @@ export function ingest(
     text,
     selfName: state.selfName,
     participants: state.participants,
+    peerNames: opts?.peerNames,
     turnIndex: state.turnIndex,
   });
 

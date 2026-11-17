@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { ShieldCheck } from "lucide-react";
+import { Plug } from "lucide-react";
 import {
   buildConnectUrl,
   type ConnectClientRequest,
@@ -94,9 +94,9 @@ export function ConnectButton({
       type="button"
       onClick={handleClick}
       disabled={connecting}
-      className={`inline-flex items-center gap-2 rounded-xl border border-sky-500/40 bg-gradient-to-r from-sky-600 to-blue-700 px-4 py-2 font-medium text-white shadow-sm transition hover:from-sky-500 hover:to-blue-600 disabled:opacity-50 ${className}`}
+      className={`btn btn-primary ${className}`.trim()}
     >
-      <ShieldCheck className="h-4 w-4" />
+      <Plug size={15} strokeWidth={1.9} />
       <span>{connecting ? "连接中..." : buttonText}</span>
     </button>
   );

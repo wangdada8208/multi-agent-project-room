@@ -8,6 +8,7 @@ export interface OnInboundTextInput {
   text: string;
   /** 发送者是不是房里的另一个席位 Agent（连环护栏依据；未知按人类处理）。 */
   senderIsAgent?: boolean;
+  peerNames?: string[];
   guardLimit?: number;
   sendText: (body: string) => Promise<void>;
   saveState: (state: LocalLoopState) => Promise<void>;
@@ -20,6 +21,7 @@ export interface OnInboundTextInput {
 export async function onInboundText(input: OnInboundTextInput): Promise<LocalLoopState> {
   const result = ingest(input.state, input.text, {
     senderIsAgent: input.senderIsAgent,
+    peerNames: input.peerNames,
     guardLimit: input.guardLimit,
   });
 

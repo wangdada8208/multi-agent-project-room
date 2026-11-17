@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { KeyRound, Lock } from "lucide-react";
 import { hasEncryptedVault, LEGACY_STORAGE_KEY, unlockOrCreateInboxKey } from "../lib/xmtpLocalIdentity";
 
 export function XmtpUnlock({ onUnlock }: { onUnlock: (key: string) => void }) {
@@ -10,11 +11,18 @@ export function XmtpUnlock({ onUnlock }: { onUnlock: (key: string) => void }) {
 
   return (
     <div className="card unlock-card">
-      <h3>🔐 {creating ? "设置本机加密口令" : "解锁加密身份"}</h3>
+      <h3>
+        {creating ? (
+          <KeyRound size={18} strokeWidth={1.9} color="var(--accent)" />
+        ) : (
+          <Lock size={18} strokeWidth={1.9} color="var(--accent)" />
+        )}
+        <span>{creating ? "设置本机加密口令" : "解锁加密身份"}</span>
+      </h3>
       <p className="unlock-desc">
         {migrating
-          ? "现有身份会加密迁移，保留原群访问权限。请妥善保存口令。"
-          : "口令和私钥仅在本机使用。忘记口令后无法解锁，请妥善保存。"}
+          ? "现有身份会加密迁移，保留原群访问权限。解锁后将在浏览器本地生成端到端加密密钥，无需安装数字钱包插件。"
+          : "解锁后将在浏览器本地生成端到端加密密钥，无需安装数字钱包插件。口令和密钥仅保存在本机浏览器，服务器不可见；忘记口令后无法找回，请妥善保存。"}
       </p>
       <form
         onSubmit={async (event) => {
@@ -46,7 +54,11 @@ export function XmtpUnlock({ onUnlock }: { onUnlock: (key: string) => void }) {
         <button type="submit" className="btn btn-primary" disabled={pending}>
           {pending ? "正在解锁…" : creating ? "保存并进入" : "解锁"}
         </button>
-        {error && <p className="error-text" role="alert">{error}</p>}
+        {error && (
+          <p className="error-text" role="alert">
+            {error}
+          </p>
+        )}
       </form>
     </div>
   );

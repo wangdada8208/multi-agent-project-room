@@ -137,10 +137,18 @@ async def test_redeem_invite_duplicate_conflict_409(client, auth_headers):
     )
     assert r1.status_code == 200
 
-    # Second redemption of same token must be 409
-    r2 = await client.post(
+    # Same address re-redeeming (e.g. page reload while waiting for owner sync) is idempotent (200)
+    r_retry = await client.post(
         f"/api/v1/invites/{token}/redeem",
         json={"xmtp_address": agent_addr},
+    )
+    assert r_retry.status_code == 200
+
+    # Second redemption of same token by a different address must be 409
+    other_addr = "0x3434343434343434343434343434343434343434"
+    r2 = await client.post(
+        f"/api/v1/invites/{token}/redeem",
+        json={"xmtp_address": other_addr},
     )
     assert r2.status_code == 409
     assert "already redeemed" in r2.json()["detail"].lower()

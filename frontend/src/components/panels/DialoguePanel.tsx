@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Activity, CheckCircle2, CircleOff, Play, SkipForward, Square } from "lucide-react";
 import { apiFetch } from "../../lib/api";
 import type { MessageLoopState } from "../../types/chat";
 
@@ -178,7 +179,8 @@ export function DialoguePanel({ roomId, onlineAgents }: DialoguePanelProps) {
             <input type="range" min={2} max={20} value={maxTurns} onChange={(e) => setMaxTurns(Number(e.target.value))} />
           </div>
           <button type="button" className="btn btn-primary" onClick={startDialogue} disabled={loading || !topic.trim() || onlineAgents.length < 2}>
-            {loading ? "启动中..." : "▶ 自动运行对话"}
+            <Play size={14} strokeWidth={2} />
+            <span>{loading ? "启动中..." : "自动运行对话"}</span>
           </button>
           {onlineAgents.length < 2 && (
             <p className="panel-hint">至少需要 2 个 Agent 在线才能启动对话。</p>
@@ -188,10 +190,27 @@ export function DialoguePanel({ roomId, onlineAgents }: DialoguePanelProps) {
 
       {loop && (
         <>
-          <div className={`dialogue-status dialogue-status--${loop.status === "active" ? "active" : loop.status === "consensus" ? "consensus" : ""}`}>
-            {isActive ? "🟢 自动运行中" : loop.status === "consensus" ? "✅ 已达成共识" : "⚫ 已结束"}
-            {" · "}
-            第 ~{loop.current_round}/{loop.max_turns} 轮
+          <div
+            className={`dialogue-status dialogue-status--${loop.status === "active" ? "active" : loop.status === "consensus" ? "consensus" : ""}`}
+            style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}
+          >
+            {isActive ? (
+              <>
+                <Activity size={14} strokeWidth={2} />
+                <span>自动运行中</span>
+              </>
+            ) : loop.status === "consensus" ? (
+              <>
+                <CheckCircle2 size={14} strokeWidth={2} />
+                <span>已达成共识</span>
+              </>
+            ) : (
+              <>
+                <CircleOff size={14} strokeWidth={2} />
+                <span>已结束</span>
+              </>
+            )}
+            <span>· 第 ~{loop.current_round}/{loop.max_turns} 轮</span>
           </div>
           <p style={{ fontSize: 13, fontWeight: 600 }}>{loop.topic}</p>
           <p className="panel-hint">Agent 回复会实时出现在聊天区。</p>
@@ -200,10 +219,12 @@ export function DialoguePanel({ roomId, onlineAgents }: DialoguePanelProps) {
             <>
               <div style={{ display: "flex", gap: 6 }}>
                 <button type="button" className="btn btn-ghost btn-sm" onClick={skipTurn} disabled={loading}>
-                  ⏭ 跳过当前轮
+                  <SkipForward size={13} strokeWidth={2} />
+                  <span>跳过当前轮</span>
                 </button>
                 <button type="button" className="btn btn-danger btn-sm" onClick={endDialogue} disabled={loading}>
-                  ⏹ 停止对话
+                  <Square size={12} strokeWidth={2} />
+                  <span>停止对话</span>
                 </button>
               </div>
               <div className="field">

@@ -1,149 +1,764 @@
-/* ── 落地页：白底苹果风，全部样式包在 .landing 内，不与全局撞名 ── */
+/* ── 落地页：纯白与浅灰交替的 Apple 极简节奏，全部作用域限定在 .landing 内 ── */
 
 .landing {
   --lp-bg: #ffffff;
   --lp-bg-alt: #f5f5f7;
   --lp-text: #1d1d1f;
   --lp-text-2: #6e6e73;
-  --lp-line: #d2d2d7;
+  --lp-muted: #86868b;
+  --lp-line: rgba(0, 0, 0, 0.08);
+  --lp-line-strong: rgba(0, 0, 0, 0.14);
   --lp-blue: #0071e3;
-  --lp-blue-hover: #0064cd;
+  --lp-blue-hover: #0077ed;
+  --lp-blue-soft: rgba(0, 113, 227, 0.08);
+  --lp-blue-border: rgba(0, 113, 227, 0.22);
+  --lp-green: #1d8348;
+  --lp-green-soft: rgba(29, 131, 72, 0.08);
+  --lp-green-border: rgba(29, 131, 72, 0.22);
   --lp-radius-lg: 20px;
-  --lp-font: -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Segoe UI", sans-serif;
-  --lp-mono: ui-monospace, "SF Mono", Menlo, monospace;
+  --lp-radius-md: 14px;
+  --lp-font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", sans-serif;
+  --lp-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 
   font-family: var(--lp-font);
   background: var(--lp-bg);
   color: var(--lp-text);
-  font-size: 17px;
-  line-height: 1.5;
+  font-size: 16px;
+  line-height: 1.52;
+  -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
   min-height: 100vh;
 }
-.landing ::selection { background: rgba(0,113,227,.18); }
-.landing a { color: var(--lp-blue); text-decoration: none; }
-.landing a:hover { text-decoration: none; }
-.landing a:focus-visible, .landing button:focus-visible {
-  outline: 2px solid var(--lp-blue); outline-offset: 3px; border-radius: 6px;
+
+.landing ::selection {
+  background: rgba(0, 113, 227, 0.16);
 }
+
+.landing a {
+  color: var(--lp-blue);
+  text-decoration: none;
+}
+
+.landing a:hover {
+  text-decoration: none;
+}
+
+.landing a:focus-visible,
+.landing button:focus-visible {
+  outline: 2px solid var(--lp-blue);
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+
 @media (prefers-reduced-motion: no-preference) {
-  .landing { scroll-behavior: smooth; }
+  .landing {
+    scroll-behavior: smooth;
+  }
 }
 
-/* ── 顶栏：细、透、字小 ── */
+/* ── 毛玻璃吸顶导航栏 ── */
+.landing__nav-wrap {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  border-bottom: 1px solid var(--lp-line);
+}
+
 .landing__nav {
-  height: 52px; display: flex; align-items: center; justify-content: space-between;
-  max-width: 1024px; margin: 0 auto; padding: 0 22px;
-  font-size: 13px; color: var(--lp-text-2);
-  border-bottom: 1px solid rgba(0,0,0,.06);
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 0 24px;
+  font-size: 13px;
+  color: var(--lp-text-2);
 }
-.landing__mark { font-weight: 600; color: var(--lp-text); font-size: 15px; letter-spacing: -.01em; }
-.landing__mark em { font-style: normal; color: var(--lp-text-2); font-weight: 400; }
-.landing a.landing__login { color: var(--lp-text); font-weight: 500; }
-.landing a.landing__login:hover { color: var(--lp-blue); }
 
-/* ── 主视觉 ── */
-.landing__hero { text-align: center; padding: 120px 24px 0; }
+.landing a.landing__mark {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-weight: 600;
+  color: var(--lp-text);
+  font-size: 15px;
+  letter-spacing: -0.015em;
+}
+
+.landing__mark em {
+  font-style: normal;
+  color: var(--lp-text-2);
+  font-weight: 400;
+}
+
+.landing__nav-links {
+  display: flex;
+  align-items: center;
+  gap: 26px;
+}
+
+.landing__nav-links a {
+  color: var(--lp-text-2);
+  font-size: 13px;
+  transition: color 0.15s ease;
+}
+
+.landing__nav-links a:hover {
+  color: var(--lp-text);
+}
+
+.landing a.landing__login {
+  color: #ffffff;
+  background: var(--lp-text);
+  font-weight: 500;
+  font-size: 12.5px;
+  padding: 6px 14px;
+  border-radius: 980px;
+  transition: opacity 0.15s ease;
+}
+
+.landing a.landing__login:hover {
+  opacity: 0.86;
+}
+
+/* ── 主视觉 Hero ── */
+.landing__hero {
+  text-align: center;
+  padding: 96px 24px 0;
+  max-width: 920px;
+  margin: 0 auto;
+}
+
+.landing__eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--lp-text-2);
+  background: var(--lp-bg-alt);
+  border: 1px solid var(--lp-line);
+  border-radius: 980px;
+  padding: 5px 14px;
+  margin-bottom: 22px;
+}
+
 .landing__hero h1 {
-  font-size: 64px; font-weight: 700; letter-spacing: -.028em; line-height: 1.1;
-  max-width: 16ch; margin: 0 auto;
+  font-size: clamp(38px, 6vw, 60px);
+  font-weight: 700;
+  letter-spacing: -0.028em;
+  line-height: 1.1;
+  max-width: 17ch;
+  margin: 0 auto;
+  color: var(--lp-text);
 }
+
 .landing__sub {
-  margin: 22px auto 0; font-size: 21px; line-height: 1.45; color: var(--lp-text-2);
-  max-width: 34em;
+  margin: 22px auto 0;
+  font-size: 19px;
+  line-height: 1.52;
+  color: var(--lp-text-2);
+  max-width: 38em;
 }
-.landing__sub b { color: var(--lp-text); font-weight: 600; }
-.landing__actions { margin-top: 34px; display: flex; gap: 30px; justify-content: center; align-items: center; }
+
+.landing__sub b {
+  color: var(--lp-text);
+  font-weight: 600;
+}
+
+.landing__actions {
+  margin-top: 34px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px 20px;
+  justify-content: center;
+  align-items: center;
+}
+
 .landing__btn {
-  display: inline-block; font-size: 17px; line-height: 1;
-  padding: 12px 26px; border-radius: 980px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  font-size: 15.5px;
+  font-weight: 500;
+  line-height: 1.2;
+  padding: 12px 24px;
+  border-radius: 980px;
+  transition: background-color 0.16s ease, border-color 0.16s ease, color 0.16s ease, transform 0.12s ease;
 }
-.landing a.landing__btn--primary { background: var(--lp-blue); color: #fff; }
-.landing a.landing__btn--primary:hover { background: var(--lp-blue-hover); }
-.landing a.landing__btn--link { color: var(--lp-blue); padding: 12px 0; }
-.landing a.landing__btn--link::after { content: "›"; margin-left: 6px; font-weight: 600; }
-.landing a.landing__btn--link:hover { text-decoration: underline; }
 
-/* ── 房间：唯一的产品实物 ── */
-.landing__room { max-width: 720px; margin: 90px auto 0; padding: 0 24px 110px; width: 100%; }
+.landing__btn:active {
+  transform: scale(0.985);
+}
+
+.landing a.landing__btn--primary {
+  background: var(--lp-blue);
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(0, 113, 227, 0.18);
+}
+
+.landing a.landing__btn--primary:hover {
+  background: var(--lp-blue-hover);
+}
+
+.landing a.landing__btn--secondary {
+  background: var(--lp-bg);
+  color: var(--lp-text);
+  border: 1px solid var(--lp-line-strong);
+}
+
+.landing a.landing__btn--secondary:hover {
+  background: var(--lp-bg-alt);
+}
+
+.landing a.landing__btn--link {
+  color: var(--lp-blue);
+  padding: 10px 6px;
+  font-size: 14.5px;
+}
+
+.landing a.landing__btn--link:hover {
+  text-decoration: underline;
+}
+
+/* ── 加密房间真实协作预览 ── */
+.landing__room {
+  max-width: 820px;
+  margin: 68px auto 0;
+  padding: 0 24px 96px;
+  width: 100%;
+}
+
 .landing__room-card {
-  background: #fff; border-radius: var(--lp-radius-lg); overflow: hidden;
-  box-shadow: 0 4px 6px rgba(0,0,0,.04), 0 12px 40px rgba(0,0,0,.10);
-  border: 1px solid rgba(0,0,0,.06);
+  background: #ffffff;
+  border-radius: var(--lp-radius-lg);
+  overflow: hidden;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.05), 0 20px 48px rgba(0, 0, 0, 0.08);
+  border: 1px solid var(--lp-line);
 }
+
 .landing__room-bar {
-  display: flex; align-items: center;
-  padding: 14px 20px; font-size: 13px; color: var(--lp-text-2);
-  border-bottom: 1px solid rgba(0,0,0,.06);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 13px 20px;
+  font-size: 13px;
+  background: rgba(245, 245, 247, 0.65);
+  border-bottom: 1px solid var(--lp-line);
 }
+
+.landing__room-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  color: var(--lp-text);
+}
+
+.landing__room-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--lp-green);
+}
+
+.landing__room-pills {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.landing__guardrail {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--lp-text-2);
+  background: #ffffff;
+  border: 1px solid var(--lp-line);
+  border-radius: 980px;
+  padding: 3px 10px;
+}
+
 .landing__room-lock {
-  display: flex; align-items: center; gap: 5px; margin-left: auto;
-  font-size: 12px; font-weight: 500; color: var(--lp-text-2);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--lp-green);
+  background: var(--lp-green-soft);
+  border: 1px solid var(--lp-green-border);
+  border-radius: 980px;
+  padding: 3px 10px;
 }
-.landing__msgs { padding: 28px 22px 32px; display: flex; flex-direction: column; gap: 18px; }
 
-.landing__msg { display: flex; gap: 10px; max-width: 80%; }
-.landing__msg--own { margin-left: auto; flex-direction: row-reverse; }
+.landing__msgs {
+  padding: 26px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.landing__msg {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  max-width: 84%;
+}
+
+.landing__msg--own {
+  margin-left: auto;
+  flex-direction: row-reverse;
+}
+
+.landing__msg-col {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 .landing__avatar {
-  width: 30px; height: 30px; border-radius: 50%; flex-shrink: 0; align-self: flex-end;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 13px; font-weight: 600; background: var(--lp-bg-alt); color: var(--lp-text-2);
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-top: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12.5px;
+  font-weight: 600;
+  background: var(--lp-bg-alt);
+  color: var(--lp-text);
+  border: 1px solid var(--lp-line-strong);
 }
-.landing__avatar--agent { background: #ececee; color: var(--lp-text); }
+
+.landing__avatar--self {
+  background: var(--lp-blue-soft);
+  color: var(--lp-blue);
+  border-color: var(--lp-blue-border);
+}
+
+.landing__avatar--agent {
+  background: #1d1d1f;
+  color: #ffffff;
+  border-color: #1d1d1f;
+}
+
 .landing__name {
-  font-size: 12px; color: var(--lp-text-2); margin: 0 4px 4px;
-  display: flex; gap: 6px; align-items: center;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--lp-text-2);
+  margin: 0 4px 4px;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
 }
-.landing__msg--own .landing__name { justify-content: flex-end; }
+
+.landing__msg--own .landing__name {
+  justify-content: flex-end;
+}
+
+.landing__human-tag {
+  font-size: 10.5px;
+  font-weight: 500;
+  padding: 1px 7px;
+  border-radius: 980px;
+  background: var(--lp-bg-alt);
+  color: var(--lp-text-2);
+  border: 1px solid var(--lp-line);
+}
+
 .landing__tier {
-  font-size: 11px; font-weight: 500; padding: 1px 6px; border-radius: 4px;
-  background: #ececee; color: var(--lp-text-2);
+  font-size: 11px;
+  font-weight: 500;
+  padding: 1px 8px;
+  border-radius: 980px;
+  border: 1px solid var(--lp-line-strong);
+  background: var(--lp-bg-alt);
+  color: var(--lp-text-2);
+  white-space: nowrap;
 }
+
+.landing__tier--local {
+  color: var(--lp-green);
+  background: var(--lp-green-soft);
+  border-color: var(--lp-green-border);
+}
+
+.landing__tier--cloud {
+  color: var(--lp-blue);
+  background: var(--lp-blue-soft);
+  border-color: var(--lp-blue-border);
+}
+
+.landing__tier--custom {
+  color: var(--lp-text-2);
+  background: var(--lp-bg-alt);
+  border-color: var(--lp-line-strong);
+}
+
 .landing__bubble {
-  background: var(--lp-bg-alt); border-radius: 18px; padding: 9px 14px;
-  font-size: 15px; line-height: 1.45; min-width: 0; color: var(--lp-text);
+  background: var(--lp-bg-alt);
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  border-radius: 6px 16px 16px 16px;
+  padding: 10px 15px;
+  font-size: 14.5px;
+  line-height: 1.5;
+  min-width: 0;
+  color: var(--lp-text);
 }
-.landing__msg--own .landing__bubble { background: var(--lp-blue); color: #fff; }
 
-/* ── 三步：无编号、无卡片 ── */
-.landing__how { background: var(--lp-bg-alt); padding: 100px 24px; }
-.landing__how-inner { max-width: 1024px; margin: 0 auto; }
-.landing__how h2 { font-size: 40px; font-weight: 700; letter-spacing: -.025em; text-align: center; }
+.landing__bubble--human {
+  background: #ffffff;
+  border-color: var(--lp-line-strong);
+}
+
+.landing__msg--own .landing__bubble {
+  background: var(--lp-blue);
+  border-color: var(--lp-blue);
+  border-radius: 16px 6px 16px 16px;
+  color: #ffffff;
+}
+
+.landing__bubble code {
+  font-family: var(--lp-mono);
+  font-size: 12.5px;
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: rgba(0, 0, 0, 0.06);
+}
+
+/* 房间预览底部 @Agent 输入示范栏 */
+.landing__composer {
+  border-top: 1px solid var(--lp-line);
+  padding: 12px 20px 14px;
+  background: rgba(245, 245, 247, 0.45);
+}
+
+.landing__mentions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 9px;
+}
+
+.landing__mentions span {
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--lp-blue);
+  background: var(--lp-blue-soft);
+  border: 1px solid var(--lp-blue-border);
+  border-radius: 980px;
+  padding: 2px 10px;
+}
+
+.landing__composer-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px 8px 15px;
+  border-radius: 980px;
+  background: #ffffff;
+  border: 1px solid var(--lp-line-strong);
+  font-size: 13px;
+  color: var(--lp-muted);
+}
+
+.landing a.landing__composer-cta {
+  flex-shrink: 0;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: #ffffff;
+  background: var(--lp-blue);
+  padding: 5px 14px;
+  border-radius: 980px;
+}
+
+.landing a.landing__composer-cta:hover {
+  background: var(--lp-blue-hover);
+}
+
+/* ── 支持的 Agent 品类展示矩阵 (#f5f5f7 画布) ── */
+.landing__agents {
+  background: var(--lp-bg-alt);
+  padding: 96px 24px;
+  border-top: 1px solid var(--lp-line);
+  border-bottom: 1px solid var(--lp-line);
+}
+
+.landing__section-inner {
+  max-width: 1040px;
+  margin: 0 auto;
+}
+
+.landing__section-head {
+  text-align: center;
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+.landing__section-head h2 {
+  font-size: clamp(28px, 4vw, 40px);
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  line-height: 1.16;
+  color: var(--lp-text);
+}
+
+.landing__section-head p {
+  margin-top: 14px;
+  font-size: 16px;
+  line-height: 1.58;
+  color: var(--lp-text-2);
+}
+
+.landing__agents-grid {
+  margin-top: 48px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+
+.landing__agent-card {
+  background: #ffffff;
+  border: 1px solid var(--lp-line);
+  border-radius: var(--lp-radius-lg);
+  padding: 24px 22px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03);
+  display: flex;
+  flex-direction: column;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
+}
+
+.landing__agent-card:hover {
+  border-color: var(--lp-line-strong);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
+  transform: translateY(-2px);
+}
+
+.landing__agent-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.landing__agent-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: var(--lp-bg-alt);
+  border: 1px solid var(--lp-line);
+  color: var(--lp-text);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.landing__agent-card h3 {
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  color: var(--lp-text);
+}
+
+.landing__agent-channel {
+  margin-top: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--lp-muted);
+}
+
+.landing__agent-desc {
+  margin-top: 10px;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--lp-text-2);
+}
+
+.landing__section-cta {
+  margin-top: 40px;
+  text-align: center;
+}
+
+/* ── 三步接入流程条 (纯白背景) ── */
+.landing__how {
+  background: var(--lp-bg);
+  padding: 96px 24px;
+}
+
 .landing__how-grid {
-  margin-top: 64px; display: grid; grid-template-columns: repeat(3, 1fr);
-  gap: 48px;
+  margin-top: 56px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 36px;
 }
-.landing__how-item { text-align: center; }
+
+.landing__how-item {
+  text-align: left;
+  padding: 26px;
+  border-radius: var(--lp-radius-lg);
+  background: var(--lp-bg-alt);
+  border: 1px solid var(--lp-line);
+}
+
 .landing__how-icon {
-  width: 44px; height: 44px; margin: 0 auto 18px;
-  display: flex; align-items: center; justify-content: center; color: var(--lp-text);
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: #ffffff;
+  border: 1px solid var(--lp-line);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--lp-text);
+  margin-bottom: 18px;
 }
-.landing__how-item h3 { font-size: 21px; font-weight: 600; letter-spacing: -.01em; }
-.landing__how-item p { margin-top: 8px; font-size: 15px; color: var(--lp-text-2); line-height: 1.55; }
+
+.landing__step-num {
+  display: inline-block;
+  font-family: var(--lp-mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--lp-blue);
+  margin-bottom: 6px;
+}
+
+.landing__how-item h3 {
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  color: var(--lp-text);
+}
+
+.landing__how-item p {
+  margin-top: 8px;
+  font-size: 14.5px;
+  color: var(--lp-text-2);
+  line-height: 1.58;
+}
+
 .landing__how-item code {
-  font-family: var(--lp-mono); font-size: 13px; color: var(--lp-text);
-  background: #ececee; padding: 2px 8px; border-radius: 5px;
+  font-family: var(--lp-mono);
+  font-size: 12.5px;
+  color: var(--lp-text);
+  background: #ffffff;
+  border: 1px solid var(--lp-line);
+  padding: 1px 6px;
+  border-radius: 5px;
 }
 
-/* ── 底部：一条线，一行字 ── */
+/* ── 底部：单线单行，零小字免责堆叠 ── */
 .landing__foot {
-  border-top: 1px solid rgba(0,0,0,.08);
-  max-width: 1024px; margin: 0 auto; width: 100%;
-  padding: 22px 24px 34px;
-  display: flex; justify-content: space-between; align-items: center;
-  font-size: 12px; color: var(--lp-text-2);
+  border-top: 1px solid var(--lp-line);
+  max-width: 1040px;
+  margin: 0 auto;
+  width: 100%;
+  padding: 22px 24px 32px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  font-size: 12.5px;
+  color: var(--lp-text-2);
 }
-.landing__foot a { color: var(--lp-text-2); }
-.landing__foot a:hover { color: var(--lp-text); }
 
-@media (max-width: 820px) {
-  .landing__hero { padding-top: 80px; }
-  .landing__hero h1 { font-size: 40px; }
-  .landing__sub { font-size: 18px; }
-  .landing__actions { flex-direction: column; gap: 14px; }
-  .landing__room { margin-top: 64px; padding-bottom: 80px; }
-  .landing__how { padding: 72px 24px; }
-  .landing__how h2 { font-size: 30px; }
-  .landing__how-grid { grid-template-columns: 1fr; gap: 36px; margin-top: 48px; }
-  .landing__foot { flex-direction: column; gap: 6px; }
+.landing__foot-right {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+
+.landing__foot a {
+  color: var(--lp-text-2);
+}
+
+.landing__foot a:hover {
+  color: var(--lp-text);
+  text-decoration: underline;
+}
+
+/* ── 响应式适配 ── */
+@media (max-width: 900px) {
+  .landing__agents-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .landing__nav-links {
+    display: none;
+  }
+
+  .landing__hero {
+    padding-top: 64px;
+  }
+
+  .landing__sub {
+    font-size: 16.5px;
+  }
+
+  .landing__actions {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .landing__btn {
+    width: 100%;
+    max-width: 320px;
+  }
+
+  .landing__room {
+    margin-top: 48px;
+    padding: 0 16px 68px;
+  }
+
+  .landing__msgs {
+    padding: 18px 16px;
+  }
+
+  .landing__msg {
+    max-width: 94%;
+  }
+
+  .landing__composer-bar span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .landing__agents,
+  .landing__how {
+    padding: 68px 18px;
+  }
+
+  .landing__agents-grid,
+  .landing__how-grid {
+    grid-template-columns: 1fr;
+    gap: 14px;
+    margin-top: 32px;
+  }
+
+  .landing__foot {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
 }

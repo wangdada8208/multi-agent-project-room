@@ -1,13 +1,21 @@
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { chmod, mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { access, chmod, constants as fsConstants, mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { isAllowedOpenAiBaseUrl, openAiCompatibleEngine, webhookEngine } from "../engines/httpEngines.ts";
 import type { EngineConfig } from "../engines/types.ts";
 import { createHubClient, type HubClient } from "./hubClient.ts";
-import { defaultDetectDeps, detectLocalAgents } from "./knownAgents.ts";
-import { createSeatStore, createSeatSupervisor, type SeatSupervisor } from "./seats.ts";
-import { createHelperServer, HelperHttpError, HELPER_BIND, HELPER_PORT } from "./server.ts";
+import { defaultDetectDeps, detectLocalAgents, type DetectDeps } from "./knownAgents.ts";
+import { createSeatStore, createSeatSupervisor, type SeatStore, type SeatSupervisor } from "./seats.ts";
+import {
+  createHelperServer,
+  HelperHttpError,
+  HELPER_BIND,
+  HELPER_PORT,
+  type AgentTestResult,
+  type HelperServerDeps,
+} from "./server.ts";
 import type { HelperConfig, LocalAgent, ManualAgent, SeatRecord } from "./types.ts";
 
 /**
@@ -32,10 +40,30 @@ export interface UpOptions {
   openBrowser: boolean;
 }
 
+export interface HelperRuntimeOptions {
+  hubOrigin: string;
+  pairCode?: string;
+  rootDir: string;
+  detectDeps?: DetectDeps;
+  fetchImpl?: typeof fetch;
+  platform?: NodeJS.Platform;
+  checkExecutable?: (filePath: string) => Promise<boolean>;
+  hubClientFactory?: (origin: string, token: string | null) => HubClient;
+}
+
+export interface HelperRuntime {
+  deps: HelperServerDeps;
+  store: SeatStore;
+  supervisor: SeatSupervisor;
+  heartbeat: () => Promise<void>;
+}
+
 const DEFAULT_HUB_ORIGIN = "https://hub.wangdada8208.xyz";
 const HEARTBEAT_INTERVAL_MS = 30_000;
 /** 成员进程单次回复的默认超时，与 engines/index.ts 的 DEFAULT_TIMEOUT_MS 一致。 */
 const ENGINE_TIMEOUT_MS = 120_000;
+/** 连通性测试探针超时（15 秒）。 */
+const TEST_PROBE_TIMEOUT_MS = 15_000;
 /** 版本号写死在这里而不是读 package.json：发布包可能不含完整 package.json。 */
 const HELPER_VERSION = "0.1.0";
 /** 打开过本机页面后写这个标记文件，之后开机自启不再弹浏览器。 */
@@ -71,7 +99,7 @@ async function readJsonSecure(file: string): Promise<unknown | null> {
 }
 
 async function writeJsonSecure(file: string, data: unknown): Promise<void> {
-  const tmp = `${file}.tmp-${process.pid}`;
+  const tmp = `${file}.tmp-${process.pid}-${randomUUID().slice(0, 8)}`;
   await writeFile(tmp, JSON.stringify(data, null, 2), { encoding: "utf8", mode: 0o600 });
   await chmod(tmp, 0o600);
   await rename(tmp, file);
@@ -79,6 +107,26 @@ async function writeJsonSecure(file: string, data: unknown): Promise<void> {
 
 function messageOf(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+function scrubSecrets(text: string, secrets: readonly string[]): string {
+  let out = text;
+  for (const s of secrets) {
+    if (s && s.length >= 3) {
+      out = out.split(s).join("[REDACTED]");
+    }
+  }
+  out = out.replace(/Bearer\s+[^\s"']+/gi, "Bearer [REDACTED]");
+  return out;
+}
+
+async function defaultCheckExecutable(filePath: string): Promise<boolean> {
+  try {
+    await access(filePath, fsConstants.X_OK);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** 打开系统默认浏览器；失败不致命（无图形界面的机器上 xdg-open 会报错）。 */
@@ -94,8 +142,13 @@ function openBrowser(url: string): void {
   }
 }
 
-export async function runHelper(options: UpOptions): Promise<number> {
+export async function createHelperRuntime(options: HelperRuntimeOptions): Promise<HelperRuntime> {
   const rootDir = options.rootDir;
+  const runtimePlatform = options.platform ?? process.platform;
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const isExecutable = options.checkExecutable ?? defaultCheckExecutable;
+  const makeHub = options.hubClientFactory ?? createHubClient;
+
   await mkdir(rootDir, { recursive: true, mode: 0o700 });
   await chmod(rootDir, 0o700);
 
@@ -105,15 +158,20 @@ export async function runHelper(options: UpOptions): Promise<number> {
   const raw = await readJsonSecure(configPath);
   if (raw !== null) {
     const c = raw as HelperConfig;
-    if (typeof c.helperId !== "string" || typeof c.helperToken !== "string" || typeof c.hubOrigin !== "string") {
+    if (
+      typeof c.helperId !== "string" ||
+      typeof c.helperToken !== "string" ||
+      typeof c.hubOrigin !== "string" ||
+      !/^https?:\/\//i.test(c.hubOrigin)
+    ) {
       throw new Error(`${configPath} is malformed`);
     }
     c.manualAgents = Array.isArray(c.manualAgents) ? c.manualAgents : [];
     config = c;
   }
 
-  let hub: HubClient | null = config?.helperToken ? createHubClient(config.hubOrigin, config.helperToken) : null;
-  const detectDeps = defaultDetectDeps();
+  let hub: HubClient | null = config?.helperToken ? makeHub(config.hubOrigin, config.helperToken) : null;
+  const detectDeps = options.detectDeps ?? defaultDetectDeps();
   const agents = (): Promise<LocalAgent[]> => detectLocalAgents(detectDeps, config);
 
   const writeConfig = async (cfg: HelperConfig): Promise<void> => {
@@ -123,10 +181,10 @@ export async function runHelper(options: UpOptions): Promise<number> {
 
   const doPair = async (code: string): Promise<HelperConfig> => {
     // 配对这一步本身不带令牌：配对码就是授权。
-    const res = await createHubClient(options.hubOrigin, null).pair(
+    const res = await makeHub(options.hubOrigin, null).pair(
       code,
       os.hostname() || "mapr-helper",
-      process.platform
+      runtimePlatform
     );
     const next: HelperConfig = {
       hubOrigin: options.hubOrigin,
@@ -139,11 +197,11 @@ export async function runHelper(options: UpOptions): Promise<number> {
       manualAgents: config?.manualAgents ?? [],
     };
     await writeConfig(next);
-    hub = createHubClient(next.hubOrigin, next.helperToken);
+    hub = makeHub(next.hubOrigin, next.helperToken);
     return next;
   };
 
-  if (!config && options.pairCode) {
+  if (options.pairCode) {
     const paired = await doPair(options.pairCode);
     console.log(`[helper] paired as ${paired.ownerDisplayName}`);
   } else if (config?.helperToken) {
@@ -168,7 +226,7 @@ export async function runHelper(options: UpOptions): Promise<number> {
         timeoutMs: ENGINE_TIMEOUT_MS,
       };
     }
-    // 手动云端 Agent：元数据在 helper.json，密钥只在 ~/.mapr/agents/<key>.secret。
+    // 手动云端/本地网关 Agent：元数据在 helper.json，密钥只在 ~/.mapr/agents/<key>.secret。
     const manual = config?.manualAgents.find((m) => m.key === agent.key);
     if (!manual) throw new Error(`manual agent ${agent.key} missing from helper config`);
     const secretPath = secretFileFor(rootDir, agent.key);
@@ -187,7 +245,7 @@ export async function runHelper(options: UpOptions): Promise<number> {
   const supervisor: SeatSupervisor = createSeatSupervisor({
     store,
     helper: () => {
-      if (!config) throw new Error("helper not paired");
+      if (!config?.helperToken) throw new Error("helper not paired");
       return config;
     },
     agents,
@@ -204,8 +262,195 @@ export async function runHelper(options: UpOptions): Promise<number> {
     await rm(path.join(rootDir, "sandbox", seatId), { recursive: true, force: true });
   };
 
-  // ── 3. 本机接口 ──
-  const server = createHelperServer({
+  const addManualAgent = async (input: unknown): Promise<LocalAgent> => {
+    const cfg = config;
+    if (!cfg?.helperToken) throw new HelperHttpError(409, "not_paired");
+    const b = (input ?? {}) as Record<string, unknown>;
+    const kind = b.kind;
+    if (kind !== "openai-compatible" && kind !== "webhook") throw new HelperHttpError(400, "invalid_kind");
+    const displayName = typeof b.displayName === "string" ? b.displayName.trim() : "";
+    if (!displayName || displayName.length > 64) throw new HelperHttpError(400, "invalid_display_name");
+
+    const key = `manual:${randomUUID()}`;
+    let manual: ManualAgent;
+    let secretBody: Record<string, string>;
+    if (kind === "openai-compatible") {
+      const baseUrl = typeof b.baseUrl === "string" ? b.baseUrl.trim().replace(/\/+$/, "") : "";
+      const model = typeof b.model === "string" ? b.model.trim() : "";
+      const apiKey = typeof b.apiKey === "string" ? b.apiKey.trim() : "";
+      // 公网地址强制要求 https，同时允许本机回环 http（Ollama、vLLM、Muse 本地网关等）。
+      if (!isAllowedOpenAiBaseUrl(baseUrl)) {
+        throw new HelperHttpError(400, "base_url_must_be_https_or_loopback");
+      }
+      if (!model) throw new HelperHttpError(400, "model_required");
+      if (!apiKey) throw new HelperHttpError(400, "api_key_required");
+      manual = { key, kind, displayName, baseUrl, model };
+      secretBody = { apiKey };
+    } else {
+      const url = typeof b.url === "string" ? b.url.trim() : "";
+      const secret = typeof b.secret === "string" ? b.secret.trim() : "";
+      // Webhook 允许回环 http（本机自建的接入端），公网仍要求 https。
+      if (!isAllowedOpenAiBaseUrl(url)) {
+        throw new HelperHttpError(400, "url_must_be_https_or_loopback");
+      }
+      if (!secret) throw new HelperHttpError(400, "secret_required");
+      manual = { key, kind, displayName, url };
+      secretBody = { secret };
+    }
+
+    cfg.manualAgents.push(manual);
+    await writeConfig(cfg);
+    const agentsDir = path.join(rootDir, "agents");
+    await mkdir(agentsDir, { recursive: true, mode: 0o700 });
+    await chmod(agentsDir, 0o700);
+    const secretFile = secretFileFor(rootDir, key);
+    await writeFile(secretFile, JSON.stringify(secretBody), { encoding: "utf8", mode: 0o600 });
+    await chmod(secretFile, 0o600);
+    return {
+      key,
+      kind,
+      displayName,
+      source: "manual",
+      loginState: "unknown",
+      ...(manual.baseUrl ? { baseUrl: manual.baseUrl } : {}),
+    };
+  };
+
+  const removeManualAgent = async (rawKey: string): Promise<void> => {
+    const cfg = config;
+    if (!cfg?.helperToken) throw new HelperHttpError(409, "not_paired");
+    const key = rawKey.trim();
+    if (!key.startsWith("manual:")) throw new HelperHttpError(400, "invalid_agent_key");
+    const activeSeats = await store.list();
+    if (activeSeats.some((s) => s.agentKey === key)) {
+      throw new HelperHttpError(409, "agent_has_active_seats");
+    }
+    const idx = cfg.manualAgents.findIndex((m) => m.key === key);
+    if (idx < 0) throw new HelperHttpError(404, "agent_not_found");
+    cfg.manualAgents.splice(idx, 1);
+    await writeConfig(cfg);
+    await rm(secretFileFor(rootDir, key), { force: true });
+  };
+
+  const testAgent = async (rawKey: string): Promise<AgentTestResult> => {
+    const key = rawKey.trim();
+    const startedAt = Date.now();
+    const agent = (await agents()).find((a) => a.key === key);
+    if (!agent) throw new HelperHttpError(404, "agent_not_found");
+
+    if (agent.kind === "claude-code" || agent.kind === "codex" || agent.kind === "gemini-cli") {
+      const binOk = agent.binaryPath ? await isExecutable(agent.binaryPath) : false;
+      const latencyMs = Math.max(0, Date.now() - startedAt);
+      if (!binOk) {
+        return {
+          ok: false,
+          latencyMs,
+          detail: `未找到可执行的 ${agent.displayName} 命令文件`,
+        };
+      }
+      if (agent.loginState === "likely-ready") {
+        return {
+          ok: true,
+          latencyMs,
+          detail: `已检测到 ${agent.displayName}${agent.version ? ` (${agent.version})` : ""}，登录态与运行环境就绪`,
+        };
+      }
+      if (agent.loginState === "needs-login") {
+        return {
+          ok: false,
+          latencyMs,
+          detail: `已检测到 ${agent.displayName}，但尚未完成终端登录授权`,
+        };
+      }
+      if (agent.kind === "codex") {
+        const sandboxHint =
+          runtimePlatform === "darwin"
+            ? "缺少 macOS sandbox-exec 沙箱环境"
+            : "缺少 bubblewrap (bwrap) 沙箱或登录凭证，请确认已安装 bwrap 并完成登录";
+        return {
+          ok: false,
+          latencyMs,
+          detail: `已检测到 ${agent.displayName}，但${sandboxHint}`,
+        };
+      }
+      return {
+        ok: true,
+        latencyMs,
+        detail: `已检测到 ${agent.displayName}${agent.version ? ` (${agent.version})` : ""} 可执行文件（登录态待首次调用确认）`,
+      };
+    }
+
+    const secretsToScrub: string[] = [];
+    try {
+      const dummySeat: SeatRecord = {
+        seatId: "test-probe",
+        agentKey: agent.key,
+        roomId: "probe",
+        roomName: "probe",
+        agentUsername: "probe",
+        xmtpWalletKey: "0x" + "00".repeat(32),
+        xmtpDbEncryptionKey: "0x" + "00".repeat(32),
+        xmtpAddress: "0x" + "0".repeat(40),
+        xmtpGroupId: null,
+        allowedSenders: [],
+        agentToken: "",
+        consolePort: 0,
+        createdAt: new Date(0).toISOString(),
+      };
+      const baseCfg = await engineFor(agent, dummySeat);
+      if (baseCfg.kind === "openai-compatible") {
+        secretsToScrub.push(baseCfg.apiKey);
+        const engine = openAiCompatibleEngine(
+          { ...baseCfg, timeoutMs: TEST_PROBE_TIMEOUT_MS },
+          fetchImpl
+        );
+        const reply = await engine.reply({
+          prompt: "连通性测试：请仅回复 OK",
+          signal: AbortSignal.timeout(TEST_PROBE_TIMEOUT_MS),
+        });
+        const latencyMs = Math.max(0, Date.now() - startedAt);
+        const preview = scrubSecrets(reply.trim().replace(/\s+/g, " "), secretsToScrub).slice(0, 100);
+        return {
+          ok: true,
+          latencyMs,
+          detail: preview ? `连接正常，返回：${preview}` : "连接正常（返回空内容）",
+        };
+      }
+      if (baseCfg.kind === "webhook") {
+        secretsToScrub.push(baseCfg.secret);
+        const engine = webhookEngine(
+          { ...baseCfg, timeoutMs: TEST_PROBE_TIMEOUT_MS },
+          fetchImpl
+        );
+        const reply = await engine.reply({
+          prompt: "连通性测试：请仅回复 OK",
+          signal: AbortSignal.timeout(TEST_PROBE_TIMEOUT_MS),
+        });
+        const latencyMs = Math.max(0, Date.now() - startedAt);
+        const preview = scrubSecrets(reply.trim().replace(/\s+/g, " "), secretsToScrub).slice(0, 100);
+        return {
+          ok: true,
+          latencyMs,
+          detail: preview ? `连接正常，返回：${preview}` : "连接正常（返回空内容）",
+        };
+      }
+      return {
+        ok: false,
+        latencyMs: Math.max(0, Date.now() - startedAt),
+        detail: "不支持的手动 Agent 类型",
+      };
+    } catch (err) {
+      const latencyMs = Math.max(0, Date.now() - startedAt);
+      const safeMsg = scrubSecrets(messageOf(err).replace(/\s+/g, " ").trim(), secretsToScrub).slice(0, 160);
+      return {
+        ok: false,
+        latencyMs,
+        detail: safeMsg || "连接测试失败",
+      };
+    }
+  };
+
+  const deps: HelperServerDeps = {
     version: HELPER_VERSION,
     config: () => config,
     pair: doPair,
@@ -215,77 +460,11 @@ export async function runHelper(options: UpOptions): Promise<number> {
     store,
     supervisor,
     removeSeat: removeSeatFully,
-    addManualAgent: async (input: unknown): Promise<LocalAgent> => {
-      const cfg = config;
-      if (!cfg) throw new HelperHttpError(409, "not_paired");
-      const b = (input ?? {}) as Record<string, unknown>;
-      const kind = b.kind;
-      if (kind !== "openai-compatible" && kind !== "webhook") throw new HelperHttpError(400, "invalid_kind");
-      const displayName = typeof b.displayName === "string" ? b.displayName.trim() : "";
-      if (!displayName || displayName.length > 64) throw new HelperHttpError(400, "invalid_display_name");
+    addManualAgent,
+    removeManualAgent,
+    testAgent,
+  };
 
-      const key = `manual:${randomUUID()}`;
-      let manual: ManualAgent;
-      let secretBody: Record<string, string>;
-      if (kind === "openai-compatible") {
-        const baseUrl = typeof b.baseUrl === "string" ? b.baseUrl.trim().replace(/\/+$/, "") : "";
-        const model = typeof b.model === "string" ? b.model.trim() : "";
-        const apiKey = typeof b.apiKey === "string" ? b.apiKey.trim() : "";
-        // 引擎只接受 https：密钥要过网络，明文 http 等于广播。
-        if (!/^https:\/\//.test(baseUrl)) throw new HelperHttpError(400, "base_url_must_be_https");
-        if (!model) throw new HelperHttpError(400, "model_required");
-        if (!apiKey) throw new HelperHttpError(400, "api_key_required");
-        manual = { key, kind, displayName, baseUrl, model };
-        secretBody = { apiKey };
-      } else {
-        const url = typeof b.url === "string" ? b.url.trim() : "";
-        const secret = typeof b.secret === "string" ? b.secret.trim() : "";
-        // Webhook 允许回环 http（本机自建的接入端），公网仍要求 https。
-        const loopbackHttp = /^http:\/\/(127\.0\.0\.1|localhost|\[::1\])(:|\/|$)/.test(url);
-        if (!/^https:\/\//.test(url) && !loopbackHttp) {
-          throw new HelperHttpError(400, "url_must_be_https_or_loopback");
-        }
-        if (!secret) throw new HelperHttpError(400, "secret_required");
-        manual = { key, kind, displayName, url };
-        secretBody = { secret };
-      }
-
-      cfg.manualAgents.push(manual);
-      await writeConfig(cfg);
-      const agentsDir = path.join(rootDir, "agents");
-      await mkdir(agentsDir, { recursive: true, mode: 0o700 });
-      await chmod(agentsDir, 0o700);
-      await writeFile(secretFileFor(rootDir, key), JSON.stringify(secretBody), { encoding: "utf8", mode: 0o600 });
-      return { key, kind, displayName, source: "manual", loginState: "unknown" };
-    },
-  });
-
-  try {
-    await new Promise<void>((resolve, reject) => {
-      server.once("error", reject);
-      server.listen(HELPER_PORT, HELPER_BIND, () => {
-        server.removeListener("error", reject);
-        resolve();
-      });
-    });
-  } catch (err) {
-    // 不换端口：网站与页面只认 8790，悄悄换端口等于失联。
-    console.error(`[helper] ${HELPER_BIND}:${HELPER_PORT} unavailable: ${messageOf(err)}`);
-    return 1;
-  }
-  console.log(`[helper] listening on http://${HELPER_BIND}:${HELPER_PORT}/`);
-
-  // ── 4. 恢复席位 ──
-  for (const seat of await store.list()) {
-    try {
-      await supervisor.start(seat.seatId);
-    } catch (err) {
-      // 单个席位起不来不阻塞其余席位；状态在 views() 里如实可见。
-      console.error(`[helper] seat ${seat.seatId} failed to start: ${messageOf(err)}`);
-    }
-  }
-
-  // ── 5. 心跳 ──
   const heartbeat = async (): Promise<void> => {
     const client = hub;
     if (!client || !config?.helperToken) return;
@@ -333,6 +512,47 @@ export async function runHelper(options: UpOptions): Promise<number> {
       console.error(`[helper] heartbeat failed: ${messageOf(err)}`);
     }
   };
+
+  return { deps, store, supervisor, heartbeat };
+}
+
+export async function runHelper(options: UpOptions): Promise<number> {
+  const rootDir = options.rootDir;
+  const { deps, store, supervisor, heartbeat } = await createHelperRuntime({
+    hubOrigin: options.hubOrigin,
+    pairCode: options.pairCode,
+    rootDir,
+  });
+
+  // ── 3. 本机接口 ──
+  const server = createHelperServer(deps);
+
+  try {
+    await new Promise<void>((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(HELPER_PORT, HELPER_BIND, () => {
+        server.removeListener("error", reject);
+        resolve();
+      });
+    });
+  } catch (err) {
+    // 不换端口：网站与页面只认 8790，悄悄换端口等于失联。
+    console.error(`[helper] ${HELPER_BIND}:${HELPER_PORT} unavailable: ${messageOf(err)}`);
+    return 1;
+  }
+  console.log(`[helper] listening on http://${HELPER_BIND}:${HELPER_PORT}/`);
+
+  // ── 4. 恢复席位 ──
+  for (const seat of await store.list()) {
+    try {
+      await supervisor.start(seat.seatId);
+    } catch (err) {
+      // 单个席位起不来不阻塞其余席位；状态在 views() 里如实可见。
+      console.error(`[helper] seat ${seat.seatId} failed to start: ${messageOf(err)}`);
+    }
+  }
+
+  // ── 5. 心跳 ──
   const heartbeatTimer = setInterval(() => {
     void heartbeat();
   }, HEARTBEAT_INTERVAL_MS);

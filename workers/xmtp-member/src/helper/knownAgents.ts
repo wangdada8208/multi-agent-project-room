@@ -1,9 +1,63 @@
 import { spawn } from "node:child_process";
-import { constants } from "node:fs";
+import { constants, readdirSync } from "node:fs";
 import { access, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type { HelperConfig, KnownCliAgent, LocalAgent, LoginState } from "./types.ts";
+
+/**
+ * 在 POSIX（linux / darwin）环境下保留原有 env.PATH 顺序，并去重追加用户级与常见包管理器 CLI 目录，
+ * 解决 systemd / launchd 后台服务默认 PATH 过窄导致扫不到 claude / codex / gemini 的问题。
+ */
+export function buildExpandedPath(
+  env: NodeJS.ProcessEnv,
+  homeDir?: string,
+  platform: NodeJS.Platform = process.platform
+): string {
+  if (platform === "win32") {
+    return env.PATH ?? env.Path ?? "";
+  }
+
+  const home = (homeDir ?? env.HOME ?? os.homedir()).trim();
+  const seen = new Set<string>();
+  const entries: string[] = [];
+  const push = (dir: string | undefined) => {
+    const cleaned = (dir || "").trim();
+    if (!cleaned || seen.has(cleaned)) return;
+    seen.add(cleaned);
+    entries.push(cleaned);
+  };
+
+  for (const existing of (env.PATH || "").split(":")) {
+    push(existing);
+  }
+
+  if (home) {
+    push(path.posix.join(home, ".local/bin"));
+    push(path.posix.join(home, ".npm-global/bin"));
+    push(path.posix.join(home, ".volta/bin"));
+    push(path.posix.join(home, ".bun/bin"));
+    push(path.posix.join(home, ".cargo/bin"));
+
+    const nvmNodesDir = path.posix.join(home, ".nvm/versions/node");
+    try {
+      const versions = readdirSync(nvmNodesDir, { withFileTypes: true })
+        .filter((d) => d.isDirectory() || d.isSymbolicLink())
+        .map((d) => d.name)
+        .sort((a, b) => b.localeCompare(a, undefined, { numeric: true, sensitivity: "base" }));
+      for (const ver of versions) {
+        push(path.posix.join(nvmNodesDir, ver, "bin"));
+      }
+    } catch {
+      // 未安装 nvm 时忽略。
+    }
+  }
+
+  push("/opt/homebrew/bin");
+  push("/usr/local/bin");
+
+  return entries.join(":");
+}
 
 /**
  * 能自动探测的本机命令行 Agent。新增一种 = 在这里加一行，并在 engines/ 里加一个引擎。
@@ -43,21 +97,27 @@ export interface DetectDeps {
   readVersion: (binaryPath: string, args: string[]) => Promise<string | null>;
   /** 判断存在与否，不读内容；minBytes 时文件还需达到最小字节数。 */
   exists: (pathFromHome: string, minBytes?: number) => Promise<boolean>;
+  /** Linux 沙箱（bubblewrap）是否可用；向后兼容可选提供。 */
+  hasBwrap?: () => Promise<boolean>;
+  /** macOS 原生 Seatbelt 沙箱（/usr/bin/sandbox-exec）是否可用。 */
+  hasDarwinSandbox?: () => Promise<boolean>;
+  /** 运行平台覆盖（便于跨平台单测），缺省取 process.platform。 */
+  platform?: NodeJS.Platform;
 }
 
 /**
  * 探测这台电脑上的全部 Agent：KNOWN_CLI_AGENTS 逐个探测 + config.manualAgents 原样列出。
  * 结果按 KNOWN_CLI_AGENTS 顺序，手动添加的排在后面。没装的命令行 Agent 不出现在结果里。
  *
- * codex 特例：引擎要求 bwrap 做文件系统隔离（S3，没有 bwrap 时引擎创建即抛错，绝不裸跑）。
- * LoginState 只有三档、没有「装了但不能跑」这一档，所以缺 bwrap（或不在 Linux 上）时标
- * "unknown"，让本机页面显示「不可用」而不是谎称已就绪。
+ * codex 特例：Linux 要求 bwrap、macOS 要求 /usr/bin/sandbox-exec 做文件系统写隔离（S1/S3）。
+ * 缺少对应平台沙箱时标 "unknown"，让本机页面如实提示缺少沙箱而不是谎称已就绪。
  */
 export async function detectLocalAgents(
   deps: DetectDeps,
   config: Pick<HelperConfig, "manualAgents"> | null
 ): Promise<LocalAgent[]> {
   const out: LocalAgent[] = [];
+  const platform = deps.platform ?? process.platform;
   for (const spec of KNOWN_CLI_AGENTS) {
     let binaryPath: string | null = null;
     for (const name of spec.binaries) {
@@ -77,8 +137,15 @@ export async function detectLocalAgents(
       }
     }
     if (spec.kind === "codex") {
-      const bwrap = process.platform === "linux" ? await deps.findOnPath("bwrap") : null;
-      if (!bwrap) loginState = "unknown";
+      let sandboxReady = false;
+      if (platform === "darwin" && deps.hasDarwinSandbox) {
+        sandboxReady = await deps.hasDarwinSandbox();
+      } else if (deps.hasBwrap) {
+        sandboxReady = await deps.hasBwrap();
+      } else if (platform === "linux") {
+        sandboxReady = Boolean(await deps.findOnPath("bwrap"));
+      }
+      if (!sandboxReady) loginState = "unknown";
     }
     out.push({
       key: spec.kind,
@@ -97,6 +164,7 @@ export async function detectLocalAgents(
       displayName: manual.displayName,
       source: "manual",
       loginState: "unknown",
+      ...(manual.baseUrl ? { baseUrl: manual.baseUrl } : {}),
     });
   }
   return out;
@@ -104,13 +172,12 @@ export async function detectLocalAgents(
 
 /**
  * 生产用探测实现。
- * - findOnPath：逐个 PATH 目录 stat，不经过 shell，返回第一个可执行文件的绝对路径。
- * - readVersion：spawn 直接执行（无 shell），3 秒超时杀进程，只取 stdout 首行。
+ * - findOnPath：逐个扩展 PATH 目录 stat，不经过 shell，返回第一个可执行文件的绝对路径。
+ * - readVersion：spawn 直接执行（无 shell，注入扩展 PATH 保证 #!/usr/bin/env node 可用），3 秒超时杀进程。
  * - exists：相对家目录拼接，只 stat 不读内容。
  */
 export function defaultDetectDeps(): DetectDeps {
   const home = os.homedir();
-  // Windows 下命令常以 .cmd/.exe 形式存在，PATHEXT 是系统登记的可执行后缀清单。
   const pathexts =
     process.platform === "win32"
       ? (process.env.PATHEXT || ".EXE;.CMD;.BAT;.COM").split(";").map((s) => s.trim()).filter(Boolean)
@@ -124,25 +191,30 @@ export function defaultDetectDeps(): DetectDeps {
     return names;
   };
 
-  return {
-    async findOnPath(binary) {
-      for (const dir of (process.env.PATH || "").split(path.delimiter)) {
-        if (!dir) continue;
-        for (const name of candidateNames(binary)) {
-          const candidate = path.join(dir, name);
-          try {
-            const st = await stat(candidate);
-            if (!st.isFile()) continue;
-            await access(candidate, constants.X_OK);
-            return candidate;
-          } catch {
-            // 不存在或不可执行：下一个候选。
-          }
+  const findOnPath = async (binary: string): Promise<string | null> => {
+    const searchPath = buildExpandedPath(process.env, home);
+    for (const dir of searchPath.split(path.delimiter)) {
+      if (!dir) continue;
+      for (const name of candidateNames(binary)) {
+        const candidate = path.join(dir, name);
+        try {
+          const st = await stat(candidate);
+          if (!st.isFile()) continue;
+          await access(candidate, constants.X_OK);
+          return candidate;
+        } catch {
+          // 不存在或不可执行：下一个候选。
         }
       }
-      return null;
-    },
+    }
+    return null;
+  };
+
+  return {
+    platform: process.platform,
+    findOnPath,
     readVersion(binaryPath, args) {
+      const searchPath = buildExpandedPath(process.env, home);
       return new Promise((resolve) => {
         let out = "";
         let done = false;
@@ -154,8 +226,11 @@ export function defaultDetectDeps(): DetectDeps {
         };
         let child;
         try {
-          // spawn 的 timeout 选项到期自动 SIGTERM；版本探测失败不致命，返回 null。
-          child = spawn(binaryPath, args, { stdio: ["ignore", "pipe", "ignore"], timeout: 3000 });
+          child = spawn(binaryPath, args, {
+            env: { ...process.env, PATH: searchPath },
+            stdio: ["ignore", "pipe", "ignore"],
+            timeout: 3000,
+          });
         } catch {
           finish(null);
           return;
@@ -177,6 +252,19 @@ export function defaultDetectDeps(): DetectDeps {
       try {
         const st = await stat(path.join(home, pathFromHome));
         if (minBytes !== undefined && st.isFile()) return st.size >= minBytes;
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    async hasBwrap() {
+      if (process.platform !== "linux") return false;
+      return Boolean(await findOnPath("bwrap"));
+    },
+    async hasDarwinSandbox() {
+      if (process.platform !== "darwin") return false;
+      try {
+        await access("/usr/bin/sandbox-exec", constants.X_OK);
         return true;
       } catch {
         return false;

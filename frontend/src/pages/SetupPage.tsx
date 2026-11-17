@@ -1,17 +1,47 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useNavigate, useParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import type { Client } from "@xmtp/browser-sdk";
 import {
-  apiFetch, bindXmtpGroup, createRoom, createRoomFromTemplate, fetchTemplates,
+  ArrowLeft,
+  ArrowRight,
+  Blocks,
+  Check,
+  CheckCircle2,
+  ClipboardList,
+  Clock,
+  Cpu,
+  FolderGit2,
+  Handshake,
+  Info,
+  Layers,
+  Lock,
+  MessageSquare,
+  User,
+  XCircle,
+} from "lucide-react";
+import {
+  apiFetch,
+  bindXmtpGroup,
+  createRoom,
+  createRoomFromTemplate,
+  fetchTemplates,
 } from "../lib/api";
 import {
-  listRoomSeats, markSeatGroupAdded, type HubSeatView,
+  TRUST_TIER_LABEL,
+  trustTierOf,
+  listRoomSeats,
+  markSeatGroupAdded,
+  type HubSeatView,
 } from "../lib/localHelper";
 import {
-  hasEncryptedVault, inboxAddress, unlockOrCreateInboxKey, createLocalXmtpClient,
+  hasEncryptedVault,
+  inboxAddress,
+  unlockOrCreateInboxKey,
+  createLocalXmtpClient,
 } from "../lib/xmtpLocalIdentity";
 import { syncPendingSeatsToGroup } from "../lib/seatGroupSync";
+import { CopyButton } from "../components/CopyButton";
 import { AgentJoinSection } from "./AgentsPage";
 import { useAuthStore } from "../stores/authStore";
 import { useAnalytics } from "../hooks/useAnalytics";
@@ -19,19 +49,38 @@ import type { Room } from "../types/chat";
 
 type SubState = "idle" | "running" | "done" | "failed";
 
+function renderSetupTemplateIcon(key: string, name: string): ReactNode {
+  const k = `${key} ${name}`.toLowerCase();
+  if (k.includes("arch") || k.includes("code") || k.includes("dev") || k.includes("架构") || k.includes("研发") || k.includes("代码")) {
+    return <Blocks size={17} strokeWidth={1.85} />;
+  }
+  if (k.includes("plan") || k.includes("task") || k.includes("review") || k.includes("评审") || k.includes("规划") || k.includes("需求")) {
+    return <ClipboardList size={17} strokeWidth={1.85} />;
+  }
+  if (k.includes("negot") || k.includes("sync") || k.includes("partner") || k.includes("对齐") || k.includes("协同") || k.includes("谈判")) {
+    return <Handshake size={17} strokeWidth={1.85} />;
+  }
+  if (k.includes("repo") || k.includes("git") || k.includes("仓库")) {
+    return <FolderGit2 size={17} strokeWidth={1.85} />;
+  }
+  return <MessageSquare size={17} strokeWidth={1.85} />;
+}
+
 function CheckRow({ label, state }: { label: string; state: SubState }) {
   return (
     <div className={`check-row ${state === "done" ? "done" : state === "failed" ? "failed" : ""}`}>
       {state === "running" && <span className="spinner" />}
-      {state === "done" && <span>✅</span>}
-      {state === "failed" && <span>❌</span>}
-      {state === "idle" && <span style={{ width: 16, textAlign: "center", color: "var(--text-3)" }}>·</span>}
+      {state === "done" && <CheckCircle2 size={16} strokeWidth={2} />}
+      {state === "failed" && <XCircle size={16} strokeWidth={2} />}
+      {state === "idle" && (
+        <span style={{ width: 16, textAlign: "center", color: "var(--text-3)" }}>·</span>
+      )}
       <span>{label}</span>
     </div>
   );
 }
 
-const STEP_LABELS = ["选场景", "加密配置", "接入 Agent", "完成"];
+const STEP_LABELS = ["选场景", "建加密房间", "接入智能体", "完成"];
 
 const GROUP_STATUS_LABEL: Record<HubSeatView["group_status"], string> = {
   pending: "等待入群",
@@ -101,17 +150,18 @@ export function SetupPage() {
   const [cryptoBusy, setCryptoBusy] = useState(false);
   const [progress, setProgress] = useState<{ label: string; state: SubState }[]>([
     { label: "解锁本机加密身份", state: "idle" },
-    { label: "创建加密群", state: "idle" },
-    { label: "绑定到房间", state: "idle" },
+    { label: "创建端到端加密群", state: "idle" },
+    { label: "绑定加密群到房间", state: "idle" },
   ]);
 
-  // 客户端跨步骤保留：新席位的加密身份要等其进程首次启动后才注册到网络，
-  // 拉进群只能在注册之后发出（在「完成」步轮询补拉）。
   const clientRef = useRef<Client<any> | null>(null);
-  useEffect(() => () => {
-    clientRef.current?.close();
-    clientRef.current = null;
-  }, []);
+  useEffect(
+    () => () => {
+      clientRef.current?.close();
+      clientRef.current = null;
+    },
+    [],
+  );
 
   const setStage = (index: number, state: SubState) =>
     setProgress((prev) => prev.map((p, i) => (i === index ? { ...p, state } : p)));
@@ -157,15 +207,13 @@ export function SetupPage() {
     }
   }
 
-  // ── Step 2: 接入 Agent（本机助手 + 一次性票据，见 AgentJoinSection） ──
+  // ── Step 2: 接入 Agent ──
   const [joinedCount, setJoinedCount] = useState(0);
 
   // ── Step 3: 看席位状态 + 补拉入群 ──
   const [seats, setSeats] = useState<HubSeatView[]>([]);
   const [seatPollFailed, setSeatPollFailed] = useState(false);
 
-  // 新席位的 XMTP 身份在其进程首次启动后才注册到网络；可解析后才拉进群。
-  // 只拉 owner 是自己且 pending 的席位，不替别人拉（方案 5.4）。
   useEffect(() => {
     if (step !== 3 || !room) return;
     let cancelled = false;
@@ -184,7 +232,6 @@ export function SetupPage() {
           roomId,
           groupId,
           currentUserId: myId,
-          // 席位列表刚拉过，直接喂给同步逻辑，省一次请求。
           deps: { listSeats: async () => list, markAdded: markSeatGroupAdded },
         });
       } catch {
@@ -193,35 +240,56 @@ export function SetupPage() {
     };
     void tick();
     const timer = window.setInterval(tick, 4000);
-    return () => { cancelled = true; window.clearInterval(timer); };
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
   }, [step, room, groupId, user?.id]);
 
   const myLiveSeats = seats.filter((s) => s.owner_user_id === user?.id);
   const allMineIn = myLiveSeats.length > 0 && myLiveSeats.every((s) => s.group_status === "added");
 
-  const dot = (i: number) =>
-    `setup-step-dot ${i < step ? "done" : i === step ? "current" : ""}`;
+  const dot = (i: number) => `setup-step-dot ${i < step ? "done" : i === step ? "current" : ""}`;
 
   return (
     <div>
       <header className="topbar">
-        <Link to="/home" className="topbar__brand">🤖 协作空间</Link>
+        <Link to="/home" className="topbar__brand">
+          <Layers size={16} strokeWidth={1.9} />
+          <span>Multi-Agent 协作空间</span>
+        </Link>
         <span className="topbar__spacer" />
-        <span className="topbar__user">{user?.display_name}</span>
+        <div className="topbar__actions">
+          <Link to="/home" className="btn btn-ghost btn-sm">
+            <ArrowLeft size={14} strokeWidth={1.9} />
+            <span>返回房间列表</span>
+          </Link>
+          {user?.display_name && (
+            <span className="topbar__user">
+              <User size={13} strokeWidth={1.9} />
+              {user.display_name}
+            </span>
+          )}
+        </div>
       </header>
 
-      <div className="setup-page">
+      <div className="setup-page" style={{ maxWidth: step === 2 ? 920 : 720 }}>
         <div className="setup-head">
-          <h1>一键配置</h1>
-          <p>三步完成：建房间 → 加密配置 → 接入 Agent。</p>
+          <h1>一键创建加密协作房间</h1>
+          <p>四步向导：选择场景 → 建加密房间 → 接入智能体 → 完成同步。</p>
         </div>
 
-        <div className="setup-steps">
+        <div className="setup-steps" role="list" aria-label="创建加密房间步骤">
           {STEP_LABELS.map((label, i) => (
-            <div key={label} style={{ display: "flex", alignItems: "center" }}>
+            <div key={label} role="listitem" style={{ display: "flex", alignItems: "center" }}>
               {i > 0 && <div className={`setup-step-line ${i <= step ? "done" : ""}`} />}
-              <div className={dot(i)} title={label}>
-                {i < step ? "✓" : i + 1}
+              <div className="setup-step-item">
+                <div className={dot(i)} aria-current={i === step ? "step" : undefined}>
+                  {i < step ? <Check size={15} strokeWidth={2.4} /> : i + 1}
+                </div>
+                <span className={`setup-step-label ${i === step ? "current" : i < step ? "done" : ""}`}>
+                  {label}
+                </span>
               </div>
             </div>
           ))}
@@ -231,7 +299,7 @@ export function SetupPage() {
           <div className="page-error card">
             <p>房间不存在或没有访问权限。</p>
             <Link to="/setup" className="btn btn-ghost" style={{ marginTop: 12, display: "inline-flex" }}>
-              重新走一遍向导
+              重新开始配置向导
             </Link>
           </div>
         )}
@@ -239,11 +307,17 @@ export function SetupPage() {
         {/* ── Step 0 选场景 ── */}
         {!routeRoomId && step === 0 && (
           <div className="card setup-card">
-            <h2>🏠 你想让 Agent 们做什么？</h2>
-            <p className="setup-desc">选一个场景模板，房间会立刻建好并带好人设分工。</p>
+            <h2>
+              <Layers size={19} strokeWidth={1.9} style={{ color: "var(--accent)" }} />
+              <span>选择房间协作场景</span>
+            </h2>
+            <p className="setup-desc">选择一个预设分工模板立即建房，或直接创建空白房间。</p>
             <div className="setup-body">
               {templatesQuery.isLoading && (
-                <div className="loading-center"><span className="spinner" />加载场景...</div>
+                <div className="loading-center">
+                  <span className="spinner" />
+                  <span>加载模板…</span>
+                </div>
               )}
               <div className="tpl-grid">
                 {templates.map((t) => (
@@ -253,31 +327,36 @@ export function SetupPage() {
                     className="tpl-card"
                     disabled={creating !== null}
                     onClick={() =>
-                      pickTemplate(t.key, `${t.name} - ${new Date().toLocaleDateString("zh-CN")}`)}
+                      void pickTemplate(t.key, `${t.name} · ${new Date().toLocaleDateString("zh-CN")}`)
+                    }
                   >
-                    <span className="tpl-icon">{t.icon}</span>
-                    <strong>{creating === t.key ? "创建中..." : t.name}</strong>
+                    <span className="tpl-icon" style={{ color: "var(--accent)" }}>
+                      {renderSetupTemplateIcon(t.key, t.name)}
+                    </span>
+                    <strong>{creating === t.key ? "创建中…" : t.name}</strong>
                     <small>{t.description}</small>
                   </button>
                 ))}
               </div>
               <div className="field">
-                <label>或者建一个空白房间</label>
+                <label>或者创建一个自定义房间</label>
                 <div style={{ display: "flex", gap: 8 }}>
                   <input
                     className="input"
                     value={blankName}
                     onChange={(e) => setBlankName(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && blankName.trim() && pickTemplate(null, blankName.trim())}
-                    placeholder="房间名称，例如：和邻居的 Agent 讨论周报"
+                    onKeyDown={(e) =>
+                      e.key === "Enter" && blankName.trim() && void pickTemplate(null, blankName.trim())
+                    }
+                    placeholder="房间名称，例如：架构设计与代码评审"
                   />
                   <button
                     type="button"
-                    className="btn btn-ghost"
+                    className="btn btn-primary"
                     disabled={creating !== null || !blankName.trim()}
-                    onClick={() => pickTemplate(null, blankName.trim())}
+                    onClick={() => void pickTemplate(null, blankName.trim())}
                   >
-                    {creating === "blank" ? "创建中..." : "创建"}
+                    {creating === "blank" ? "创建中…" : "创建"}
                   </button>
                 </div>
               </div>
@@ -286,35 +365,40 @@ export function SetupPage() {
           </div>
         )}
 
-        {/* ── Step 1 加密配置 ── */}
+        {/* ── Step 1 建加密房间 ── */}
         {step === 1 && room && (
           <div className="card setup-card">
-            <h2>🔐 {creatingVault ? "设置加密口令" : "解锁加密身份"}</h2>
+            <h2>
+              <Lock size={19} strokeWidth={1.9} style={{ color: "var(--accent)" }} />
+              <span>{creatingVault ? "设置本机加密口令" : "解锁本机加密身份"}</span>
+            </h2>
             <p className="setup-desc">
-              房间 <strong>「{room.name}」</strong> 已建好。
+              房间 <strong>「{room.name}」</strong> 已就绪。
               {creatingVault
-                ? "这台电脑还没有加密身份，设置一个口令（至少 10 位），系统会自动创建加密群并绑定到房间。"
-                : "输入你的加密口令，系统会自动创建加密群并绑定到房间。"}
+                ? "首次在这台浏览器使用，请设置至少 10 位本地口令，系统将在浏览器本地生成端到端加密密钥并创建加密群（无需安装数字钱包插件）。"
+                : "输入你之前设置的本地加密口令，系统将自动创建端到端加密群并绑定到此房间。"}
             </p>
             <div className="setup-body">
               <div className="field">
-                <label>加密口令</label>
+                <label>本机加密口令</label>
                 <input
                   className="input"
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && configureEncryption()}
-                  placeholder={creatingVault ? "至少 10 位，忘记后无法找回" : "输入之前设置的口令"}
+                  onKeyDown={(e) => e.key === "Enter" && void configureEncryption()}
+                  placeholder={creatingVault ? "至少 10 位，仅保存在当前浏览器" : "输入本机加密口令"}
                   autoComplete={creatingVault ? "new-password" : "current-password"}
                   minLength={creatingVault ? 10 : undefined}
                   autoFocus
                 />
-                <p className="hint">口令和密钥只保存在这台电脑上，服务器看不到。</p>
+                <p className="hint">口令与私钥仅保存在这台设备的浏览器本地存储中，平台服务器无法读取。</p>
               </div>
               {progress.some((p) => p.state !== "idle") && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                  {progress.map((p) => <CheckRow key={p.label} label={p.label} state={p.state} />)}
+                  {progress.map((p) => (
+                    <CheckRow key={p.label} label={p.label} state={p.state} />
+                  ))}
                 </div>
               )}
               {cryptoError && <p className="error-text">{cryptoError}</p>}
@@ -323,32 +407,50 @@ export function SetupPage() {
               <button
                 type="button"
                 className="btn btn-primary"
-                onClick={configureEncryption}
+                onClick={() => void configureEncryption()}
                 disabled={cryptoBusy || !password || (creatingVault && password.length < 10)}
               >
-                {cryptoBusy ? "配置中..." : "自动配置加密 →"}
+                <span>{cryptoBusy ? "配置中…" : "自动配置端到端加密"}</span>
+                {!cryptoBusy && <ArrowRight size={15} strokeWidth={2} />}
               </button>
               {!routeRoomId && (
-                <button type="button" className="btn btn-ghost" onClick={() => setStep(0)}>← 返回</button>
+                <button type="button" className="btn btn-ghost" onClick={() => setStep(0)}>
+                  <ArrowLeft size={15} strokeWidth={2} />
+                  <span>返回</span>
+                </button>
               )}
             </div>
           </div>
         )}
 
-        {/* ── Step 2 接入 Agent ── */}
+        {/* ── Step 2 接入智能体 ── */}
         {step === 2 && room && (
           <div className="card setup-card">
-            <h2>🤖 接入你的 Agent</h2>
+            <h2>
+              <Cpu size={19} strokeWidth={1.9} style={{ color: "var(--accent)" }} />
+              <span>接入你的智能体</span>
+            </h2>
             <p className="setup-desc">
-              加密群已就绪。Agent 跑在你自己的电脑上——密钥不出本机，点一下「加入」即可。
+              端到端加密群已绑定。选择本机智能体或一键配置 Grok / Muse / Ollama 即可入座此房间。
             </p>
             <div className="setup-body">
               {myAddress && (
-                <div className="field">
-                  <label>我的加密地址</label>
-                  <span className="addr-pill" onClick={() => navigator.clipboard.writeText(myAddress).catch(() => {})} title="点击复制">
-                    {myAddress} 📋
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: 8,
+                    flexWrap: "wrap",
+                    padding: "8px 12px",
+                    borderRadius: 10,
+                    background: "var(--bg-subtle)",
+                  }}
+                >
+                  <span style={{ fontSize: 12.5, color: "var(--text-secondary)" }}>
+                    我的加密身份：<code style={{ color: "var(--text-primary)" }}>{myAddress}</code>
                   </span>
+                  <CopyButton text={myAddress} label="复制地址" />
                 </div>
               )}
               <AgentJoinSection
@@ -360,9 +462,13 @@ export function SetupPage() {
             </div>
             <div className="setup-actions">
               <button type="button" className="btn btn-primary" onClick={() => setStep(3)}>
-                {joinedCount > 0 ? "下一步 →" : "先不接入，下一步 →"}
+                <span>{joinedCount > 0 ? "下一步 · 确认入群状态" : "暂不接入，直接下一步"}</span>
+                <ArrowRight size={15} strokeWidth={2} />
               </button>
-              <button type="button" className="btn btn-ghost" onClick={() => setStep(1)}>← 返回</button>
+              <button type="button" className="btn btn-ghost" onClick={() => setStep(1)}>
+                <ArrowLeft size={15} strokeWidth={2} />
+                <span>返回</span>
+              </button>
             </div>
           </div>
         )}
@@ -370,39 +476,74 @@ export function SetupPage() {
         {/* ── Step 3 席位状态与完成 ── */}
         {step === 3 && room && (
           <div className="card setup-card">
-            <h2>{allMineIn ? "🎉 配置完成" : "⏳ 席位状态"}</h2>
+            <h2>
+              {allMineIn ? (
+                <CheckCircle2 size={19} strokeWidth={2} style={{ color: "var(--success)" }} />
+              ) : (
+                <Clock size={19} strokeWidth={1.9} style={{ color: "var(--accent)" }} />
+              )}
+              <span>{allMineIn ? "配置完成 · 席位已全部入群" : "正在同步席位入群状态"}</span>
+            </h2>
             <p className="setup-desc">
               {allMineIn
-                ? "你的 Agent 已创建席位并加入加密群，协作空间就绪。"
-                : "这里每 4 秒刷新一次席位状态。新席位要等它的进程首次启动、加密身份注册后才会被自动拉进群。"}
+                ? "你的智能体席位已自动拉入端到端加密群，现在可以进入房间 @智能体 开始协作。"
+                : "每 4 秒自动刷新席位状态；新启动的席位在完成加密身份注册后会被自动拉进加密群（进入房间页后同样会自动完成）。"}
             </p>
             <div className="setup-body">
               {seats.length === 0 && !seatPollFailed && (
                 <p className="hint">
-                  这个房间还没有席位。回到上一步接入 Agent，或之后在「我的 Agent」页随时接入。
+                  当前房间暂无席位。你可以先进入房间，随时点右上角「接入 Agent」添加智能体。
                 </p>
               )}
-              {seatPollFailed && <p className="error-text">席位状态刷新失败，正在重试…</p>}
-              {seats.map((seat) => (
-                <div key={seat.seat_id} className="agent-row">
-                  <span className="agent-row__icon">🤖</span>
-                  <div className="agent-row__info">
-                    <strong>
-                      {seat.agent_display_name}
-                      <span className={`task-badge ${seat.group_status === "added" ? "task-badge--completed" : seat.group_status === "pending" ? "task-badge--working" : ""}`}>
-                        {GROUP_STATUS_LABEL[seat.group_status]}
-                      </span>
-                    </strong>
-                    <small>
-                      {seat.xmtp_address.slice(0, 10)}…{seat.xmtp_address.slice(-4)}
-                      {seat.owner_user_id !== user?.id ? " · 他人的 Agent" : ""}
-                    </small>
+              {seatPollFailed && <p className="error-text">席位状态刷新失败，正在自动重试…</p>}
+              {seats.map((seat) => {
+                const tier = seat.trust_tier ?? trustTierOf(seat.kind);
+                return (
+                  <div key={seat.seat_id} className="agent-row">
+                    <Cpu size={18} strokeWidth={1.8} style={{ color: "#1d1d1f", flexShrink: 0 }} />
+                    <div className="agent-row__info">
+                      <strong>
+                        <span>{seat.agent_display_name}</span>
+                        <span className={`trust-badge trust-badge--${tier} tier-badge tier-badge--${tier}`}>
+                          {TRUST_TIER_LABEL[tier]}
+                        </span>
+                        <span
+                          className={`task-badge ${
+                            seat.group_status === "added"
+                              ? "task-badge--completed"
+                              : seat.group_status === "pending"
+                                ? "task-badge--working"
+                                : ""
+                          }`}
+                        >
+                          {GROUP_STATUS_LABEL[seat.group_status]}
+                        </span>
+                      </strong>
+                      <small>
+                        {seat.xmtp_address.slice(0, 10)}…{seat.xmtp_address.slice(-4)}
+                        {seat.owner_user_id !== user?.id ? " · 协作者的 Agent" : ""}
+                      </small>
+                    </div>
                   </div>
-                </div>
-              ))}
-              <div className="setup-info">
-                💡 对方的 Agent 也要接入时，把房间 ID <code>{room.id}</code> 发给 TA，
-                让 TA 在自己的电脑上走一遍这个向导即可。
+                );
+              })}
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "flex-start",
+                  gap: 8,
+                  padding: "12px 14px",
+                  borderRadius: 10,
+                  background: "#f5f5f7",
+                  fontSize: 13,
+                  color: "#6e6e73",
+                  lineHeight: 1.55,
+                }}
+              >
+                <Info size={16} strokeWidth={1.9} style={{ color: "#0071e3", flexShrink: 0, marginTop: 2 }} />
+                <span>
+                  如需邀请同事带着自己的 Agent 一起进入此加密房间，进入房间后打开右侧「权限」面板，即可一键生成加密入群邀请链接。
+                </span>
               </div>
             </div>
             <div className="setup-actions">
@@ -415,9 +556,13 @@ export function SetupPage() {
                   navigate(`/rooms/${room.id}`);
                 }}
               >
-                {allMineIn ? "进入房间 🚀" : "先进入房间看看 →"}
+                <span>{allMineIn ? "进入协作房间" : "先进入协作房间"}</span>
+                <ArrowRight size={17} strokeWidth={2} />
               </button>
-              <button type="button" className="btn btn-ghost" onClick={() => setStep(2)}>← 返回接入</button>
+              <button type="button" className="btn btn-ghost" onClick={() => setStep(2)}>
+                <ArrowLeft size={15} strokeWidth={2} />
+                <span>返回继续接入</span>
+              </button>
             </div>
           </div>
         )}

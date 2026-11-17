@@ -71,7 +71,7 @@ export function engineConfigFromEnv(env: NodeJS.ProcessEnv): EngineConfig | null
   const parseDirList = (name: string): string[] | undefined => {
     const raw = optionalEnv(env, name);
     if (!raw) return undefined;
-    return raw.split(path.delimiter).map((s) => s.trim()).filter((s) => path.isAbsolute(s));
+    return raw.split(path.delimiter).filter((s) => s.trim().length > 0 && path.isAbsolute(s));
   };
 
   switch (kind) {

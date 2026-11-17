@@ -38,7 +38,7 @@ async function fetchMissedMessages(roomId: string, afterTimestamp: string | null
   } catch { return null; }
 }
 
-export function useWebSocket(roomId: string, transport: string = "xmtp") {
+export function useWebSocket(roomId: string, transport: string = "xmtp", enabled: boolean = true) {
   const socketRef = useRef<WebSocket | null>(null);
   const reconnectTimerRef = useRef<number | null>(null);
   const reconnectAttemptRef = useRef(0);
@@ -52,6 +52,11 @@ export function useWebSocket(roomId: string, transport: string = "xmtp") {
   const setConnectionStatus = useChatStore((state) => state.setConnectionStatus);
 
   useEffect(() => {
+    if (!enabled || !roomId) {
+      setParticipants([]);
+      setConnectionStatus("idle");
+      return () => {};
+    }
     let disposed = false;
     let needsCatchUp = false;
     let gapTimestamp: string | null = null;
@@ -265,7 +270,7 @@ export function useWebSocket(roomId: string, transport: string = "xmtp") {
         socket.close();
       }
     };
-  }, [transport, addMessage, removeParticipant, roomId, setConnectionStatus, setParticipants, upsertParticipant, upsertTask, updateTaskProgress]);
+  }, [enabled, transport, addMessage, removeParticipant, roomId, setConnectionStatus, setParticipants, upsertParticipant, upsertTask, updateTaskProgress]);
 
   const sendMessage = useCallback(async (input: SendMessageInput): Promise<boolean> => {
     // Room text only travels over XMTP; the hub never carries plaintext.

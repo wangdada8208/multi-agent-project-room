@@ -261,4 +261,13 @@ describe("cross-Hub chat and presence", () => {
     FakeSocket.all[1].emit({ type: "message", message: message("plaintext") });
     expect(harness.fetch).not.toHaveBeenCalled(); expect(store().messages).toHaveLength(0);
   });
+  it("skips opening WebSocket when enabled is false (e.g. while accepting ?invite= token) and connects once enabled", () => {
+    useWebSocket("r1", "xmtp", false);
+    expect(FakeSocket.all).toHaveLength(0);
+    expect(store().connectionStatus).toBe("idle");
+    harness.cleanups.splice(0).forEach((cleanup) => cleanup());
+    useWebSocket("r1", "xmtp", true);
+    expect(FakeSocket.all).toHaveLength(1);
+    expect(store().connectionStatus).toBe("connecting");
+  });
 });

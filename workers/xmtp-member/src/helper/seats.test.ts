@@ -122,6 +122,7 @@ test("seatEnv: HUB_TOKEN 是 agent_token，父进程秘密不下发，只放行�
   assert.equal(env.XMTP_LOOP_STATE_PATH, "/state/seat-1/loop.json");
   assert.equal(env.XMTP_ALLOWED_SENDERS, seat.allowedSenders.join(","));
   assert.equal(env.XMTP_ALLOW_GROUP_MEMBERS, "1");
+  assert.equal(env.XMTP_MENTION_ONLY, "1");
   assert.equal(env.XMTP_GROUP_ID, "grp-1");
   assert.equal(env.OWNER_NOTES_PORT, String(seat.consolePort));
   assert.equal(env.MEMBER_AGENT_KIND, "claude-code");
@@ -133,7 +134,7 @@ test("seatEnv: HUB_TOKEN 是 agent_token，父进程秘密不下发，只放行�
   const expected = new Set([
     "PATH", "HOME", "LANG",
     "XMTP_SELF_NAME", "XMTP_ENV", "XMTP_WALLET_KEY", "XMTP_DB_ENCRYPTION_KEY", "XMTP_DB_DIRECTORY",
-    "XMTP_LOOP_STATE_PATH", "XMTP_ALLOWED_SENDERS", "XMTP_ALLOW_GROUP_MEMBERS", "XMTP_GROUP_ID",
+    "XMTP_LOOP_STATE_PATH", "XMTP_ALLOWED_SENDERS", "XMTP_ALLOW_GROUP_MEMBERS", "XMTP_MENTION_ONLY", "XMTP_GROUP_ID",
     "HUB_BASE_URL", "HUB_ROOM_ID", "HUB_TOKEN", "OWNER_NOTES_PORT",
     "MEMBER_AGENT_KIND", "MEMBER_AGENT_TIMEOUT_MS", "MEMBER_AGENT_BIN", "MEMBER_AGENT_SANDBOX_DIR",
     "MEMBER_AGENT_MODEL", "MEMBER_AGENT_BWRAP_RO", "MEMBER_AGENT_BWRAP_RW",

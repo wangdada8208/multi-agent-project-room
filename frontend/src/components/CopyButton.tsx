@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Check, Copy } from "lucide-react";
 
 /** 复制按钮：写剪贴板成功后在按钮上短暂显示「已复制」。剪贴板不可用时静默。 */
 export function CopyButton({ text, label = "复制" }: { text: string; label?: string }) {
@@ -12,10 +13,22 @@ export function CopyButton({ text, label = "复制" }: { text: string; label?: s
           await navigator.clipboard.writeText(text);
           setCopied(true);
           setTimeout(() => setCopied(false), 1600);
-        } catch { /* 剪贴板不可用时静默 */ }
+        } catch {
+          /* 剪贴板不可用时静默 */
+        }
       }}
     >
-      {copied ? "✓ 已复制" : `📋 ${label}`}
+      {copied ? (
+        <>
+          <Check size={13} strokeWidth={2.2} />
+          <span>已复制</span>
+        </>
+      ) : (
+        <>
+          <Copy size={13} strokeWidth={1.9} />
+          <span>{label}</span>
+        </>
+      )}
     </button>
   );
 }
