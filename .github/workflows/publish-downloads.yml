@@ -31,6 +31,10 @@ jobs:
           curl -sk -o /dev/null -w "local https → %{http_code}\n" --resolve "hub.wangdada8208.xyz:443:127.0.0.1" \
             "https://hub.wangdada8208.xyz/downloads/$TARGET_SLUG/$PACKAGE_NAME" || true
           curl -sI "https://hub.wangdada8208.xyz/downloads/$TARGET_SLUG/$PACKAGE_NAME" | head -3 || true
+          echo "── real nginx /downloads config ──"
+          sudo -n nginx -T 2>/dev/null | grep -n -B3 -A8 "downloads" || true
+          echo "── where skills package really lives ──"
+          sudo -n find / -xdev -name "skill-classification-20260629.md" 2>/dev/null | head -5 || true
 
       - uses: actions/checkout@v6
         with:
