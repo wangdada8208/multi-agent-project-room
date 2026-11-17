@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { engineConfigFromEnv } from "./index.ts";
 import { bwrapWrap, childEnv, claudeArgv, codexArgv, geminiArgv, toolchainDirs } from "./cliEngines.ts";
 import { httpModelEngine, openAiCompatibleEngine, webhookEngine } from "./httpEngines.ts";
@@ -143,13 +146,19 @@ test("bwrapWrap masks every home then re-exposes only the allowlist", () => {
     { kind: "codex", binaryPath: process.execPath, sandboxDir: SANDBOX, timeoutMs: 1000 },
     "/tmp/out.txt"
   );
+  // CODEX_HOME 要真实存在才会下发可写挂载；用临时目录避免依赖本机路径。
+  const tmp = mkdtempSync(path.join(tmpdir(), "mapr-bwrap-test-"));
+  const codexHome = path.join(tmp, "codexhome");
+  const extraRw = path.join(tmp, "magpie");
+  mkdirSync(codexHome);
+  mkdirSync(extraRw);
   const argv = bwrapWrap(inner, {
     bwrapPath: "/usr/bin/bwrap",
     binaryPath: process.execPath,
     sandboxDir: SANDBOX,
-    codexHome: "/data/.codex",
+    codexHome,
     homeDir: "/data",
-    extraRwDirs: ["/data/magpie"],
+    extraRwDirs: [extraRw],
   });
   assert.equal(argv[0], "/usr/bin/bwrap");
   const joined = argv.join(" ");
@@ -160,8 +169,8 @@ test("bwrapWrap masks every home then re-exposes only the allowlist", () => {
   assert.ok(joined.includes("--tmpfs /root"), "root's home masked");
   assert.ok(joined.includes("--tmpfs /data"), "non-standard home masked");
   assert.ok(joined.includes(`--bind ${SANDBOX} ${SANDBOX}`), "sandbox must be writable");
-  assert.ok(joined.includes("--bind /data/.codex /data/.codex"), "CODEX_HOME writable");
-  assert.ok(joined.includes("--bind /data/magpie /data/magpie"), "extra rw dir exposed");
+  assert.ok(joined.includes(`--bind ${codexHome} ${codexHome}`), "CODEX_HOME writable");
+  assert.ok(joined.includes(`--bind ${extraRw} ${extraRw}`), "extra rw dir exposed");
   assert.deepEqual(argv.slice(-inner.length), inner, "inner argv appended verbatim");
 
   const homeUnderSlashHome = bwrapWrap(inner, {
@@ -175,9 +184,18 @@ test("bwrapWrap masks every home then re-exposes only the allowlist", () => {
 });
 
 test("toolchainDirs mounts the install tree but never home itself", () => {
-  const dirs = toolchainDirs("/data/.memoh/deps/bin/codex", "/home/u");
-  assert.ok(dirs.includes("/data/.memoh/deps/bin"));
-  assert.ok(dirs.includes("/data/.memoh/deps"));
+  // 在临时目录里搭 script → exec target 链：bin/codex 是包装脚本，
+  // exec 到 versions 下的真实二进制，断言链的两级目录都被跟随。
+  const tmp = mkdtempSync(path.join(tmpdir(), "mapr-toolchain-test-"));
+  const wrapper = path.join(tmp, "deps", "bin", "codex");
+  const target = path.join(tmp, "codex", "versions", "1.0", "codex-real");
+  mkdirSync(path.dirname(wrapper), { recursive: true });
+  mkdirSync(path.dirname(target), { recursive: true });
+  writeFileSync(target, "binary");
+  writeFileSync(wrapper, `#!/bin/sh\nexec "${target}" "$@"\n`);
+  const dirs = toolchainDirs(wrapper, "/home/u");
+  assert.ok(dirs.includes(path.join(tmp, "deps", "bin")));
+  assert.ok(dirs.includes(path.join(tmp, "deps")));
   assert.ok(dirs.some((d) => d.includes("codex/versions")), "exec target parent dir is followed");
   assert.deepEqual(toolchainDirs("/usr/bin/codex", "/home/u"), []);
   assert.deepEqual(toolchainDirs("/home/u", "/home/u"), []);
