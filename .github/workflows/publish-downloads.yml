@@ -21,10 +21,10 @@ jobs:
         env:
           SOURCE_BASE_URL: ${{ inputs.source_base_url }}
           TARGET_SLUG: ${{ inputs.target_slug }}
-          PACKAGE_NAME: wangdada-all-user-skills-20260629.tar.gz
-          PACKAGE_SHA256: 0625b3e16600c9c770a825bddd7c45fd03c2a20a1a0aaeafb7ee209469edddef
-          CLASSIFICATION_NAME: skill-classification-20260629.md
-          CLASSIFICATION_SHA256: bc186c66af1601dfd1be1face1c90d544335fe69afec81409c60616a1f808617
+          PACKAGE_NAME: xmtp-member-0.1.0.tar.gz
+          PACKAGE_SHA256: f64c5e80efa97acaff099807772ca16f7e45fbb483df2b63b71701946917ca9b
+          CLASSIFICATION_NAME: xmtp-member-0.1.0.tar.gz.sha256
+          CLASSIFICATION_SHA256: 78ea6abdba333b9bc6effd4f1d9eed43fd4b74e9dfdf07ed4608342884faadc9
         run: |
           set -euo pipefail
 
@@ -169,6 +169,21 @@ jobs:
             "https://hub.wangdada8208.xyz/downloads/$TARGET_SLUG/$CLASSIFICATION_NAME"
           curl --fail --head --location \
             "https://hub.wangdada8208.xyz/downloads/$TARGET_SLUG/$PACKAGE_NAME"
+
+      - name: Also publish package at /downloads root (install.sh default URL)
+        env:
+          PACKAGE_NAME: xmtp-member-0.1.0.tar.gz
+          PACKAGE_SHA256: f64c5e80efa97acaff099807772ca16f7e45fbb483df2b63b71701946917ca9b
+          ROOT_NAME: xmtp-member-latest.tar.gz
+          TARGET_SLUG: ${{ inputs.target_slug }}
+        run: |
+          set -euo pipefail
+          if [ "$(id -u)" -eq 0 ]; then SUDO=""; else SUDO="sudo -n"; fi
+          ROOT="/var/www/hub-downloads"
+          $SUDO install -m 644 "$ROOT/$TARGET_SLUG/$PACKAGE_NAME" "$ROOT/$ROOT_NAME"
+          printf "%s  %s\n" "$PACKAGE_SHA256" "$ROOT/$ROOT_NAME" | sha256sum -c -
+          curl --fail --head --location \
+            "https://hub.wangdada8208.xyz/downloads/$ROOT_NAME"
 
 # ── WP6 可选挂载点：xmtp-member 发布包 ─────────────────────────────
 # install.sh 的默认发布包地址是
