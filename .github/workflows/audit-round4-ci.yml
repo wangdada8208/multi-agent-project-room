@@ -27,7 +27,7 @@ env:
 jobs:
   safety-guard:
     name: Safety guard (no main push / no deploy)
-    runs-on: ubuntu-latest
+    runs-on: instabox-medium
     steps:
       - name: Assert this run cannot deploy
         run: |
@@ -40,7 +40,7 @@ jobs:
 
   backend:
     name: Backend (real PostgreSQL + real Redis + Alembic)
-    runs-on: ubuntu-latest
+    runs-on: instabox-medium
     services:
       postgres:
         # PG 17 on purpose: the isolated-PG17 gates below run a PG17 pg_dump
@@ -220,7 +220,7 @@ jobs:
 
   frontend:
     name: Frontend (vitest + build)
-    runs-on: ubuntu-latest
+    runs-on: instabox-medium
     steps:
       - uses: actions/checkout@v6
 
@@ -253,7 +253,7 @@ jobs:
 
   hygiene:
     name: Repository hygiene
-    runs-on: ubuntu-latest
+    runs-on: instabox-medium
     steps:
       # Full history is required: the whitespace gate compares against the
       # merge base with the PR base branch, which a shallow clone lacks.
