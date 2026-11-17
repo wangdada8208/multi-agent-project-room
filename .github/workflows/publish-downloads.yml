@@ -170,6 +170,13 @@ jobs:
             $SUDO nginx -s reload
           fi
 
+          echo "── ls $ROOT ──"
+          $SUDO ls -la "$ROOT" "$DEST" || true
+          echo "── local nginx probe (bypass Cloudflare) ──"
+          curl -sk -o /dev/null -w "http 127.0.0.1  → %{http_code}\n" -H "Host: hub.wangdada8208.xyz" \
+            "http://127.0.0.1/downloads/$TARGET_SLUG/$PACKAGE_NAME" || true
+          curl -sk -o /dev/null -w "https 127.0.0.1 → %{http_code}\n" --resolve "hub.wangdada8208.xyz:443:127.0.0.1" \
+            "https://hub.wangdada8208.xyz/downloads/$TARGET_SLUG/$PACKAGE_NAME" || true
           curl --fail --head --location \
             "https://hub.wangdada8208.xyz/downloads/$TARGET_SLUG/$CLASSIFICATION_NAME"
           curl --fail --head --location \
