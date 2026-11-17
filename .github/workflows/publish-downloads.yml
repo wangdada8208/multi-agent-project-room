@@ -169,3 +169,22 @@ jobs:
             "https://hub.wangdada8208.xyz/downloads/$TARGET_SLUG/$CLASSIFICATION_NAME"
           curl --fail --head --location \
             "https://hub.wangdada8208.xyz/downloads/$TARGET_SLUG/$PACKAGE_NAME"
+
+# ── WP6 可选挂载点：xmtp-member 发布包 ─────────────────────────────
+# install.sh 的默认发布包地址是
+#   {hub_origin}/downloads/xmtp-member-latest.tar.gz
+# 要正式发布本机助手时，先跑 scripts/pack-xmtp-member.sh 得到
+# dist/xmtp-member-<version>.tar.gz，然后任选其一：
+#   a) 直接把 tar.gz 放到生产机 /var/www/hub-downloads/xmtp-member-latest.tar.gz；
+#   b) 复用本工作流：把产物挂到一个临时 HTTP 地址，workflow_dispatch 填
+#      source_base_url=<该地址>、target_slug=mapr，并把下面这段注释掉的步骤
+#      按需改写（当前工作流的 PACKAGE_NAME/SHA256 是为技能包硬编码的，
+#      复用时需把 env 参数化，或照上面 a) 手动放文件更省事）。
+# 示例（需先把 PACKAGE_NAME/PACKAGE_SHA256 参数化后再启用）：
+#   - name: Publish xmtp-member package
+#     env:
+#       PACKAGE_NAME: xmtp-member-latest.tar.gz
+#       PACKAGE_SHA256: <pack 脚本输出的 .sha256 内容>
+#     run: |
+#       curl --fail --location --output "$TMP/$PACKAGE_NAME" "$BASE_URL/$PACKAGE_NAME"
+#       printf "%s  %s\n" "$PACKAGE_SHA256" "$TMP/$PACKAGE_NAME" | sha256sum -c -
