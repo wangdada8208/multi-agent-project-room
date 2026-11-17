@@ -108,4 +108,3 @@ Six small pairs in `teaching/details.tsx`, `?example=contrasts`, Details group. 
 - **Balance a top bar:** one control and an empty side reads as unfinished. Put what the product puts there, or drop the bar.
 - **Choose copy that fits:** unless the brief fixes them, pick names, emails and values whose length suits the layout: no truncated chips, wrapped names or ragged labels.
 - **Pin a changing label to its icon:** in a fixed-width control the label sits against its chevron and grows away from it, so the gap never changes.
-
