@@ -146,10 +146,6 @@ async def create_share_link(
     from datetime import datetime, timedelta, timezone as tz
     expires_at = datetime.now(tz.utc) + timedelta(hours=payload.expires_hours)
 
-    # Store the share token on the room (simple approach)
-    room.description = f"{room.description or ''}".strip()
-    db.add(room)
-
     from app.models.room_share import RoomShareToken
     share_token = RoomShareToken(
         room_id=room_id,

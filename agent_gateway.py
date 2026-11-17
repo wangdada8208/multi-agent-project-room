@@ -28,6 +28,7 @@ import argparse
 import asyncio
 import json
 import logging
+import os
 import signal
 import sys
 import uuid
@@ -173,11 +174,27 @@ class AgentGateway:
             logger.warning("Registration response: %s", data)
         return result
 
+    async def login(self, username: str, password: str) -> bool:
+        """Authenticate the agent account so room APIs accept our calls."""
+        try:
+            resp = await self.http.post(
+                f"{self.server}/api/v1/auth/login",
+                json={"username": username, "password": password},
+            )
+            if resp.status_code != 200:
+                logger.error("Login failed: HTTP %s", resp.status_code)
+                return False
+            self.auth_token = resp.json().get("access_token")
+            return bool(self.auth_token)
+        except Exception as e:
+            logger.error("Login error: %s", e)
+            return False
+
     async def poll_messages(self) -> list[dict]:
         """Poll for new messages that mention us."""
+        if not self.room_id:
+            return []
         params: dict = {}
-        if self.room_id:
-            params["room_id"] = self.room_id
         if self.last_message_ts:
             params["after"] = self.last_message_ts
 
@@ -187,7 +204,7 @@ class AgentGateway:
 
         try:
             resp = await self.http.get(
-                f"{self.server}/api/v1/rooms/{self.room_id}/messages" if self.room_id else "",
+                f"{self.server}/api/v1/rooms/{self.room_id}/messages",
                 params=params,
                 headers=headers,
             )
@@ -200,7 +217,7 @@ class AgentGateway:
                 sender = msg.get("sender_name", "")
                 if sender == self.agent_name:
                     continue
-                if f"@{self.agent_name}" in content.lower():
+                if f"@{self.agent_name.lower()}" in content.lower():
                     relevant.append(msg)
                 self.last_message_ts = msg.get("created_at", self.last_message_ts)
             return relevant
@@ -274,7 +291,11 @@ def main():
     parser.add_argument("--agent-name", required=True, help="Agent display name")
     parser.add_argument("--backend", choices=list(BACKENDS.keys()), help="Predefined backend type")
     parser.add_argument("--command", nargs="+", help="Custom command (overrides --backend)")
-    parser.add_argument("--room-id", help="Room to join (default: auto)")
+    parser.add_argument("--room-id", required=True, help="Room to join")
+    parser.add_argument("--username", default=os.environ.get("MAPR_AGENT_USERNAME"),
+                        help="Agent account username (or MAPR_AGENT_USERNAME)")
+    parser.add_argument("--password", default=os.environ.get("MAPR_AGENT_PASSWORD"),
+                        help="Agent account password (or MAPR_AGENT_PASSWORD)")
     parser.add_argument("--poll-interval", type=float, default=3.0)
     args = parser.parse_args()
 
@@ -295,6 +316,12 @@ def main():
     )
 
     async def _run():
+        if args.username and args.password:
+            if not await gateway.login(args.username, args.password):
+                print("Error: agent login failed", file=sys.stderr)
+                sys.exit(1)
+        else:
+            logger.warning("No --username/--password given; authenticated endpoints will fail")
         loop = asyncio.get_event_loop()
         for sig in (signal.SIGINT, signal.SIGTERM):
             try:

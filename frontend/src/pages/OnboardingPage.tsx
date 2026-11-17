@@ -37,10 +37,11 @@ export function OnboardingPage() {
   const templatesQuery = useQuery({
     queryKey: ["templates"],
     queryFn: async () => {
-      const res = await fetch("/api/v1/templates");
-      if (!res.ok) return [];
-      const data = await res.json();
-      return (data.templates ?? []) as RoomTemplateSummary[];
+      try {
+        return await fetchTemplates();
+      } catch {
+        return [] as RoomTemplateSummary[];
+      }
     },
   });
 

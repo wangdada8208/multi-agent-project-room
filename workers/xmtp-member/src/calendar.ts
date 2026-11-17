@@ -27,7 +27,9 @@ export function freeBusy(events: CalendarEvent[], range: DateRange): FreeBusyPay
   const busy = events
     .map((e) => ({ s: Date.parse(e.start), e: Date.parse(e.end) }))
     .filter((x) => Number.isFinite(x.s) && Number.isFinite(x.e) && x.s < to && x.e > from)
-    .map((x) => ({ start: new Date(x.s).toISOString(), end: new Date(x.e).toISOString() }))
+    // Clamp to the approved window: the requester must not learn busy times
+    // outside the range they were granted.
+    .map((x) => ({ start: new Date(Math.max(x.s, from)).toISOString(), end: new Date(Math.min(x.e, to)).toISOString() }))
     .sort((a, b) => a.start.localeCompare(b.start));
   return {
     scope: "calendar.free_busy",

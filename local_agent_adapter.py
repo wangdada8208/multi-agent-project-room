@@ -213,10 +213,10 @@ def _dialogue_seed_message(agent_name: str, content: str) -> str:
 
 def _is_dialogue_stop(content: str) -> bool:
     compact = "".join(content.lower().split())
-    return any(
-        word in compact
-        for word in ["结束", "停止", "不用回复", "我这边结束", "[[end]]", "end"]
-    )
+    if any(word in compact for word in ["结束", "停止", "不用回复", "我这边结束", "[[end]]"]):
+        return True
+    # English stop words need word boundaries: "send" contains "end".
+    return bool(re.search(r"\b(end|stop)\b", content, re.IGNORECASE))
 
 
 def _quick_reply(agent_name: str, content: str) -> Optional[str]:

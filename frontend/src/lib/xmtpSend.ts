@@ -1,43 +1,16 @@
 import type { ChatMessage, SenderType } from "../types/chat";
 
-export interface RouteOutgoingInput {
-  transport?: string;
-  content: string;
-}
-
-export interface RouteOutgoingResult {
-  channel: "hub" | "xmtp";
-  hubPayload: { content: string } | null;
-}
-
-export function routeOutgoing(input: RouteOutgoingInput): RouteOutgoingResult {
-  return {
-    channel: "xmtp",
-    hubPayload: null,
-  };
-}
-
 export async function deliverOutgoing(input: {
   transport?: string;
   content: string;
   xmtpGroupId?: string | null;
   sendToXmtp?: (groupId: string, content: string) => Promise<void>;
-}): Promise<{ delivered: boolean; hubPayload: { content: string } | null }> {
-  if (input.transport !== "xmtp") {
-    return { delivered: false, hubPayload: null };
-  }
-  const route = routeOutgoing({
-    transport: input.transport,
-    content: input.content,
-  });
-  if (route.hubPayload) {
-    return { delivered: true, hubPayload: route.hubPayload };
-  }
-  if (!input.xmtpGroupId || !input.sendToXmtp) {
-    return { delivered: false, hubPayload: null };
+}): Promise<{ delivered: boolean }> {
+  if (input.transport !== "xmtp" || !input.xmtpGroupId || !input.sendToXmtp) {
+    return { delivered: false };
   }
   await input.sendToXmtp(input.xmtpGroupId, input.content);
-  return { delivered: true, hubPayload: null };
+  return { delivered: true };
 }
 
 export async function sendXmtpMessage(options: {

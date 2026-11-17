@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useAuthStore } from "../stores/authStore";
 import { useChatStore } from "../stores/chatStore";
 
 const PERMISSION_KEY = "mapr-notification-enabled";
 
 export function useNotification(roomId: string) {
-  const lastMessageCount = useRef(0);
+  const seenIds = useRef<Set<string> | null>(null);
   const messages = useChatStore((state) => state.messages);
   const [enabled, setEnabledState] = useState(
     () => localStorage.getItem(PERMISSION_KEY) === "true"
@@ -24,19 +25,23 @@ export function useNotification(roomId: string) {
   useEffect(() => {
     if (!enabled || !roomId) return;
 
-    // Only notify for NEW messages since mount
-    if (lastMessageCount.current === 0) {
-      lastMessageCount.current = messages.length;
+    // First pass marks history as seen; only later arrivals notify.
+    if (seenIds.current === null) {
+      seenIds.current = new Set(messages.map((msg) => msg.id));
       return;
     }
 
-    const newMessages = messages.slice(lastMessageCount.current);
-    lastMessageCount.current = messages.length;
+    const newMessages = messages.filter((msg) => !seenIds.current!.has(msg.id));
+    for (const msg of newMessages) seenIds.current!.add(msg.id);
+    // Bound memory: keep the newest few thousand IDs.
+    if (seenIds.current.size > 5000) {
+      seenIds.current = new Set(messages.slice(-2000).map((msg) => msg.id));
+    }
 
     for (const msg of newMessages) {
       // Don't notify for own messages or system
-      const user = JSON.parse(localStorage.getItem("mapr-auth-user") ?? "{}");
-      if (msg.sender_id === user.id || msg.sender_type === "system") continue;
+      const user = useAuthStore.getState().user;
+      if (msg.sender_id === user?.id || msg.sender_type === "system") continue;
       if (msg.sender_type !== "agent") continue; // Only agent replies
 
       try {

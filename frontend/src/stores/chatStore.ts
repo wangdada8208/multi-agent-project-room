@@ -1,13 +1,11 @@
 import { create } from "zustand";
-import type { ChatMessage, MessageLoopState, PresenceParticipant, RoomTask, RoomTaskPatch, TaskProgressEvent } from "../types/chat";
+import type { ChatMessage, PresenceParticipant, RoomTask, RoomTaskPatch, TaskProgressEvent } from "../types/chat";
 
 interface ChatState {
   messages: ChatMessage[];
   connectionStatus: "idle" | "connecting" | "open" | "closed" | "error";
-  typingUsers: string[];
   participants: PresenceParticipant[];
   tasks: RoomTask[];
-  activeLoop: MessageLoopState | null;
   setMessages: (messages: ChatMessage[], roomId?: string) => void;
   addMessage: (message: ChatMessage) => void;
   setParticipants: (participants: PresenceParticipant[]) => void;
@@ -17,9 +15,6 @@ interface ChatState {
   upsertTask: (task: RoomTaskPatch) => void;
   updateTaskProgress: (event: TaskProgressEvent, roomId: string) => void;
   setConnectionStatus: (status: ChatState["connectionStatus"]) => void;
-  markTyping: (senderId: string) => void;
-  setActiveLoop: (loop: MessageLoopState | null) => void;
-  appendLoopTurn: (agentName: string, content: string, consensus: boolean, conflicts: string[]) => void;
 }
 
 const TASK_STATUSES = new Set(["submitted", "queued", "working", "input_required", "completed", "failed", "canceled"]);
@@ -152,10 +147,8 @@ function normalizeParticipants(participants: PresenceParticipant[]): PresencePar
 export const useChatStore = create<ChatState>((set) => ({
   messages: [],
   connectionStatus: "idle",
-  typingUsers: [],
   participants: [],
   tasks: [],
-  activeLoop: null,
   setMessages: (messages, roomId) => set((state) => ({ messages: mergeMessages(state.messages, messages, roomId) })),
   addMessage: (message) => set((state) => ({ messages: mergeMessages(state.messages, [message]) })),
   setConnectionStatus: (connectionStatus) => set({ connectionStatus }),
@@ -192,30 +185,4 @@ export const useChatStore = create<ChatState>((set) => ({
     const next = { phase: event.phase, percent: event.percent, ...(event.event_seq !== undefined ? { event_seq: event.event_seq } : {}) };
     return { tasks: state.tasks.map((item) => item === task ? { ...task, progress: next } : item) };
   }),
-  markTyping: (senderId) =>
-    set((state) => ({
-      typingUsers: Array.from(new Set([...state.typingUsers, senderId])),
-    })),
-  setActiveLoop: (activeLoop) => set({ activeLoop }),
-  appendLoopTurn: (agentName, content, consensus, conflicts) =>
-    set((state) => {
-      if (!state.activeLoop) return state;
-      return {
-        activeLoop: {
-          ...state.activeLoop,
-          current_round: state.activeLoop.current_round + 1,
-          turns: [
-            ...state.activeLoop.turns,
-            {
-              agent_name: agentName,
-              content,
-              turn_number: state.activeLoop.turns.length + 1,
-              signals_consensus: consensus,
-              conflicts,
-              timestamp: new Date().toISOString(),
-            },
-          ],
-        },
-      };
-    }),
 }));

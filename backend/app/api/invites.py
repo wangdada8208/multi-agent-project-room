@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.permissions import require_role
@@ -127,18 +127,35 @@ async def redeem_room_invite(
         raise HTTPException(status_code=404, detail="Invite token not found")
 
     now = datetime.now(timezone.utc)
-    if _as_utc(invite.expires_at) < now:
-        raise HTTPException(status_code=410, detail="Invite token expired")
-    if invite.used_at is not None:
+    # Snapshot before the atomic claim: a rollback expires the ORM object and
+    # lazy re-load is not safe to trigger on the error path.
+    expires_at_utc = _as_utc(invite.expires_at)
+    room_id = invite.room_id
+    # Single-use claim: only the first concurrent redeem wins this update.
+    claim = await db.execute(
+        update(RoomInvite)
+        .where(
+            RoomInvite.token == token,
+            RoomInvite.used_at.is_(None),
+            RoomInvite.expires_at > now,
+        )
+        .values(used_at=now, redeemed_by_address=payload.xmtp_address.lower())
+        # The WHERE is evaluated by the database, not against the loaded ORM
+        # object: SQLite returns naive datetimes, which cannot be compared
+        # with the tz-aware `now` in a session-synchronize pass.
+        .execution_options(synchronize_session=False)
+    )
+    if claim.rowcount != 1:
+        await db.rollback()
+        if expires_at_utc < now:
+            raise HTTPException(status_code=410, detail="Invite token expired")
         raise HTTPException(status_code=409, detail="Invite token already redeemed")
 
-    room = await db.get(Room, invite.room_id)
+    room = await db.get(Room, room_id)
     if room is None or not room.is_active:
+        await db.rollback()
         raise HTTPException(status_code=404, detail="Room not found")
 
-    invite.used_at = now
-    invite.redeemed_by_address = payload.xmtp_address.lower()
-    db.add(invite)
     await db.commit()
 
     return {

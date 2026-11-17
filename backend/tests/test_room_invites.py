@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from sqlalchemy import select
 
+from conftest import engine as _test_engine
 from app.models.room import Room
 from app.models.room_invite import RoomInvite
 
@@ -201,3 +202,34 @@ async def test_redeem_invalid_address_422(client, auth_headers):
         json={"xmtp_address": "not-an-address"},
     )
     assert resp.status_code == 422
+
+
+@pytest.mark.skipif(
+    _test_engine.dialect.name != "postgresql",
+    reason="true concurrent claim requires real PostgreSQL row locking",
+)
+@pytest.mark.asyncio
+async def test_redeem_invite_concurrent_single_winner(client, auth_headers):
+    """Two overlapping redeems of the same token must produce exactly one 200."""
+    import asyncio
+
+    room_id = await _create_test_room(client, auth_headers)
+    create_resp = await client.post(
+        f"/api/v1/rooms/{room_id}/invites",
+        headers=auth_headers,
+        json={"proposed_scopes": ["calendar.free_busy"]},
+    )
+    token = create_resp.json()["invite"]["token"]
+
+    async def redeem(addr: str):
+        return await client.post(
+            f"/api/v1/invites/{token}/redeem",
+            json={"xmtp_address": addr},
+        )
+
+    r1, r2 = await asyncio.gather(
+        redeem("0x5555555555555555555555555555555555555555"),
+        redeem("0x6666666666666666666666666666666666666666"),
+    )
+    statuses = sorted([r1.status_code, r2.status_code])
+    assert statuses == [200, 409], f"{r1.status_code}/{r2.status_code}"

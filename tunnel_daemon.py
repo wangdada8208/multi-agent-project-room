@@ -28,7 +28,7 @@ for _ in range(40):
     line = proc.stdout.readline()
     if not line:
         break
-    match = re.search(r"https://[a-zA-Z0-9.-]+\.(?:pinggy\.net|pinggy-free\.link)", line)
+    match = re.search(r"https://[a-zA-Z0-9.-]+\.(?:pinggy\.net|pinggy\.link|pinggy-free\.link)", line)
     if match:
         url = match.group(0)
         with open("/tmp/live_tunnel.url", "w") as f:

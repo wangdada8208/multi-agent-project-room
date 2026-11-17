@@ -20,12 +20,11 @@ asyncio.run(init())
 # 启动服务器（--env-file 覆盖 .env）
 uvicorn app.main:app --app-dir backend --port 8000 --env-file /dev/null &
 SERVER_PID=$!
+trap 'kill $SERVER_PID 2>/dev/null || true; wait $SERVER_PID 2>/dev/null || true' EXIT
 sleep 2
 
 # 运行测试
-python tests/e2e_gateway_test.py
-EXIT_CODE=$?
+EXIT_CODE=0
+python tests/e2e_gateway_test.py || EXIT_CODE=$?
 
-kill $SERVER_PID 2>/dev/null || true
-wait $SERVER_PID 2>/dev/null || true
 exit $EXIT_CODE

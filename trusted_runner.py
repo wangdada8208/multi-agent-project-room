@@ -299,9 +299,9 @@ class TrustedRunner:
         self._http_client: Optional[httpx.AsyncClient] = None
 
     def _get_client(self) -> httpx.AsyncClient:
-        if self._http_client is not None:
-            return self._http_client
-        return httpx.AsyncClient(verify=self.verify, timeout=30.0)
+        if self._http_client is None:
+            self._http_client = httpx.AsyncClient(verify=self.verify, timeout=30.0)
+        return self._http_client
 
     # ── 授权与取消控制 ────────────────────────────────────
 
@@ -433,8 +433,10 @@ class TrustedRunner:
     def is_dialogue_stop(self, content: str) -> bool:
         """判断是否要求停止或结束对话。"""
         compact = "".join(content.lower().split())
-        stop_words = ["结束", "停止", "不用回复", "我这边结束", "[[end]]", "end", "stop"]
-        return any(w in compact for w in stop_words)
+        if any(w in compact for w in ["结束", "停止", "不用回复", "我这边结束", "[[end]]"]):
+            return True
+        # English stop words need word boundaries: "send" contains "end".
+        return bool(re.search(r"\b(end|stop)\b", content, re.IGNORECASE))
 
     def detect_dialogue_request(self, content: str) -> tuple[Optional[str], Optional[str]]:
         """检测是否要求与另一个 Agent 发起 A2A 对话。返回 (目标Agent名, 议题)。"""
@@ -686,7 +688,9 @@ class TrustedRunner:
         sender_name = msg.get("sender_name", "")
         sender_id = msg.get("sender_id", "")
         sender_type = str(msg.get("sender_type") or "human").lower()
-        if sender_name.lower() == self.agent_name.lower() or sender_id == self.composite_sender_id:
+        if (sender_name.lower() == self.agent_name.lower()
+                or sender_id == self.composite_sender_id
+                or (self.user_id is not None and sender_id == self.user_id)):
             return None
         if sender_type == "agent":
             # 对方 Agent 发送的房间广播跳过，由 A2A 协议的 handle_dialogue_message 专门处理

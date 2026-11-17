@@ -15,8 +15,8 @@ async def test_dialogue_start_send_and_end(client: AsyncClient, auth_headers: di
             "method": "dialogues/create",
             "params": {
                 "room_id": "dialogue-room",
-                "initiator_agent": "Codex",
-                "participants": ["Codex", "Claude"],
+                "initiator_agent": "tester",
+                "participants": ["tester", "Claude"],
                 "duration_seconds": 30,
                 "max_turns": 8,
             },
@@ -27,7 +27,7 @@ async def test_dialogue_start_send_and_end(client: AsyncClient, auth_headers: di
     assert start_resp.status_code == 200
     start_result = start_resp.json()["result"]
     assert start_result["status"] == "active"
-    assert start_result["participants"] == ["Codex", "Claude"]
+    assert sorted(start_result["participants"]) == ["Claude", "tester"]
     dialogue_id = start_result["dialogue_id"]
 
     send_resp = await client.post(
@@ -39,8 +39,8 @@ async def test_dialogue_start_send_and_end(client: AsyncClient, auth_headers: di
             "params": {
                 "dialogue_id": dialogue_id,
                 "room_id": "dialogue-room",
-                "sender_id": "codex-local",
-                "sender_name": "Codex",
+                "sender_id": "agent_tester",
+                "sender_name": "tester",
                 "target_agent": "Claude",
                 "content": "我们先对齐当前项目状态。",
             },
@@ -83,8 +83,8 @@ async def test_dialogue_rejects_send_after_turn_limit(client: AsyncClient, auth_
             "method": "dialogues/create",
             "params": {
                 "room_id": "dialogue-room",
-                "initiator_agent": "Codex",
-                "participants": ["Codex", "Claude"],
+                "initiator_agent": "tester",
+                "participants": ["tester", "Claude"],
                 "duration_seconds": 30,
                 "max_turns": 1,
             },
@@ -102,8 +102,8 @@ async def test_dialogue_rejects_send_after_turn_limit(client: AsyncClient, auth_
             "params": {
                 "dialogue_id": dialogue_id,
                 "room_id": "dialogue-room",
-                "sender_id": "codex-local",
-                "sender_name": "Codex",
+                "sender_id": "agent_tester",
+                "sender_name": "tester",
                 "target_agent": "Claude",
                 "content": "第一轮。",
             },
@@ -121,9 +121,9 @@ async def test_dialogue_rejects_send_after_turn_limit(client: AsyncClient, auth_
             "params": {
                 "dialogue_id": dialogue_id,
                 "room_id": "dialogue-room",
-                "sender_id": "claude-local",
-                "sender_name": "Claude",
-                "target_agent": "Codex",
+                "sender_id": "agent_tester",
+                "sender_name": "tester",
+                "target_agent": "Claude",
                 "content": "第二轮。",
             },
             "id": "dialogue-send-second",

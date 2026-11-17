@@ -3,11 +3,12 @@ from __future__ import annotations
 import json
 from datetime import datetime, timedelta, timezone
 from typing import Optional
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.permissions import require_role
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models.analytics import AnalyticsEvent
@@ -32,11 +33,16 @@ async def track_event(
     current_user: User = Depends(get_current_user),
 ) -> dict:
     """Record a product analytics event."""
+    if payload.room_id is not None:
+        await require_role(payload.room_id, current_user, db, min_role="viewer")
+    metadata_json = json.dumps(payload.metadata) if payload.metadata else None
+    if metadata_json is not None and len(metadata_json) > 4096:
+        raise HTTPException(status_code=400, detail="metadata too large")
     event = AnalyticsEvent(
         event_type=payload.event_type,
         user_id=current_user.id,
         room_id=payload.room_id,
-        metadata_json=json.dumps(payload.metadata) if payload.metadata else None,
+        metadata_json=metadata_json,
     )
     db.add(event)
     await db.commit()

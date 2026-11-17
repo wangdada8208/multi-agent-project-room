@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { apiFetch } from "../../lib/api";
 import type { MessageLoopState } from "../../types/chat";
 
 interface DialoguePanelProps {
@@ -6,91 +7,99 @@ interface DialoguePanelProps {
   onlineAgents: string[];
 }
 
+async function dialogueRpc(method: string, params: Record<string, unknown>) {
+  const res = await apiFetch("/a2a/dialogue-rpc", {
+    method: "POST",
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      method,
+      params,
+      id: Date.now(),
+    }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  if (data.error) throw new Error(data.error.message ?? "调用失败");
+  return data.result;
+}
+
 export function DialoguePanel({ roomId, onlineAgents }: DialoguePanelProps) {
   const [topic, setTopic] = useState("");
-  const [initiator, setInitiator] = useState(onlineAgents[0] || "Claude");
-  const [participant, setParticipant] = useState(onlineAgents[1] || "Codex");
+  const [initiator, setInitiator] = useState(onlineAgents[0] ?? "");
+  const [participant, setParticipant] = useState(onlineAgents[1] ?? "");
   const [maxTurns, setMaxTurns] = useState(6);
   const [loop, setLoop] = useState<MessageLoopState | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [injectText, setInjectText] = useState("");
+  const pollRef = useRef<number | null>(null);
 
   const all_participants = 2; // initiator + participant
+
+  const stopPolling = () => {
+    if (pollRef.current !== null) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+  };
+
+  useEffect(() => stopPolling, []);
+
+  useEffect(() => {
+    if (!onlineAgents.includes(initiator)) setInitiator(onlineAgents[0] ?? "");
+    if (!onlineAgents.includes(participant)) {
+      setParticipant(onlineAgents.find((a) => a !== initiator) ?? "");
+    }
+  }, [onlineAgents, initiator, participant]);
 
   async function startDialogue() {
     if (!topic.trim()) return;
     setLoading(true);
     setError("");
     try {
-      const token = localStorage.getItem("mapr-auth-token") ?? "";
-      const res = await fetch("/a2a/dialogue-rpc", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({
-          jsonrpc: "2.0",
-          method: "dialogues/run",
-          params: {
-            room_id: roomId,
-            initiator_agent: initiator,
-            participants: [participant],
-            topic: topic.trim(),
-            max_turns: maxTurns,
-          },
-          id: Date.now(),
-        }),
+      const result = await dialogueRpc("dialogues/run", {
+        room_id: roomId,
+        initiator_agent: initiator,
+        participants: [participant],
+        topic: topic.trim(),
+        max_turns: maxTurns,
       });
-      const data = await res.json();
-      if (data.result) {
-        setLoop({
-          loop_id: data.result.dialogue_id,
-          room_id: roomId,
-          topic,
-          status: "active",
-          current_round: 0,
-          max_turns: data.result.max_turns,
-          turns: [],
-        });
-        // Poll real status from server every 5 seconds
-        const pollId = setInterval(async () => {
-          try {
-            const token = localStorage.getItem("mapr-auth-token") ?? "";
-            const statusRes = await fetch("/a2a/dialogue-rpc", {
-              method: "POST",
-              headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-              body: JSON.stringify({
-                jsonrpc: "2.0",
-                method: "dialogues/status",
-                params: { dialogue_id: data.result.dialogue_id },
-                id: Date.now(),
-              }),
-            });
-            const statusData = await statusRes.json();
-            if (statusData.result) {
-              setLoop((prev) => prev ? {
-                ...prev,
-                status: statusData.result.status,
-                current_round: Math.floor((statusData.result.turns?.length ?? 0) / all_participants),
-                turns: (statusData.result.turns ?? []).map((t: Record<string, unknown>) => ({
-                  agent_name: t.agent as string,
-                  content: t.content as string,
-                  turn_number: prev.turns.length + 1,
-                  signals_consensus: t.consensus as boolean,
-                  conflicts: [],
-                  timestamp: new Date().toISOString(),
-                })),
-              } : null);
-              if (statusData.result.status !== "active") clearInterval(pollId);
-            }
-          } catch {
-            // Silent fail on poll
+      const dialogueId = result.dialogue_id;
+      setLoop({
+        loop_id: dialogueId,
+        room_id: roomId,
+        topic: topic.trim(),
+        status: "active",
+        current_round: 0,
+        max_turns: result.max_turns,
+        turns: [],
+      });
+      stopPolling();
+      pollRef.current = window.setInterval(async () => {
+        try {
+          const status = await dialogueRpc("dialogues/status", { dialogue_id: dialogueId });
+          if (status) {
+            setLoop((prev) => prev ? {
+              ...prev,
+              status: status.status,
+              current_round: Math.floor((status.turns?.length ?? 0) / all_participants),
+              turns: (status.turns ?? []).map((t: Record<string, unknown>, index: number) => ({
+                agent_name: t.agent as string,
+                content: t.content as string,
+                turn_number: index + 1,
+                signals_consensus: t.consensus as boolean,
+                conflicts: [],
+                timestamp: new Date().toISOString(),
+              })),
+            } : null);
+            if (status.status !== "active") stopPolling();
           }
-        }, 5000);
-      } else {
-        setError(data.error?.message ?? "启动失败");
-      }
-    } catch {
-      setError("网络错误");
+        } catch {
+          // Transient poll failure; the next tick retries.
+        }
+      }, 5000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "启动失败");
     } finally {
       setLoading(false);
     }
@@ -99,19 +108,13 @@ export function DialoguePanel({ roomId, onlineAgents }: DialoguePanelProps) {
   async function endDialogue() {
     if (!loop) return;
     setLoading(true);
+    setError("");
     try {
-      const token = localStorage.getItem("mapr-auth-token") ?? "";
-      await fetch("/a2a/dialogue-rpc", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({
-          jsonrpc: "2.0",
-          method: "dialogues/end",
-          params: { dialogue_id: loop.loop_id },
-          id: Date.now(),
-        }),
-      });
+      await dialogueRpc("dialogues/end", { dialogue_id: loop.loop_id });
       setLoop((prev) => prev ? { ...prev, status: "canceled" } : null);
+      stopPolling();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "结束失败");
     } finally {
       setLoading(false);
     }
@@ -120,21 +123,16 @@ export function DialoguePanel({ roomId, onlineAgents }: DialoguePanelProps) {
   async function injectHumanMessage() {
     if (!loop || !injectText.trim()) return;
     setLoading(true);
+    setError("");
     try {
-      const token = localStorage.getItem("mapr-auth-token") ?? "";
-      await fetch("/a2a/dialogue-rpc", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({
-          jsonrpc: "2.0",
-          method: "dialogues/inject",
-          params: { dialogue_id: loop.loop_id, content: injectText.trim(), sender_type: "human" },
-          id: Date.now(),
-        }),
+      await dialogueRpc("dialogues/inject", {
+        dialogue_id: loop.loop_id,
+        content: injectText.trim(),
+        sender_type: "human",
       });
       setInjectText("");
-    } catch {
-      // Silent fail
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "注入失败");
     } finally {
       setLoading(false);
     }
@@ -143,20 +141,11 @@ export function DialoguePanel({ roomId, onlineAgents }: DialoguePanelProps) {
   async function skipTurn() {
     if (!loop) return;
     setLoading(true);
+    setError("");
     try {
-      const token = localStorage.getItem("mapr-auth-token") ?? "";
-      await fetch("/a2a/dialogue-rpc", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({
-          jsonrpc: "2.0",
-          method: "dialogues/skip",
-          params: { dialogue_id: loop.loop_id },
-          id: Date.now(),
-        }),
-      });
-    } catch {
-      // Silent
+      await dialogueRpc("dialogues/skip", { dialogue_id: loop.loop_id });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "跳过失败");
     } finally {
       setLoading(false);
     }

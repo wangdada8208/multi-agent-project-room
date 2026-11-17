@@ -96,7 +96,6 @@ class User(Base):
             "display_name": self.display_name,
             "user_type": self.user_type,
             "avatar_url": self.avatar_url,
-            "is_online": self.is_online,
             "is_active": self.is_active,
             "last_seen_at": self.last_seen_at.isoformat() if self.last_seen_at else None,
             "created_at": self.created_at.isoformat(),

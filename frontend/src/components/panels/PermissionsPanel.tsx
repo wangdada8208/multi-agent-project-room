@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { apiFetch } from "../../lib/api";
 
 interface RoomMember {
   user_id: string;
@@ -23,10 +24,7 @@ export function PermissionsPanel({ roomId }: PermissionsPanelProps) {
 
   async function fetchPermissions() {
     try {
-      const token = localStorage.getItem("mapr-auth-token") ?? "";
-      const res = await fetch(`/api/v1/rooms/${roomId}/permissions`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await apiFetch(`/api/v1/rooms/${roomId}/permissions`);
       if (res.ok) {
         const data = await res.json();
         setMembers(data.members ?? []);
@@ -51,10 +49,8 @@ export function PermissionsPanel({ roomId }: PermissionsPanelProps) {
     setError("");
     setMessage("");
     try {
-      const token = localStorage.getItem("mapr-auth-token") ?? "";
-      const res = await fetch(`/api/v1/rooms/${roomId}/invite`, {
+      const res = await apiFetch(`/api/v1/rooms/${roomId}/invite`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ username: inviteUsername.trim(), role: inviteRole }),
       });
       if (res.ok) {
@@ -74,10 +70,8 @@ export function PermissionsPanel({ roomId }: PermissionsPanelProps) {
 
   async function handleRoleChange(userId: string, newRole: string) {
     try {
-      const token = localStorage.getItem("mapr-auth-token") ?? "";
-      const res = await fetch(`/api/v1/rooms/${roomId}/role`, {
+      const res = await apiFetch(`/api/v1/rooms/${roomId}/role`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ user_id: userId, role: newRole }),
       });
       if (res.ok) fetchPermissions();
@@ -86,10 +80,8 @@ export function PermissionsPanel({ roomId }: PermissionsPanelProps) {
 
   async function handleRemove(userId: string) {
     try {
-      const token = localStorage.getItem("mapr-auth-token") ?? "";
-      const res = await fetch(`/api/v1/rooms/${roomId}/members/${userId}`, {
+      const res = await apiFetch(`/api/v1/rooms/${roomId}/members/${userId}`, {
         method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) fetchPermissions();
     } catch { /* silent */ }

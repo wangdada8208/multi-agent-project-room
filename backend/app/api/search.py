@@ -38,14 +38,16 @@ async def search_messages(
             "total": 0,
         }
 
-    pattern = f"%{q}%"
+    # Escape LIKE metacharacters so user input is matched literally.
+    escaped = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    pattern = f"%{escaped}%"
     stmt = (
         select(Message)
         .where(
             Message.room_id == room.id,
             or_(
-                Message.content.ilike(pattern),
-                Message.sender_name.ilike(pattern),
+                Message.content.ilike(pattern, escape="\\"),
+                Message.sender_name.ilike(pattern, escape="\\"),
             ),
         )
         .order_by(Message.created_at.desc())

@@ -121,6 +121,8 @@ async def _save_room_message(
     content: str,
     dialogue_id: str,
 ) -> dict:
+    from app.chat.plaintext_guard import PlaintextStorageForbidden
+
     try:
         async with async_session() as db:
             await chat_service.get_or_create_room(
@@ -140,6 +142,20 @@ async def _save_room_message(
             payload = message.to_dict()
             payload["dialogue_id"] = dialogue_id
             return payload
+    except PlaintextStorageForbidden:
+        # Encrypted room text must never reach hub storage or broadcasts.
+        return {
+            "id": str(uuid.uuid4()),
+            "room_id": room_id,
+            "sender_id": sender_id,
+            "sender_type": "agent",
+            "sender_name": sender_name,
+            "content": None,
+            "msg_type": "text",
+            "parent_id": dialogue_id,
+            "created_at": _now().isoformat(),
+            "persistence": "refused_encrypted",
+        }
     except Exception:
         logger.warning("dialogue message persistence failed")
         return {
@@ -210,7 +226,8 @@ async def rpc_dialogues_create(params: dict, user: User) -> dict:
     async with async_session() as db:
         room = await db.get(Room, room_id)
         if not room:
-            room = Room(id=room_id, name=f"Room {room_id[:8]}", created_by=user.id)
+            # Dialogue traffic is hub-mediated plaintext; these rooms are not XMTP.
+            room = Room(id=room_id, name=f"Room {room_id[:8]}", created_by=user.id, transport="hub")
             db.add(room)
             await db.flush()
             perm = RoomPermission(room_id=room_id, user_id=user.id, role="owner")
@@ -227,6 +244,8 @@ async def rpc_dialogues_create(params: dict, user: User) -> dict:
     max_turns = max(1, min(max_turns, 40))
     now = _now()
     dialogue_id = str(params.get("dialogue_id") or uuid.uuid4())
+    if dialogue_id in DIALOGUES:
+        raise DialogueError("dialogue_id already exists")
     dialogue = {
         "dialogue_id": dialogue_id,
         "room_id": room_id,
@@ -266,16 +285,18 @@ async def rpc_dialogues_send(params: dict, user: User) -> dict:
     if not dialogue:
         raise HTTPException(status_code=404, detail="Dialogue not found")
 
-    from app.models.user import User as UserModel
-
     async with async_session() as db:
         await _require_dialogue_room_role(db, dialogue["room_id"], user.id)
 
-        # Impersonation guard: cannot forge another real user ID as sender_id
-        if sender_id != user.id:
-            other_user = await db.get(UserModel, sender_id)
-            if other_user and other_user.id != user.id:
-                raise HTTPException(status_code=403, detail="Impersonation of another user is prohibited")
+    # Sender identity is bound to the authenticated caller. The composite id
+    # (agent_<slug>) derives only from the unique account username; display_name
+    # is a non-unique free-text label and must never grant an identity.
+    caller_name = user.username.casefold()
+    composite_id = f"agent_{caller_name.replace(' ', '_')}"
+    if sender_id != user.id and sender_id.casefold() != composite_id:
+        raise HTTPException(status_code=403, detail="Impersonation of another user is prohibited")
+    if sender_name.casefold() != caller_name:
+        raise HTTPException(status_code=403, detail="Impersonation of another user is prohibited")
     if not dialogue or dialogue["status"] != "active":
         raise DialogueError("Dialogue is not active")
     if _now() >= dialogue["expires_at"]:
@@ -306,6 +327,8 @@ async def rpc_dialogues_send(params: dict, user: User) -> dict:
         content=content,
         dialogue_id=dialogue_id,
     )
+    if message_payload.get("persistence") == "refused_encrypted":
+        raise DialogueError("加密房间的对话消息不经过 Hub")
     message_payload["dialogue_id"] = dialogue_id
     message_payload["target_agent"] = target_agent
 
@@ -350,12 +373,7 @@ async def rpc_dialogues_end(params: dict, user: User) -> dict:
         {"type": "agent_dialogue_ended", "dialogue": _serialize_dialogue(dialogue)},
     )
     # Cleanup: remove ended dialogue after 60 seconds to prevent memory leak
-    import asyncio
-    async def _delayed_cleanup(did=dialogue_id):
-        await asyncio.sleep(60)
-        DIALOGUES.pop(did, None)
-        RUNNING_LOOPS.discard(did)
-    asyncio.create_task(_delayed_cleanup())
+    _schedule_dialogue_cleanup(dialogue_id)
     return _serialize_dialogue(dialogue)
 
 
@@ -363,6 +381,17 @@ async def rpc_dialogues_end(params: dict, user: User) -> dict:
 # ── Dialogue auto-run: backend drives agent-to-agent message loop ──
 
 RUNNING_LOOPS: set[str] = set()
+
+
+def _schedule_dialogue_cleanup(dialogue_id: str, delay_seconds: int = 60) -> None:
+    import asyncio
+
+    async def _delayed_cleanup(did=dialogue_id):
+        await asyncio.sleep(delay_seconds)
+        DIALOGUES.pop(did, None)
+        RUNNING_LOOPS.discard(did)
+
+    asyncio.create_task(_delayed_cleanup())
 
 
 async def _send_to_agent(agent_name: str, prompt: str) -> str:
@@ -496,8 +525,9 @@ async def _run_dialogue_loop(dialogue_id: str):
                     content=response_text,
                     dialogue_id=dialogue_id,
                 )
-                if message_payload.get("persistence") == "failed":
-                    dialogue.update(status="ended", reason="persistence_failed", ended_at=_now())
+                if message_payload.get("persistence"):
+                    reason = "encrypted_room" if message_payload["persistence"] == "refused_encrypted" else "persistence_failed"
+                    dialogue.update(status="ended", reason=reason, ended_at=_now())
                     break
                 dialogue["turns"].append(turn_data)
 
@@ -527,6 +557,7 @@ async def _run_dialogue_loop(dialogue_id: str):
         dialogue.update(status="ended", reason="access_revoked", ended_at=_now())
     finally:
         RUNNING_LOOPS.discard(dialogue_id)
+        _schedule_dialogue_cleanup(dialogue_id)
         await connection_manager.broadcast(room_id, {
             "type": "agent_dialogue_ended",
             "dialogue": _serialize_dialogue(dialogue),

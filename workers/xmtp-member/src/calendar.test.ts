@@ -34,6 +34,20 @@ test("free/busy only contains start and end, sorted, inside the range", () => {
   }
 });
 
+test("events spanning outside the range are clamped to it", () => {
+  const payload = freeBusy(
+    [
+      { start: "2026-10-03T08:00:00Z", end: "2026-10-06T12:00:00Z", title: "跨周" },
+      { start: "2026-10-08T20:00:00Z", end: "2026-10-12T09:00:00Z", title: "跨周末" },
+    ],
+    { date_from: "2026-10-05", date_to: "2026-10-09" }
+  );
+  assert.deepEqual(payload.busy, [
+    { start: "2026-10-05T00:00:00.000Z", end: "2026-10-06T12:00:00.000Z" },
+    { start: "2026-10-08T20:00:00.000Z", end: "2026-10-10T00:00:00.000Z" },
+  ]);
+});
+
 test("the last day of the range is included", () => {
   const payload = freeBusy(
     [{ start: "2026-10-09T23:00:00Z", end: "2026-10-09T23:30:00Z" }],
