@@ -43,7 +43,7 @@ export HOME="$FAKE_HOME"
 
 say_section "0. 环境"
 for c in node npm curl tar; do
-  command -v "$c" >/dev/null 2>&1 || { bad "缺少 $c，无法继续"; exit 1; }
+  command -v "$c" >/dev/null 2>&1 || { bad "缺少 ${c}，无法继续"; exit 1; }
 done
 ok "node $(node -v) / npm $(npm -v)"
 
