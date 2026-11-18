@@ -80,3 +80,58 @@ if [[ "$*" == *"alembic"* && "$FAILURE" == migration ]]; then exit 7; fi
         assert (backup / "docker-compose.yml").read_text() == "# previous compose\n"
         assert (backup / ".env").read_text() == "SYNTHETIC=1\n"
         assert "Database is not automatically downgraded" in result.stderr
+
+
+def test_deploy_script_syncs_optional_auth_env_and_preserves_backslashes(tmp_path):
+    target = tmp_path / "server"
+    target.mkdir()
+    (target / ".env").write_text(
+        "SYNTHETIC=1\nMAPR_SMTP_PASSWORD=old-pw\nMAPR_EMAIL_FROM_NAME=Existing\n"
+    )
+    (target / "docker-compose.yml").write_text("# previous compose\n")
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    log = tmp_path / "calls.log"
+    fake_docker = '''#!/usr/bin/env bash
+echo "$*" >> "$CALL_LOG"
+if [[ "$1 $2" == "image inspect" ]]; then exit 1; fi
+if [[ "$*" == *"pg_dump"* ]]; then echo synthetic-backup; fi
+if [[ "$*" == *"printenv POSTGRES_PASSWORD"* ]]; then echo synthetic_password; fi
+if [[ "$*" == *"ps -q backend" ]]; then echo backend-container; fi
+if [[ "$*" == *"ps -q frontend" ]]; then echo frontend-container; fi
+if [[ "$1" == inspect && "$*" == *HostConfig.PortBindings* ]]; then echo 18180
+elif [[ "$1" == inspect ]]; then echo sha256:synthetic-previous-image; fi
+'''
+    for name, content in {
+        "docker": fake_docker,
+        "curl": '#!/usr/bin/env bash\nexit 0\n',
+        "sleep": '#!/usr/bin/env bash\nexit 0\n',
+    }.items():
+        script = bin_dir / name
+        script.write_text(content)
+        script.chmod(0o700)
+
+    env = {
+        **os.environ,
+        "PATH": f"{bin_dir}:{os.environ['PATH']}",
+        "MAPR_DEPLOY_DIR": str(target),
+        "IMAGE_TAG": "b" * 40,
+        "VITE_XMTP_WORKER_ADDRESS": "0x" + "1" * 40,
+        "VITE_XMTP_ENV": "production",
+        "GITHUB_WORKSPACE": str(ROOT),
+        "CALL_LOG": str(log),
+        "MAPR_GOOGLE_CLIENT_ID": "cid-123.apps.googleusercontent.com",
+        "MAPR_SMTP_PASSWORD": r"p@ss\1\2word",
+        "MAPR_EMAIL_FROM_NAME": "",
+    }
+    result = subprocess.run(
+        ["bash", str(ROOT / "scripts/deploy.sh")],
+        env=env,
+        text=True,
+        capture_output=True,
+    )
+    assert result.returncode == 0, result.stderr
+    env_lines = (target / ".env").read_text().splitlines()
+    assert "MAPR_GOOGLE_CLIENT_ID=cid-123.apps.googleusercontent.com" in env_lines
+    assert r"MAPR_SMTP_PASSWORD=p@ss\1\2word" in env_lines
+    assert "MAPR_EMAIL_FROM_NAME=Existing" in env_lines

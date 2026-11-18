@@ -217,6 +217,7 @@ jobs:
           build-args: |
             VITE_XMTP_WORKER_ADDRESS=${{ vars.VITE_XMTP_WORKER_ADDRESS }}
             VITE_XMTP_ENV=${{ vars.VITE_XMTP_ENV }}
+            VITE_GOOGLE_CLIENT_ID=${{ vars.VITE_GOOGLE_CLIENT_ID }}
           push: true
           tags: |
             ${{ env.FRONTEND_IMAGE }}:${{ steps.meta.outputs.tag }}
@@ -250,6 +251,22 @@ jobs:
           IMAGE_TAG: ${{ needs.build.outputs.tag }}
           VITE_XMTP_WORKER_ADDRESS: ${{ vars.VITE_XMTP_WORKER_ADDRESS }}
           VITE_XMTP_ENV: ${{ vars.VITE_XMTP_ENV }}
+          VITE_GOOGLE_CLIENT_ID: ${{ vars.VITE_GOOGLE_CLIENT_ID }}
+          MAPR_GOOGLE_CLIENT_ID: ${{ vars.MAPR_GOOGLE_CLIENT_ID }}
+          MAPR_GOOGLE_JWKS_URL: ${{ vars.MAPR_GOOGLE_JWKS_URL }}
+          MAPR_OAUTH_HTTP_PROXY: ${{ vars.MAPR_OAUTH_HTTP_PROXY }}
+          MAPR_EMAIL_PROVIDER: ${{ vars.MAPR_EMAIL_PROVIDER }}
+          MAPR_EMAIL_FROM_ADDRESS: ${{ vars.MAPR_EMAIL_FROM_ADDRESS }}
+          MAPR_EMAIL_FROM_NAME: ${{ vars.MAPR_EMAIL_FROM_NAME }}
+          MAPR_EMAIL_WORKER_URL: ${{ vars.MAPR_EMAIL_WORKER_URL }}
+          MAPR_EMAIL_WORKER_SECRET: ${{ secrets.MAPR_EMAIL_WORKER_SECRET }}
+          MAPR_EMAIL_API_URL: ${{ vars.MAPR_EMAIL_API_URL }}
+          MAPR_EMAIL_API_KEY: ${{ secrets.MAPR_EMAIL_API_KEY }}
+          MAPR_SMTP_HOST: ${{ vars.MAPR_SMTP_HOST }}
+          MAPR_SMTP_PORT: ${{ vars.MAPR_SMTP_PORT }}
+          MAPR_SMTP_USERNAME: ${{ vars.MAPR_SMTP_USERNAME }}
+          MAPR_SMTP_PASSWORD: ${{ secrets.MAPR_SMTP_PASSWORD }}
+          MAPR_SMTP_USE_SSL: ${{ vars.MAPR_SMTP_USE_SSL }}
         run: |
           set -euo pipefail
           id

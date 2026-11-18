@@ -99,13 +99,35 @@ if not is_synthetic:
         raise SystemExit('MAPR_AUTH_SECRET_KEY has insufficient character entropy (must contain at least 4 unique characters)')
 
 values = {'VITE_XMTP_WORKER_ADDRESS': address, 'VITE_XMTP_ENV': xmtp_env, 'MAPR_FRONTEND_PORT': os.environ['MAPR_FRONTEND_PORT'], 'MAPR_ENVIRONMENT': 'production'}
+OPTIONAL_AUTH_KEYS = (
+    'VITE_GOOGLE_CLIENT_ID',
+    'MAPR_GOOGLE_CLIENT_ID',
+    'MAPR_GOOGLE_JWKS_URL',
+    'MAPR_OAUTH_HTTP_PROXY',
+    'MAPR_EMAIL_PROVIDER',
+    'MAPR_EMAIL_FROM_ADDRESS',
+    'MAPR_EMAIL_FROM_NAME',
+    'MAPR_EMAIL_WORKER_URL',
+    'MAPR_EMAIL_WORKER_SECRET',
+    'MAPR_EMAIL_API_URL',
+    'MAPR_EMAIL_API_KEY',
+    'MAPR_SMTP_HOST',
+    'MAPR_SMTP_PORT',
+    'MAPR_SMTP_USERNAME',
+    'MAPR_SMTP_PASSWORD',
+    'MAPR_SMTP_USE_SSL',
+)
+for opt_key in OPTIONAL_AUTH_KEYS:
+    opt_val = os.environ.get(opt_key, '')
+    if opt_val and '\n' not in opt_val and '\r' not in opt_val:
+        values[opt_key] = opt_val
 if not re.search(r'^MAPR_DATABASE_PASSWORD=.+$', raw, re.M):
     password = subprocess.check_output(os.environ['MAPR_COMPOSE_COMMAND'].split() + ['exec', '-T', 'postgres', 'printenv', 'POSTGRES_PASSWORD'], text=True).strip()
     if not re.fullmatch(r'[A-Za-z0-9_~.-]+', password):
         raise SystemExit('Existing database password requires explicit URI encoding; refusing to change it')
     values['MAPR_DATABASE_PASSWORD'] = password
 for key, value in values.items():
-    raw = re.sub(r'^' + key + r'=.*$', key + '=' + value, raw, flags=re.M) if re.search(r'^' + key + '=', raw, re.M) else raw.rstrip() + '\n' + key + '=' + value + '\n'
+    raw = re.sub(r'^' + re.escape(key) + r'=.*$', lambda _m, k=key, v=value: f'{k}={v}', raw, flags=re.M) if re.search(r'^' + re.escape(key) + r'=', raw, re.M) else raw.rstrip() + '\n' + key + '=' + value + '\n'
 temp = p.with_suffix('.release.tmp')
 temp.write_text(raw)
 temp.chmod(0o600)

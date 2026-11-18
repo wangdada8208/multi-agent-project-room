@@ -5,6 +5,9 @@ export interface AuthUser {
   username: string;
   display_name: string;
   user_type: "human" | "agent";
+  email?: string | null;
+  email_verified?: boolean;
+  avatar_url?: string | null;
   last_seen_at?: string | null;
 }
 
