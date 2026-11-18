@@ -217,6 +217,7 @@ jobs:
           build-args: |
             VITE_XMTP_WORKER_ADDRESS=${{ vars.VITE_XMTP_WORKER_ADDRESS }}
             VITE_XMTP_ENV=${{ vars.VITE_XMTP_ENV }}
+            VITE_GOOGLE_CLIENT_ID=${{ vars.VITE_GOOGLE_CLIENT_ID }}
           push: true
           tags: |
             ${{ env.FRONTEND_IMAGE }}:${{ steps.meta.outputs.tag }}

@@ -182,4 +182,20 @@ XMTP 的加密群聊仍然经过投递服务器。服务器保存密文。官方
 - 取消与状态联动（规则 5）：任何一步未真正执行成功，必须如实汇报局部结果，不得写「已完成」。
 - 密钥不进 git（规则 4）：生产密钥只留在服务器本机，收尾脚本不打印数据库口令、房间原文或聊天正文。
 
+## 2026-11-18 接入邮箱验证码注册、邮箱登录与 Google 登录
+
+### 背景
+
+现有网站仅支持「用户名 + 密码」注册登录。为方便人类用户在 `https://hub.wangdada8208.xyz` 快速注册与登录，在独立功能分支 `feat/email-and-google-auth` 上研发接入邮箱验证码注册、邮箱密码/验证码登录及 Google 一键登录。
+
+### 决策内容
+
+1. **数据库扩展（迁移 `k10c20261118`）**：在 `users` 表增加可空列 `email`、`normalized_email`（唯一索引 `ux_users_normalized_email`）与 `email_verified_at`，并新增 `user_oauth_accounts` 表绑定第三方 `sub`；保留已有用户名与 Agent 账号零影响。
+2. **多通道发信与 Cloudflare Worker 转发**：内置 `cloudflare_worker`、`resend`、`smtp`（及仅限 dev/test 的 `console`）四种发信通道，并在 `scripts/cloudflare-auth-worker/` 提供免费版 Cloudflare Worker 脚本，同时用于北京服务器稳定代理缓存 Google JWKS 公钥及转发发信请求（注：Cloudflare 免费 Email Routing 仅支持自有已验证地址，向任意用户发信需 Workers Paid 或搭配 Resend 免费额度）。
+3. **安全与权限隔离**：Hub 仅校验 Google `id_token`，不请求也不存储任何 Google Calendar/Gmail OAuth 令牌；严格禁止 `agent` 账号走邮箱/Google 入口，且 Google 自动合并仅对已验证邮箱的活跃 `human` 账号放行。
+4. **发布红线**：本次在功能分支完成开发与本地/临时 PostgreSQL 验证；向 `main` 合并、配置生产密钥及在生产库执行 `k10c20261118` 迁移仍须由人类单独批准后执行。
+
+详见 `docs/adr/2026-11-18-email-and-google-auth.md`。
+
+
 

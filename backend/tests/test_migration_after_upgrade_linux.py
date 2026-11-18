@@ -53,9 +53,9 @@ REPO_ROOT = BACKEND_DIR.parent
 ALEMBIC_INI = REPO_ROOT / "alembic.ini"
 
 # 生产环境期望的 Alembic 头（迁移脚本的最终状态）。
-HEAD_REVISION = "j00c20261117"
+HEAD_REVISION = "k10c20261118"
 # 回填用例的起点：h80 是「只有 normalized_username」的上一层，
-# 从它 upgrade 到 head 会跑 i90c20261017（回填）与 j00c20261117（helper 三表）。
+# 从它 upgrade 到 head 会跑 i90c20261017（回填）、j00c20261117（helper 三表）与 k10c20261118（邮箱与 OAuth 认证）。
 PRE_BACKFILL_REVISION = "h80c20261015"
 COMPARISON_INDEX = "ux_users_comparison_username"
 

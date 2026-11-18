@@ -34,6 +34,8 @@ from app.a2a import server as a2a_server
 from app.a2a import discovery as a2a_discovery
 from app.chat import ws_handler as chat_ws_handler
 from app.ws.connection_manager import connection_manager
+from app.auth.email_otp import reset_email_otp_state
+from app.auth.google_oauth import reset_google_jwks_cache
 from app.auth.rate_limit import _attempts, _blocked_until, _flush_redis_state
 
 # ---------------------------------------------------------------------------
@@ -180,6 +182,8 @@ async def setup_db():
     _attempts.clear()
     _blocked_until.clear()
     _flush_redis_state()
+    reset_email_otp_state()
+    reset_google_jwks_cache()
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
         await conn.run_sync(LEASE_METADATA.create_all)
@@ -188,6 +192,8 @@ async def setup_db():
     _attempts.clear()
     _blocked_until.clear()
     _flush_redis_state()
+    reset_email_otp_state()
+    reset_google_jwks_cache()
     async with engine.begin() as conn:
         await conn.run_sync(LEASE_METADATA.drop_all)
         await conn.run_sync(Base.metadata.drop_all)

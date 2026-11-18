@@ -131,6 +131,54 @@ export async function apiFetch(input: RequestInfo | URL, init: RequestInit = {})
   return response;
 }
 
+export interface AuthProviders {
+  email_enabled: boolean;
+  google_enabled: boolean;
+  google_client_id: string;
+}
+
+const _AUTH_ERROR_MAP: Record<string, string> = {
+  "Invalid username or password": "账号或密码错误，请重试",
+  "Inactive account": "该账号已被停用",
+  "Username already exists": "该用户名已被注册",
+};
+
+async function _parseAuthError(response: Response, fallbackMsg: string): Promise<string> {
+  const errorText = await response.text();
+  if (!errorText.trim()) return fallbackMsg;
+  try {
+    const errorJson = JSON.parse(errorText) as { detail?: unknown; error?: unknown };
+    if (Array.isArray(errorJson.detail)) {
+      const msgs = errorJson.detail.map((d: any) => {
+        const loc: string[] = Array.isArray(d?.loc) ? d.loc : [];
+        if (loc.includes("password")) return "密码长度至少需要 8 位，请重新输入";
+        if (loc.includes("username")) return "用户名格式不符合要求";
+        if (loc.includes("email")) return "请输入有效的邮箱地址";
+        if (loc.includes("code")) return "请输入 6 位数字验证码";
+        return typeof d?.msg === "string" ? d.msg : "输入格式不符合要求";
+      });
+      return msgs.join("；");
+    }
+    if (typeof errorJson.detail === "string" && errorJson.detail.trim()) {
+      return _AUTH_ERROR_MAP[errorJson.detail] ?? errorJson.detail;
+    }
+    if (typeof errorJson.error === "string" && errorJson.error.trim()) {
+      return errorJson.error;
+    }
+  } catch {
+    // Non-JSON response body
+  }
+  return errorText;
+}
+
+export async function fetchAuthProviders(): Promise<AuthProviders> {
+  const response = await apiFetch("/api/v1/auth/providers");
+  if (!response.ok) {
+    return { email_enabled: false, google_enabled: false, google_client_id: "" };
+  }
+  return response.json();
+}
+
 export async function register(input: {
   username: string;
   password: string;
@@ -142,27 +190,38 @@ export async function register(input: {
     body: JSON.stringify(input),
   });
   if (!response.ok) {
-    const errorText = await response.text();
-    try {
-      const errorJson = JSON.parse(errorText);
-      if (Array.isArray(errorJson.detail)) {
-        const msgs = errorJson.detail.map((d: any) => {
-          if (d.loc && d.loc.includes("password")) {
-            return "密码长度至少需要 8 位，请重新输入";
-          }
-          if (d.loc && d.loc.includes("username")) {
-            return "用户名格式不符合要求";
-          }
-          return d.msg || "输入格式不符合要求";
-        });
-        throw new Error(msgs.join("；"));
-      } else if (typeof errorJson.detail === "string") {
-        throw new Error(errorJson.detail);
-      }
-    } catch (e) {
-      if (e instanceof Error && e.message !== errorText) throw e;
-    }
-    throw new Error(errorText);
+    throw new Error(await _parseAuthError(response, "注册失败，请重试"));
+  }
+  return response.json();
+}
+
+export async function sendEmailCode(input: {
+  email: string;
+  purpose: "register" | "login";
+}): Promise<{ sent: boolean; expires_in: number; cooldown_seconds: number }> {
+  const response = await apiFetch("/api/v1/auth/email/send-code", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) {
+    throw new Error(await _parseAuthError(response, "发送验证码失败，请稍后重试"));
+  }
+  return response.json();
+}
+
+export async function registerWithEmail(input: {
+  email: string;
+  code: string;
+  password: string;
+  display_name?: string;
+  username?: string;
+}): Promise<{ user: AuthUser; access_token: string }> {
+  const response = await apiFetch("/api/v1/auth/email/register", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) {
+    throw new Error(await _parseAuthError(response, "邮箱注册失败，请重试"));
   }
   return response.json();
 }
@@ -175,7 +234,36 @@ export async function login(input: {
     method: "POST",
     body: JSON.stringify(input),
   });
-  if (!response.ok) throw new Error("登录失败，请检查用户名和密码");
+  if (!response.ok) {
+    throw new Error(await _parseAuthError(response, "登录失败，请检查账号和密码"));
+  }
+  return response.json();
+}
+
+export async function loginWithEmailCode(input: {
+  email: string;
+  code: string;
+}): Promise<{ user: AuthUser; access_token: string }> {
+  const response = await apiFetch("/api/v1/auth/email/login", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) {
+    throw new Error(await _parseAuthError(response, "验证码登录失败，请重试"));
+  }
+  return response.json();
+}
+
+export async function loginWithGoogle(
+  credential: string,
+): Promise<{ user: AuthUser; access_token: string }> {
+  const response = await apiFetch("/api/v1/auth/google", {
+    method: "POST",
+    body: JSON.stringify({ credential }),
+  });
+  if (!response.ok) {
+    throw new Error(await _parseAuthError(response, "Google 登录失败，请重试"));
+  }
   return response.json();
 }
 

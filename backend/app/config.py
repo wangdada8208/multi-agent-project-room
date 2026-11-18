@@ -36,6 +36,27 @@ class Settings(BaseSettings):
     environment: str = "development"
     trusted_proxies: list[str] = ["127.0.0.1", "::1", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"]
 
+    # Email OTP registration & login
+    email_provider: str = ""
+    email_from_address: str = "noreply@wangdada8208.xyz"
+    email_from_name: str = "Multi-Agent Project Room"
+    email_worker_url: str = ""
+    email_worker_secret: SecretStr = SecretStr("")
+    email_api_url: str = "https://api.resend.com/emails"
+    email_api_key: SecretStr = SecretStr("")
+    smtp_host: str = ""
+    smtp_port: int = 465
+    smtp_username: str = ""
+    smtp_password: SecretStr = SecretStr("")
+    smtp_use_ssl: bool = True
+    email_otp_ttl_seconds: int = 600
+    email_otp_cooldown_seconds: int = 60
+
+    # Google OAuth (GIS id_token verification)
+    google_client_id: str = ""
+    google_jwks_url: str = "https://www.googleapis.com/oauth2/v3/certs"
+    oauth_http_proxy: str = ""
+
     model_config = {"env_file": ".env", "env_prefix": "MAPR_"}
 
     @field_validator("trusted_proxies", mode="before")
@@ -77,6 +98,10 @@ class Settings(BaseSettings):
             if len(set(stripped)) < 4:
                 raise ValueError(
                     "MAPR_AUTH_SECRET_KEY has insufficient character entropy (must contain at least 4 unique characters)"
+                )
+            if (self.email_provider or "").strip().lower() == "console":
+                raise ValueError(
+                    "MAPR_EMAIL_PROVIDER='console' cannot be used in non-development environments"
                 )
         return self
 

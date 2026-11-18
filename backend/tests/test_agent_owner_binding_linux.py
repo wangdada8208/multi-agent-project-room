@@ -290,16 +290,21 @@ def test_postgresql_offline_ddl_and_revision_head():
             # H3：唯一约束迁移挂在 h80c20261015 之后。
             assert revisions["i90c20261017"] == "h80c20261015"
             if "j00c20261117" in revisions:
-                # helper 三表迁移挂在 i90c20261017 之后，它是唯一的链头。
+                # helper 三表迁移挂在 i90c20261017 之后。
                 assert revisions["j00c20261117"] == "i90c20261017"
-                assert set(revisions) - set(revisions.values()) == {"j00c20261117"}
+                if "k10c20261118" in revisions:
+                    # 邮箱与 OAuth 绑定迁移挂在 j00c20261117 之后，它是唯一的链头。
+                    assert revisions["k10c20261118"] == "j00c20261117"
+                    assert set(revisions) - set(revisions.values()) == {"k10c20261118"}
+                else:
+                    assert set(revisions) - set(revisions.values()) == {"j00c20261117"}
             else:
                 assert set(revisions) - set(revisions.values()) == {"i90c20261017"}
         else:
             assert set(revisions) - set(revisions.values()) == {"h80c20261015"}
     else:
         assert set(revisions) - set(revisions.values()) == {"g70c20261012"}
-    old = {r: parent for r, parent in revisions.items() if r not in (new, "b20c20261010", "c30c20261010", "d40c20261010", "e50c20261011", "f60c20261011", "g70c20261012", "h80c20261015", "i90c20261017", "j00c20261117")}
+    old = {r: parent for r, parent in revisions.items() if r not in (new, "b20c20261010", "c30c20261010", "d40c20261010", "e50c20261011", "f60c20261011", "g70c20261012", "h80c20261015", "i90c20261017", "j00c20261117", "k10c20261118")}
     assert len(old) == 11 and set(old) - set(old.values()) == {"f9a1c2d3e4b5"}
     spec = importlib.util.spec_from_file_location("binding_offline_migration", versions / "a10c20261010_agent_owner_binding.py")
     migration = importlib.util.module_from_spec(spec)

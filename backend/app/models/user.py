@@ -1,4 +1,5 @@
 from __future__ import annotations
+import unicodedata
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
@@ -11,6 +12,24 @@ from app.agent.identity import comparison_identity, normalize_unicode_casefold
 # 模型侧必须与此一致，否则 SQLite 的 create_all()（默认测试路径）
 # 与真实 PostgreSQL 迁移建出来的表形状会不一致。
 COMPARISON_USERNAME_INDEX = "ux_users_comparison_username"
+NORMALIZED_EMAIL_INDEX = "ux_users_normalized_email"
+
+
+def _normalize_email_key(value: str) -> str:
+    return unicodedata.normalize("NFKC", value.strip()).lower()
+
+
+def _default_normalized_email(context) -> Optional[str]:
+    """从同一行正在插入的 ``email`` 推导归一化邮箱键；无邮箱时返回 ``None``。"""
+    try:
+        parameters = context.get_current_parameters() or {}
+    except Exception:
+        parameters = {}
+    email = parameters.get("email")
+    if not isinstance(email, str):
+        return None
+    normalized = _normalize_email_key(email)
+    return normalized or None
 
 
 def _default_comparison_username(context) -> str:
@@ -67,6 +86,11 @@ class User(Base):
     )
     owner_bound_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     avatar_url: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    email: Mapped[Optional[str]] = mapped_column(String(254), nullable=True)
+    normalized_email: Mapped[Optional[str]] = mapped_column(
+        String(254), nullable=True, default=_default_normalized_email
+    )
+    email_verified_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     is_online: Mapped[bool] = mapped_column(Boolean, default=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     password_hash: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
@@ -77,6 +101,7 @@ class User(Base):
 
     __table_args__ = (
         Index(COMPARISON_USERNAME_INDEX, "comparison_username", unique=True),
+        Index(NORMALIZED_EMAIL_INDEX, "normalized_email", unique=True),
     )
 
     @validates("username")
@@ -89,8 +114,20 @@ class User(Base):
             self.comparison_username = comparison_identity(value)
         return value
 
-    def to_dict(self) -> dict:
-        return {
+    @validates("email")
+    def _sync_normalized_email(self, key: str, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            self.normalized_email = None
+            return None
+        cleaned = unicodedata.normalize("NFKC", value).strip()
+        if not cleaned:
+            self.normalized_email = None
+            return None
+        self.normalized_email = cleaned.lower()
+        return cleaned
+
+    def to_dict(self, *, include_email: bool = False) -> dict:
+        data = {
             "id": self.id,
             "username": self.username,
             "display_name": self.display_name,
@@ -100,3 +137,7 @@ class User(Base):
             "last_seen_at": self.last_seen_at.isoformat() if self.last_seen_at else None,
             "created_at": self.created_at.isoformat(),
         }
+        if include_email:
+            data["email"] = self.email
+            data["email_verified"] = self.email_verified_at is not None
+        return data

@@ -591,6 +591,94 @@ input[type="range"]::-moz-range-thumb {
   text-decoration: underline;
 }
 
+.auth-inline-row {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.auth-inline-row .input {
+  flex: 1;
+  min-width: 0;
+}
+
+.auth-code-btn {
+  flex-shrink: 0;
+  padding: 0 13px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-strong);
+  background: var(--bg-subtle);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.auth-code-btn:hover:not(:disabled) {
+  background: var(--bg-hover);
+  border-color: var(--accent-border);
+}
+
+.auth-code-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.auth-notice {
+  background: var(--success-bg);
+  border: 1px solid var(--success-border);
+  color: var(--success);
+  border-radius: var(--radius-sm);
+  padding: 9px 12px;
+  font-size: 13px;
+  text-align: left;
+  line-height: 1.45;
+}
+
+.auth-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 18px 0 14px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.auth-divider::before,
+.auth-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.auth-google-slot {
+  display: flex;
+  justify-content: center;
+  min-height: 40px;
+}
+
+.auth-method-toggle {
+  margin-top: 14px;
+  text-align: center;
+}
+
+.auth-method-toggle button {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 2px 4px;
+}
+
+.auth-method-toggle button:hover {
+  text-decoration: underline;
+}
+
 /* ── 首页（房间列表与一键接入横幅） ──────────────────────── */
 
 .home {
