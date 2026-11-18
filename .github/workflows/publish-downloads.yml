@@ -153,8 +153,41 @@ jobs:
             $SUDO mv -f "$DEST_DIR/.tmp.$LATEST_ALIAS.sha256" "$DEST_DIR/$LATEST_ALIAS.sha256"
           fi
 
-          if $SUDO nginx -T 2>&1 | grep -q 'location ^~ /downloads/'; then
-            echo "Nginx /downloads/ location already configured; skipping patch"
+          if ! $SUDO nginx -t >/dev/null 2>&1; then
+            echo "Detected failing nginx -t; checking for .bak-downloads-* backups to restore"
+            $SUDO python3 - <<'PY'
+          import re
+          import shutil
+          import subprocess
+          from pathlib import Path
+
+          roots = [Path("/www/server/nginx/conf"), Path("/etc/nginx")]
+          grouped = {}
+          for root in roots:
+              if not root.is_dir():
+                  continue
+              for bak in sorted(root.rglob("*.bak-downloads-*")):
+                  base_str = re.sub(r"\.bak-downloads-[0-9]+$", "", str(bak))
+                  grouped.setdefault(base_str, []).append(bak)
+
+          for base_str, baks in sorted(grouped.items()):
+              earliest = sorted(baks)[0]
+              shutil.copy2(str(earliest), base_str)
+              print("Restored {} from {}".format(base_str, earliest))
+
+          subprocess.run(["nginx", "-t"], check=True)
+          for baks in grouped.values():
+              for bak in baks:
+                  try:
+                      bak.unlink()
+                  except OSError:
+                      pass
+          PY
+          fi
+
+          if curl --fail --head --silent --show-error --location "$PUBLIC_PREFIX/$TARBALL_NAME?v=$SHA_NORM" >/dev/null 2>&1; then
+            echo "Public /downloads/ endpoint already serving latest asset; skipping nginx patch"
+            $SUDO nginx -t
           else
             $SUDO env DOWNLOADS_ROOT="$ROOT" python3 - <<'PY'
           import os
@@ -165,7 +198,7 @@ jobs:
           from pathlib import Path
 
           downloads_root = os.environ["DOWNLOADS_ROOT"].rstrip("/") + "/"
-          marker = "location ^~ /downloads/"
+          existing_loc_re = re.compile(r"location\s+(?:(?:\^~|=|~\*?)\s+)?/downloads(?:/|\s|\{)")
           location = (
               "\n    location ^~ /downloads/ {\n"
               "        alias " + downloads_root + ";\n"
@@ -195,10 +228,10 @@ jobs:
           if not candidates:
               raise SystemExit("Could not find nginx config for hub.wangdada8208.xyz")
 
-          changed = False
+          backups = []
           for path in sorted(candidates):
               text = path.read_text()
-              if marker in text:
+              if existing_loc_re.search(text):
                   continue
 
               inserts = []
@@ -218,22 +251,36 @@ jobs:
                   if end is None:
                       continue
                   block = text[start:end]
-                  if "server_name" in block and "hub.wangdada8208.xyz" in block:
+                  if (
+                      "server_name" in block
+                      and "hub.wangdada8208.xyz" in block
+                      and not existing_loc_re.search(block)
+                  ):
                       inserts.append((end, location))
 
               if not inserts:
                   continue
 
               stamp = datetime.utcnow().strftime("%Y%m%d%H%M%S")
-              shutil.copy2(str(path), str(path) + ".bak-downloads-" + stamp)
+              bak_path = Path(str(path) + ".bak-downloads-" + stamp)
+              shutil.copy2(str(path), str(bak_path))
+              backups.append((path, bak_path))
               for pos, snippet in sorted(inserts, reverse=True):
                   text = text[:pos] + snippet + text[pos:]
               path.write_text(text)
-              changed = True
               print("Patched {}".format(path))
 
-          if changed:
-              subprocess.run(["nginx", "-t"], check=True)
+          if backups:
+              try:
+                  subprocess.run(["nginx", "-t"], check=True)
+              except Exception:
+                  for orig, bak in backups:
+                      shutil.copy2(str(bak), str(orig))
+                      try:
+                          bak.unlink()
+                      except OSError:
+                          pass
+                  raise
           PY
             if command -v systemctl >/dev/null 2>&1; then
               $SUDO systemctl reload nginx
