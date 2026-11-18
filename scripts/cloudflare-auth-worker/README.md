@@ -30,11 +30,11 @@
 ### 第二步：配置发信能力（二选一）
 
 - **方案 A（推荐，0 元起步）：免费版 Worker + Resend 免费层**
-  1. 注册 [Resend](https://resend.com/) → **Domains → Add Domain**，填写 `mail.wangdada8208.xyz`（或 `wangdada8208.xyz`）。
+  1. 注册 [Resend](https://resend.com/) → **Domains → Add Domain**，填写发信子域名（如 `mail.wangdada8208.xyz`；本部署实际复用已验证的 `notify.wangdada8208.xyz`）。
   2. 点击 **Sign in with Cloudflare** 一键自动把 SPF / DKIM / MX 记录写入你现有的 Cloudflare DNS。
-  3. 在 Resend 创建一个 API Key（`re_...`）。
+  3. 在 Resend 创建一个 API Key（`re_...`，建议仅授予 Sending access 并限定到该域名）。
   4. 两种接法任选其一：
-     - 经由本 Worker 转发：在 Worker Secrets 填入 `RESEND_API_KEY`，后端配置 `MAPR_EMAIL_PROVIDER="cloudflare_worker"`。
+     - 经由本 Worker 转发：在 Worker Secrets 填入 `RESEND_API_KEY`，后端配置 `MAPR_EMAIL_PROVIDER="cloudflare_worker"`（**本部署采用此方式**）。
      - 后端直连 Resend（最简单，不经过 Worker 转发发信）：后端直接配置 `MAPR_EMAIL_PROVIDER="resend"` 和 `MAPR_EMAIL_API_KEY="re_..."`（此时 Worker 仅负责 `/google-certs`）。
 
 - **方案 B（Cloudflare Paid 套餐）：原生 Cloudflare Email Service**
@@ -51,7 +51,7 @@
 2. 在部署机 `/opt/multi-agent-project-room/.env` 补齐以下环境变量后重启生效：
    ```bash
    MAPR_EMAIL_PROVIDER="cloudflare_worker"
-   MAPR_EMAIL_FROM_ADDRESS="noreply@mail.wangdada8208.xyz"
+   MAPR_EMAIL_FROM_ADDRESS="noreply@notify.wangdada8208.xyz"
    MAPR_EMAIL_FROM_NAME="Multi-Agent Project Room"
    MAPR_EMAIL_WORKER_URL="https://auth-relay.wangdada8208.xyz/send-email"
    MAPR_EMAIL_WORKER_SECRET="<你刚生成的 64 位 RELAY_SECRET>"

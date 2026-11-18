@@ -2,11 +2,13 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "mapr-auth-relay",
   "main": "worker.js",
+  "account_id": "847d8f78673d3d7bc78714d006195684",
   "compatibility_date": "2026-11-01",
   "routes": [
     {
-      "pattern": "auth-relay.wangdada8208.xyz/*",
-      "zone_name": "wangdada8208.xyz"
+      "pattern": "auth-relay.wangdada8208.xyz",
+      "zone_name": "wangdada8208.xyz",
+      "custom_domain": true
     }
   ]
   // 若已开通 Cloudflare Workers Paid 及 Email Service，可取消下方注释启用原生发信绑定：
