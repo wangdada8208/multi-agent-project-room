@@ -197,16 +197,61 @@ export const CLI_AGENT_SPECS: readonly CliAgentSpec[] = [
     modelFlag: "-m",
   },
   {
-    // MiniMax Code（mcode/minimax 二进制命名以实机为准）
+    // mcode exec "msg"（MiniMax Code；一次性任务子命令，TUI 是默认入口）
     key: "minimax-code",
     displayName: "MiniMax Code",
     binaries: ["mcode", "minimax"],
     versionArgs: ["--version"],
-    loginMarkers: [".minimax"],
+    loginMarkers: [{ path: ".minimax/config.yaml", minBytes: 8 }],
+    argvPrefix: ["exec"],
+    promptVia: "argv",
+    modelFlag: "-m",
+    envKeys: ["MINIMAX_API_KEY", "MINIMAX_CODE_API_KEY"],
+  },
+  {
+    // kilocode run "msg"（Kilo Code CLI，opencode 分支）
+    key: "kilocode",
+    displayName: "KiloCode",
+    binaries: ["kilocode", "kilo"],
+    versionArgs: ["--version"],
+    // opencode 同构：凭证走 auth.json；kilo.db/kilo.jsonc 首跑自建不算登录。
+    loginMarkers: [{ path: ".local/share/kilo/auth.json", minBytes: 8 }],
+    argvPrefix: ["run"],
+    promptVia: "argv",
+    modelFlag: "-m",
+  },
+  {
+    // kimi -p "msg"（Kimi Code CLI；旧的 kimi-cli 已被官方标记弃用）
+    key: "kimi",
+    displayName: "Kimi Code",
+    binaries: ["kimi", "kimi-cli"],
+    versionArgs: ["--version"],
+    // .kimi-code 是安装目录不是凭证；.kimi 空目录也不作数。
+    loginMarkers: [
+      { path: ".kimi/auth.json", minBytes: 8 },
+      { path: ".kimi-code/auth.json", minBytes: 8 },
+      { path: ".kimi/credentials.json", minBytes: 8 },
+    ],
     argvPrefix: ["-p"],
     promptVia: "argv",
-    modelFlag: "--model",
-    envKeys: ["MINIMAX_API_KEY", "MINIMAX_CODE_API_KEY"],
+    modelFlag: "-m",
+    envKeys: ["KIMI_API_KEY", "MOONSHOT_API_KEY"],
+  },
+  {
+    // amp -x "msg"（Sourcegraph Amp；execute 模式打完即退）
+    key: "amp",
+    displayName: "Amp",
+    binaries: ["amp"],
+    versionArgs: ["version"],
+    // .config/amp 与 device-id.json 启动即建，只认登录凭证文件。
+    loginMarkers: [
+      { path: ".config/amp/secrets.json", minBytes: 8 },
+      { path: ".config/amp/auth.json", minBytes: 8 },
+      { path: ".config/amp/session.json", minBytes: 8 },
+    ],
+    argvPrefix: ["-x"],
+    promptVia: "argv",
+    envKeys: ["AMP_API_KEY"],
   },
 ];
 

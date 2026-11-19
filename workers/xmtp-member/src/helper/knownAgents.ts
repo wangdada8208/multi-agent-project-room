@@ -163,6 +163,12 @@ const MAGPIE_NAME_TO_AGENT_KEY: Record<string, string> = {
   "mimo code": "minimax-code",
   codebuddy: "codebuddy",
   aider: "aider",
+  kilocode: "kilocode",
+  "kilo code": "kilocode",
+  "kimi code": "kimi",
+  kimi: "kimi",
+  "freecode (histh)": "freecode",
+  freecode: "freecode",
 };
 
 /** 网关地址的记录文件，按布局依次尝试（家目录相对路径）。 */
