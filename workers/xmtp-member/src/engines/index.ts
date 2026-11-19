@@ -1,5 +1,5 @@
 import path from "node:path";
-import { claudeCodeEngine, codexEngine, geminiCliEngine } from "./cliEngines.ts";
+import { claudeCodeEngine, cliAgentEngine, codexEngine, geminiCliEngine } from "./cliEngines.ts";
 import { httpModelEngine, openAiCompatibleEngine, webhookEngine } from "./httpEngines.ts";
 import { AGENT_KINDS, type AgentKind, type EngineConfig, type ReplyEngine } from "./types.ts";
 
@@ -90,6 +90,15 @@ export function engineConfigFromEnv(env: NodeJS.ProcessEnv): EngineConfig | null
         ...(rwDirs ? { bwrapRwDirs: rwDirs } : {}),
       };
     }
+    case "cli-agent":
+      return {
+        kind,
+        agentKey: requiredEnv(env, "MEMBER_AGENT_KEY"),
+        binaryPath: requireAbsolutePath(env, "MEMBER_AGENT_BIN"),
+        sandboxDir: requireAbsolutePath(env, "MEMBER_AGENT_SANDBOX_DIR"),
+        timeoutMs,
+        model: optionalEnv(env, "MEMBER_AGENT_MODEL"),
+      };
     case "openai-compatible":
       return {
         kind,
@@ -123,6 +132,8 @@ export function createReplyEngine(config: EngineConfig): ReplyEngine {
       return codexEngine(config);
     case "gemini-cli":
       return geminiCliEngine(config);
+    case "cli-agent":
+      return cliAgentEngine(config);
     case "openai-compatible":
       return openAiCompatibleEngine(config);
     case "webhook":

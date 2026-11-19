@@ -3,6 +3,7 @@ import { constants, readdirSync } from "node:fs";
 import { access, readFile, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { CLI_AGENT_SPECS } from "../engines/cliAgentSpecs.ts";
 import type { HelperConfig, KnownCliAgent, LocalAgent, LoginState } from "./types.ts";
 
 /**
@@ -88,6 +89,17 @@ export const KNOWN_CLI_AGENTS: readonly KnownCliAgent[] = [
     versionArgs: ["--version"],
     loginMarkers: [".gemini"],
   },
+  // 通用一次性问答 CLI Agent：规格表同时驱动探测与引擎（cliAgentEngine）。
+  ...CLI_AGENT_SPECS.map(
+    (s): KnownCliAgent => ({
+      key: s.key,
+      kind: "cli-agent",
+      displayName: s.displayName,
+      binaries: [...s.binaries],
+      versionArgs: [...s.versionArgs],
+      loginMarkers: [...s.loginMarkers],
+    })
+  ),
 ];
 
 export interface DetectDeps {
@@ -132,11 +144,25 @@ export function parseMagpieLs(lines: string[]): { name: string; model: string | 
   return rows;
 }
 
-/** magpie ls 里的显示名 → 我们支持的 CLI 种类。 */
-const MAGPIE_NAME_TO_CLI_KIND: Record<string, "claude-code" | "codex" | "gemini-cli"> = {
+/** magpie ls 里的显示名 → 本机 Agent 稳定键（探测项 key；用于托管提升与去重）。 */
+const MAGPIE_NAME_TO_AGENT_KEY: Record<string, string> = {
   "claude code": "claude-code",
   codex: "codex",
   "gemini cli": "gemini-cli",
+  "antigravity cli": "gemini-cli",
+  "deepseek harness": "dsh",
+  qoder: "qoder",
+  "qoder cn": "qoder",
+  "qwen code": "qwen-code",
+  opencode: "opencode",
+  crush: "crush",
+  goose: "goose",
+  "copilot cli": "copilot-cli",
+  "cursor cli": "cursor-agent",
+  "minimax code": "minimax-code",
+  "mimo code": "minimax-code",
+  codebuddy: "codebuddy",
+  aider: "aider",
 };
 
 /** 网关地址的记录文件，按布局依次尝试（家目录相对路径）。 */
@@ -201,7 +227,7 @@ export async function detectLocalAgents(
       if (!sandboxReady) loginState = "unknown";
     }
     out.push({
-      key: spec.kind,
+      key: spec.key ?? spec.kind,
       kind: spec.kind,
       displayName: spec.displayName,
       source: "detected",
@@ -227,14 +253,15 @@ export async function detectLocalAgents(
       }
     }
     for (const row of rows) {
-      const cliKind = MAGPIE_NAME_TO_CLI_KIND[row.name.toLowerCase()];
-      if (cliKind) {
-        // 被托管的 CLI Agent：模型经网关出，不再要求自己的服务商登录态。
+      const agentKey = MAGPIE_NAME_TO_AGENT_KEY[row.name.toLowerCase()];
+      if (agentKey) {
+        // 被托管的 CLI Agent：模型经 Magpie 写好的配置走网关，不再要求自己的服务商登录态。
+        // 本体已探测到就用本体席位（比纯网关应答能力完整），不再重复发 magpie: 条目。
         if (row.model !== null) {
-          const a = out.find((x) => x.kind === cliKind && x.source === "detected");
+          const a = out.find((x) => x.key === agentKey && x.source === "detected");
           if (a && a.loginState === "needs-login") a.loginState = "likely-ready";
+          if (a) continue;
         }
-        continue;
       }
       if (row.model === null || !gatewayBaseUrl) continue;
       out.push({

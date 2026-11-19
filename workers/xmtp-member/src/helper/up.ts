@@ -226,6 +226,16 @@ export async function createHelperRuntime(options: HelperRuntimeOptions): Promis
         timeoutMs: ENGINE_TIMEOUT_MS,
       };
     }
+    if (agent.kind === "cli-agent") {
+      if (!agent.binaryPath) throw new Error(`${agent.displayName} has no resolved binary path`);
+      return {
+        kind: "cli-agent",
+        agentKey: agent.key,
+        binaryPath: agent.binaryPath,
+        sandboxDir: path.join(rootDir, "sandbox", seat.seatId),
+        timeoutMs: ENGINE_TIMEOUT_MS,
+      };
+    }
     // Magpie 托管探测项：模型经本机 Magpie 网关应答，回环免密钥，密钥位用占位值。
     if (agent.kind === "openai-compatible" && agent.source === "detected") {
       if (!agent.baseUrl || !agent.model) throw new Error(`${agent.displayName} missing gateway url/model`);
@@ -343,7 +353,7 @@ export async function createHelperRuntime(options: HelperRuntimeOptions): Promis
     const agent = (await agents()).find((a) => a.key === key);
     if (!agent) throw new HelperHttpError(404, "agent_not_found");
 
-    if (agent.kind === "claude-code" || agent.kind === "codex" || agent.kind === "gemini-cli") {
+    if (agent.kind === "claude-code" || agent.kind === "codex" || agent.kind === "gemini-cli" || agent.kind === "cli-agent") {
       const binOk = agent.binaryPath ? await isExecutable(agent.binaryPath) : false;
       const latencyMs = Math.max(0, Date.now() - startedAt);
       if (!binOk) {

@@ -10,6 +10,7 @@ export type AgentKind =
   | "claude-code"
   | "codex"
   | "gemini-cli"
+  | "cli-agent"
   | "openai-compatible"
   | "webhook"
   | "http-model";
@@ -18,6 +19,7 @@ export const AGENT_KINDS: readonly AgentKind[] = [
   "claude-code",
   "codex",
   "gemini-cli",
+  "cli-agent",
   "openai-compatible",
   "webhook",
   "http-model",
@@ -51,6 +53,11 @@ export type EngineConfig =
   | ({ kind: "claude-code" } & CliEngineBase)
   | ({ kind: "codex" } & CliEngineBase)
   | ({ kind: "gemini-cli" } & CliEngineBase)
+  | ({
+      kind: "cli-agent";
+      /** cliAgentSpecs.ts 里的规格键（LocalAgent.key），如 "opencode"/"dsh"。 */
+      agentKey: string;
+    } & CliEngineBase)
   | {
       kind: "openai-compatible";
       /** 例如 xAI Grok：https://api.x.ai/v1 */

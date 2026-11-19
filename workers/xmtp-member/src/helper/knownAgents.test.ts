@@ -219,3 +219,48 @@ test("detectLocalAgents：没有 magpie 或缺 runLines/readJsonFile 时行为�
   assert.equal(list.length, 1);
   assert.equal(list[0].loginState, "needs-login");
 });
+
+test("detectLocalAgents：cli-agent 规格表里的 CLI 可被探测并标 kind/loginState", async () => {
+  const deps: DetectDeps = {
+    platform: "linux",
+    findOnPath: async (bin) =>
+      bin === "opencode" ? "/opt/npm/bin/opencode" : bin === "dsh" ? "/usr/local/bin/dsh" : null,
+    readVersion: async (p) => (p.includes("opencode") ? "opencode 1.2.3" : "dsh 4.5.6"),
+    exists: async (p) => p === ".local/share/opencode/auth.json",
+    hasBwrap: async () => true,
+  };
+  const list = await detectLocalAgents(deps, null);
+  const oc = list.find((a) => a.key === "opencode");
+  assert.equal(oc?.kind, "cli-agent");
+  assert.equal(oc?.displayName, "OpenCode");
+  assert.equal(oc?.loginState, "likely-ready");
+  const dsh = list.find((a) => a.key === "dsh");
+  assert.equal(dsh?.kind, "cli-agent");
+  assert.equal(dsh?.loginState, "needs-login"); // .dsh 不存在
+});
+
+test("detectLocalAgents：Magpie 托管的 cli-agent 用本体席位，不再重复发网关条目", async () => {
+  const deps: DetectDeps = {
+    platform: "linux",
+    findOnPath: async (bin) =>
+      bin === "dsh" ? "/usr/local/bin/dsh" : bin === "magpie" ? "/usr/local/bin/magpie" : null,
+    readVersion: async () => "dsh 4.5.6",
+    exists: async () => false, // dsh 自身无登录标记
+    hasBwrap: async () => true,
+    runLines: async (_bin, args) =>
+      args[0] === "ls"
+        ? [
+            "  DeepSeek Harness  magpie/server/group/gpt-6-luna  ·  thinking —  ~/.dsh/profiles/web/cordis.patch.yml",
+            "  Qoder             —  ·  effort —                                 ~/.qoder/settings.json",
+          ]
+        : null,
+    readJsonFile: async (rel) => (rel === "magpie/config/gateway.json" ? { addr: "127.0.0.1:3425" } : null),
+  };
+  const list = await detectLocalAgents(deps, null);
+  const dsh = list.find((a) => a.key === "dsh");
+  assert.equal(dsh?.kind, "cli-agent");
+  assert.equal(dsh?.loginState, "likely-ready"); // Magpie 托管 → 免自身登录态
+  // 本体已探测到 → 不再发 magpie:dsh 重复条目
+  assert.equal(list.find((a) => a.key === "magpie:dsh"), undefined);
+  assert.equal(list.find((a) => a.key === "magpie:deepseek-harness"), undefined);
+});
