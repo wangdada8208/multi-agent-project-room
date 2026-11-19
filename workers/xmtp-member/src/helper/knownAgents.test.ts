@@ -157,3 +157,64 @@ test("defaultDetectDeps discovers ~/.local/bin CLIs even when service PATH omits
     }
   });
 });
+
+test("parseMagpieLs 解析托管/未托管行", async () => {
+  const { parseMagpieLs } = await import("./knownAgents.ts");
+  const rows = parseMagpieLs([
+    "  Claude Code       server/group/ds-v4.1-flash[1m]  ·  effort —    ~/.claude/settings.json",
+    "  Codex             —  ·  effort —                                 ~/.codex/config.toml",
+    "  MiniMax Code      magpie/group/cursor-grok-4.7-500k              ~/.minimax/config.yaml",
+    "  T3 Code           provider —                                     ~/.t3/userdata/settings.json",
+    "  Claude Desktop    not detected                                   ",
+    "  表头不属于任何 Agent",
+  ]);
+  assert.deepEqual(rows, [
+    { name: "Claude Code", model: "server/group/ds-v4.1-flash" },
+    { name: "Codex", model: null },
+    { name: "MiniMax Code", model: "group/cursor-grok-4.7-500k" },
+    { name: "T3 Code", model: null },
+  ]);
+});
+
+test("detectLocalAgents：Magpie 托管的 Claude 免登录态，其余托管 Agent 经网关列出", async () => {
+  const deps: DetectDeps = {
+    platform: "linux",
+    findOnPath: async (bin) =>
+      bin === "claude" ? "/usr/local/bin/claude" : bin === "magpie" ? "/usr/local/bin/magpie" : null,
+    readVersion: async () => "claude 2.1.0",
+    exists: async () => false, // claude 没有任何登录标记
+    hasBwrap: async () => false,
+    runLines: async (_bin, args) =>
+      args[0] === "ls"
+        ? [
+            "  Claude Code       server/group/ds-v4.1-flash[1m]  ·  effort —    ~/.claude/settings.json",
+            "  MiniMax Code      magpie/group/cursor-grok-4.7-500k              ~/.minimax/config.yaml",
+            "  Codex             —  ·  effort —                                 ~/.codex/config.toml",
+          ]
+        : null,
+    readJsonFile: async (rel) =>
+      rel === "magpie/config/gateway.json" ? { addr: "127.0.0.1:3425" } : null,
+  };
+  const list = await detectLocalAgents(deps, null);
+  const claude = list.find((a) => a.key === "claude-code");
+  assert.equal(claude?.loginState, "likely-ready");
+  const mm = list.find((a) => a.key === "magpie:minimax-code");
+  assert.equal(mm?.kind, "openai-compatible");
+  assert.equal(mm?.baseUrl, "http://127.0.0.1:3425/v1");
+  assert.equal(mm?.model, "group/cursor-grok-4.7-500k");
+  // Codex 未被托管且没有二进制 → 不出现
+  assert.equal(list.find((a) => a.key === "codex"), undefined);
+});
+
+test("detectLocalAgents：没有 magpie 或缺 runLines/readJsonFile 时行为不变", async () => {
+  const noMagpie: DetectDeps = {
+    platform: "linux",
+    findOnPath: async (bin) => (bin === "claude" ? "/usr/local/bin/claude" : null),
+    readVersion: async () => "claude 2.1.0",
+    exists: async () => false,
+    hasBwrap: async () => false,
+  };
+  const list = await detectLocalAgents(noMagpie, null);
+  assert.equal(list.length, 1);
+  assert.equal(list[0].loginState, "needs-login");
+});

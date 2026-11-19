@@ -30,6 +30,8 @@ export interface LocalAgent {
   binaryPath?: string;
   version?: string;
   baseUrl?: string;
+  /** openai-compatible 探测项（如 Magpie 托管 Agent）的模型 id。 */
+  model?: string;
   loginState: LoginState;
 }
 
