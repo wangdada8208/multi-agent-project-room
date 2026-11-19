@@ -226,6 +226,11 @@ export async function createHelperRuntime(options: HelperRuntimeOptions): Promis
         timeoutMs: ENGINE_TIMEOUT_MS,
       };
     }
+    // Magpie 托管探测项：模型经本机 Magpie 网关应答，回环免密钥，密钥位用占位值。
+    if (agent.kind === "openai-compatible" && agent.source === "detected") {
+      if (!agent.baseUrl || !agent.model) throw new Error(`${agent.displayName} missing gateway url/model`);
+      return { kind: "openai-compatible", baseUrl: agent.baseUrl, apiKey: "mapr-magpie-local", model: agent.model, timeoutMs: ENGINE_TIMEOUT_MS };
+    }
     // 手动云端/本地网关 Agent：元数据在 helper.json，密钥只在 ~/.mapr/agents/<key>.secret。
     const manual = config?.manualAgents.find((m) => m.key === agent.key);
     if (!manual) throw new Error(`manual agent ${agent.key} missing from helper config`);

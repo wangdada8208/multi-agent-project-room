@@ -46,6 +46,7 @@ export interface LocalAgentView {
   displayName: string;
   source: "detected" | "manual";
   version?: string;
+  model?: string;
   loginState: "likely-ready" | "needs-login" | "unknown";
 }
 

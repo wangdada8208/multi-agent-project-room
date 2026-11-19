@@ -923,6 +923,7 @@ export function AgentJoinSection({
                       </strong>
                       <small>
                         {agent.version ? `${agent.version} · ` : ""}
+                        {agent.model ? `模型 ${agent.model} · ` : ""}
                         {agent.source === "detected" ? "本机自动发现" : "本机预设配置"}
                       </small>
                     </div>

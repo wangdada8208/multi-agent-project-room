@@ -10,7 +10,12 @@ function hostnameOf(host: string): string {
 }
 
 export function isLoopbackHostname(hostname: string): boolean {
-  return hostname === "127.0.0.1" || hostname === "localhost" || hostname === "::1";
+  // 末尾点（"localhost."）是合法 FQDN 写法，部分浏览器与 mDNS 环境会带上它。
+  const h = hostname.endsWith(".") ? hostname.slice(0, -1) : hostname;
+  if (h === "localhost" || h === "::1") return true;
+  // 整个 127.0.0.0/8 都是回环；浏览器实际只用 127.0.0.1，但放行整段不影响
+  // DNS 重绑定防护（拦的是非 127/8 主机名）。
+  return /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(h);
 }
 
 export function checkLocalRequest(input: {

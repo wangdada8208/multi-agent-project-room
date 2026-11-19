@@ -1743,6 +1743,20 @@ export function createHelperServer(deps: HelperServerDeps): http.Server {
 
     const g = guardHelperRequest({ method, host, origin, ownerHeader, hubOrigin, requestClass });
     if (!g.ok) {
+      // 页面请求给一个能看懂原因的提示页（比如用局域网 IP 或 *.local 打开）。
+      if (requestClass === "page") {
+        res.writeHead(403, { "Content-Type": "text/html; charset=utf-8" });
+        res.end(
+          "<!doctype html><meta charset=utf-8><title>403</title>" +
+            '<body style="font-family:system-ui;padding:2em;max-width:34em;margin:auto">' +
+            "<h2>本机控制台拒绝了这次访问</h2>" +
+            "<p>它只接受通过本机回环地址打开的请求（防止别的网站冒用你的身份）。</p>" +
+            '<p>请改用 <a href="http://127.0.0.1:8790/">http://127.0.0.1:8790/</a> 打开。' +
+            "如果你是用局域网 IP、<code>*.local</code> 主机名或从另一台设备访问，就会出现这个页面。</p>" +
+            "</body>"
+        );
+        return;
+      }
       send(403, { ok: false, reason: "forbidden" });
       return;
     }

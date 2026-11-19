@@ -83,3 +83,16 @@ test("guard ticket-write: hubOrigin 放行（网站唯一被允许的写路径�
   const r = guard({ requestClass: "ticket-write", origin: HUB });
   assert.deepEqual(r, { ok: true, corsOrigin: HUB });
 });
+
+test("guard: localhost. 带点与 127/8 整段回环都算本机；*.local 与局域网 IP 仍 403", () => {
+  for (const host of ["localhost.:8790", "LOCALHOST:8790", "127.0.0.2:8790", "127.1.2.3:8790"]) {
+    assert.deepEqual(
+      guard({ host, requestClass: "page" }),
+      { ok: true, corsOrigin: null },
+      `host=${host}`
+    );
+  }
+  for (const host of ["macbook.local:8790", "192.168.1.5:8790", "localhost.evil.com:8790", "127.0.0.1.evil.com:8790"]) {
+    assert.deepEqual(guard({ host, requestClass: "page" }), { ok: false, status: 403 }, `host=${host}`);
+  }
+});
