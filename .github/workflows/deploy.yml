@@ -23,7 +23,7 @@ env:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: instabox-medium
     env:
       # Numeric hosts, not "localhost": several SSRF/interop suites patch
       # socket.getaddrinfo to answer for every hostname, which would hijack the
@@ -161,7 +161,7 @@ jobs:
 
   build:
     needs: test
-    runs-on: ubuntu-latest
+    runs-on: instabox-medium
     permissions:
       contents: read
       packages: write
