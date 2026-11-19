@@ -153,7 +153,28 @@ jobs:
             $SUDO mv -f "$DEST_DIR/.tmp.$LATEST_ALIAS.sha256" "$DEST_DIR/$LATEST_ALIAS.sha256"
           fi
 
-          if $SUDO nginx -T 2>&1 | grep -q 'location ^~ /downloads/'; then
+          # 自愈：早期版本在已含 /downloads/ 块（写法不同，判重没认出来）时重复
+          # 插入，nginx -t 失败但文件已被写坏。恢复补丁前留下的 .bak-downloads-*
+          # 备份，把配置改回补丁前状态；无备份可恢复才视为真故障。
+          if ! $SUDO nginx -t >/dev/null 2>&1; then
+            restored=0
+            for orig in $($SUDO find /www/server/nginx/conf -type f -name '*.bak-downloads-*' -printf '%f\n' 2>/dev/null | sed 's/\.bak-downloads-.*//' | sort -u); do
+              latest="$($SUDO find /www/server/nginx/conf -type f -name "$orig.bak-downloads-*" -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2-)"
+              if [ -n "$latest" ]; then
+                dir="$($SUDO dirname "$latest")"
+                $SUDO cp "$latest" "$dir/$orig" && restored=1 && echo "Restored $dir/$orig from $latest"
+              fi
+            done
+            if [ "$restored" -eq 1 ]; then
+              $SUDO nginx -t || { echo "nginx -t still failing after restoring backups" >&2; exit 1; }
+            else
+              $SUDO nginx -t || { echo "nginx -t failing and no .bak-downloads-* backups found" >&2; exit 1; }
+            fi
+          fi
+
+          # 判重要认出 /downloads/ 的任意写法（^~、普通前缀、带不带尾斜杠），
+          # 不能只比对唯一一种文本形式。
+          if $SUDO nginx -T 2>&1 | grep -qE 'location[[:space:]]+(=[[:space:]]+|\^~[[:space:]]+|~\*?[[:space:]]+)?/downloads/?[[:space:]]*\{'; then
             echo "Nginx /downloads/ location already configured; skipping patch"
           else
             $SUDO env DOWNLOADS_ROOT="$ROOT" python3 - <<'PY'
@@ -165,7 +186,9 @@ jobs:
           from pathlib import Path
 
           downloads_root = os.environ["DOWNLOADS_ROOT"].rstrip("/") + "/"
-          marker = "location ^~ /downloads/"
+          has_location = re.compile(
+              r"location\s+(=\s+|\^~\s+|~\*?\s+)?/downloads/?\s*\{"
+          )
           location = (
               "\n    location ^~ /downloads/ {\n"
               "        alias " + downloads_root + ";\n"
@@ -195,10 +218,12 @@ jobs:
           if not candidates:
               raise SystemExit("Could not find nginx config for hub.wangdada8208.xyz")
 
-          changed = False
+          # 候选文件常互为 include 关系（如 funnel-router.conf 被 vhost include），
+          # 给多个文件各插一块会在同一 server 内产生 duplicate location。
+          # 只补丁第一个缺块的可落点文件。
           for path in sorted(candidates):
               text = path.read_text()
-              if marker in text:
+              if has_location.search(text):
                   continue
 
               inserts = []
@@ -225,15 +250,18 @@ jobs:
                   continue
 
               stamp = datetime.utcnow().strftime("%Y%m%d%H%M%S")
-              shutil.copy2(str(path), str(path) + ".bak-downloads-" + stamp)
+              backup = str(path) + ".bak-downloads-" + stamp
+              shutil.copy2(str(path), backup)
               for pos, snippet in sorted(inserts, reverse=True):
                   text = text[:pos] + snippet + text[pos:]
               path.write_text(text)
-              changed = True
               print("Patched {}".format(path))
-
-          if changed:
-              subprocess.run(["nginx", "-t"], check=True)
+              try:
+                  subprocess.run(["nginx", "-t"], check=True)
+              except subprocess.CalledProcessError:
+                  shutil.copy2(backup, str(path))
+                  raise
+              break
           PY
             if command -v systemctl >/dev/null 2>&1; then
               $SUDO systemctl reload nginx
