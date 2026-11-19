@@ -36,7 +36,9 @@ export interface LocalAgent {
 }
 
 export interface KnownCliAgent {
-  kind: Extract<AgentKind, "claude-code" | "codex" | "gemini-cli">;
+  /** LocalAgent.key 稳定键；cli-agent 类用规格键（"opencode" 等），旧三种与 kind 同名。 */
+  key?: string;
+  kind: Extract<AgentKind, "claude-code" | "codex" | "gemini-cli" | "cli-agent">;
   displayName: string;
   /** 在 PATH 里查找的命令名，按顺序尝试。 */
   binaries: string[];

@@ -150,6 +150,12 @@ export function seatEnv(
       if (engine.bwrapRoDirs?.length) env.MEMBER_AGENT_BWRAP_RO = engine.bwrapRoDirs.join(path.delimiter);
       if (engine.bwrapRwDirs?.length) env.MEMBER_AGENT_BWRAP_RW = engine.bwrapRwDirs.join(path.delimiter);
       break;
+    case "cli-agent":
+      env.MEMBER_AGENT_BIN = engine.binaryPath;
+      env.MEMBER_AGENT_SANDBOX_DIR = engine.sandboxDir;
+      env.MEMBER_AGENT_KEY = engine.agentKey;
+      if (engine.model) env.MEMBER_AGENT_MODEL = engine.model;
+      break;
     case "openai-compatible":
       env.MEMBER_AGENT_BASE_URL = engine.baseUrl;
       env.MEMBER_AGENT_API_KEY = engine.apiKey;

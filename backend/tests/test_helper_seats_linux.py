@@ -391,3 +391,34 @@ async def test_seat_view_carries_trust_tier(client, db, room_owner):
                       json=_seat_via_local(room.id))
     seats = (await client.get(f"{ROOMS}/{room.id}/seats", headers=headers(owner))).json()
     assert seats[0]["trust_tier"] == "local-cli"
+
+
+@pytest.mark.asyncio
+async def test_agent_key_accepts_cli_and_magpie_keys_rejects_traversal(client, db, room_owner):
+    """cli-agent / magpie:xxx 形态放行（PR 扩展），路径分隔符与坏形态仍拒。"""
+    owner, room = room_owner
+    paired = await _paired_helper(client, owner)
+    # 新形态放行：join-ticket 建票不 422
+    for key in ("opencode", "dsh", "qwen-code", "magpie:deepseek-harness"):
+        ticket = await _join_ticket(client, owner, paired["helper_id"], room.id, agent_key=key)
+        assert ticket
+    # 坏形态仍拒
+    for bad in ("../x", "a/b", "UPPER", "magpie:", "x" * 70):
+        resp = await client.post(f"{BASE}/{paired['helper_id']}/join-tickets",
+                                 headers=headers(owner),
+                                 json={"room_id": room.id, "agent_key": bad,
+                                       "owner_xmtp_address": ADDR_OWNER})
+        assert resp.status_code == 422, (bad, resp.status_code)
+
+
+@pytest.mark.asyncio
+async def test_cli_agent_kind_seat_gets_local_cli_tier(client, db, room_owner):
+    """kind=cli-agent 的席位照常创建且信任分级为 local-cli。"""
+    owner, room = room_owner
+    paired = await _paired_helper(client, owner)
+    resp = await client.post(f"{BASE}/me/seats", headers=_helper_headers(paired),
+                             json=_seat_via_local(room.id, agent_key="opencode",
+                                                  kind="cli-agent"))
+    assert resp.status_code == 201, resp.text
+    seats = (await client.get(f"{ROOMS}/{room.id}/seats", headers=headers(owner))).json()
+    assert seats[0]["trust_tier"] == "local-cli"

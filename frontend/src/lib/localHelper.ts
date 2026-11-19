@@ -24,7 +24,7 @@ const LOCAL_CALL_TIMEOUT_MS = 5000;
 const JOIN_TIMEOUT_MS = 30000;
 
 /** 与 workers/xmtp-member/src/engines/types.ts 的 AgentKind 保持一致。 */
-export type AgentKind = "claude-code" | "codex" | "gemini-cli" | "openai-compatible" | "webhook" | "http-model";
+export type AgentKind = "claude-code" | "codex" | "gemini-cli" | "cli-agent" | "openai-compatible" | "webhook" | "http-model";
 
 export interface HelperHello {
   app: "mapr-helper";
@@ -81,6 +81,7 @@ const TIER_BY_KIND: Record<AgentKind, TrustTier> = {
   "claude-code": "local-cli",
   codex: "local-cli",
   "gemini-cli": "local-cli",
+  "cli-agent": "local-cli",
   "openai-compatible": "cloud-api",
   "http-model": "cloud-api",
   webhook: "custom-webhook",

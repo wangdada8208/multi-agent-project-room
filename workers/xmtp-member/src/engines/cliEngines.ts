@@ -5,6 +5,7 @@ import { mkdir, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { buildExpandedPath } from "../helper/knownAgents.ts";
+import { PROVIDER_ENV_KEYS, cliAgentSpec } from "./cliAgentSpecs.ts";
 import type { EngineConfig, ReplyEngine, ReplyRequest } from "./types.ts";
 import { MAX_REPLY_BYTES } from "./types.ts";
 
@@ -770,6 +771,56 @@ export function geminiCliEngine(
         throw new Error(`gemini exited with code ${result.code}${stderrTail(result.stderr)}`);
       }
       return result.stdout.trimEnd();
+    },
+  };
+}
+
+// ── 通用一次性问答 CLI Agent（kind: "cli-agent"，规格见 cliAgentSpecs.ts） ──
+
+export function cliAgentArgv(spec: { argvPrefix: readonly string[]; promptVia: "argv" | "stdin"; modelFlag?: string }, binaryPath: string, prompt: string, model?: string): string[] {
+  const argv = [binaryPath, ...spec.argvPrefix];
+  if (model && spec.modelFlag) argv.push(spec.modelFlag, model);
+  if (spec.promptVia === "argv") argv.push(prompt);
+  return argv;
+}
+
+function cliAgentEnv(spec: { envKeys?: readonly string[] }, parent: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const out: NodeJS.ProcessEnv = {};
+  for (const key of ["LANG", "TERM", ...PROVIDER_ENV_KEYS, ...(spec.envKeys ?? [])]) {
+    const value = parent[key];
+    if (value !== undefined) out[key] = value;
+  }
+  return out;
+}
+
+export function cliAgentEngine(
+  config: Extract<EngineConfig, { kind: "cli-agent" }>,
+  deps?: { runCliImpl?: typeof runCli; env?: NodeJS.ProcessEnv }
+): ReplyEngine {
+  const spec = cliAgentSpec(config.agentKey);
+  if (!spec) throw new Error(`unknown cli-agent spec: ${config.agentKey}`);
+  const runCliFn = deps?.runCliImpl ?? runCli;
+  const envSrc = deps?.env ?? process.env;
+  return {
+    kind: "cli-agent",
+    async reply(req: ReplyRequest): Promise<string> {
+      const cwd = config.sandboxDir?.trim() ? config.sandboxDir : os.tmpdir();
+      if (config.sandboxDir?.trim()) await mkdir(config.sandboxDir, { recursive: true, mode: 0o700 });
+      const base = minimalEnv(envSrc, config.binaryPath);
+      const result = await runCliFn({
+        argv: cliAgentArgv(spec, config.binaryPath, req.prompt, config.model),
+        stdin: spec.promptVia === "stdin" ? req.prompt : "",
+        cwd,
+        signal: req.signal,
+        env: { ...cliAgentEnv(spec, envSrc), ...(envSrc.HOME ? { HOME: envSrc.HOME } : {}), PATH: base.PATH },
+        maxOutputBytes: MAX_REPLY_BYTES,
+      });
+      if (result.code !== 0) {
+        throw new Error(`${spec.key} exited with code ${result.code}${stderrTail(result.stderr)}`);
+      }
+      const text = result.stdout.trimEnd();
+      if (!text) throw new Error(`${spec.key} produced empty reply`);
+      return text;
     },
   };
 }
