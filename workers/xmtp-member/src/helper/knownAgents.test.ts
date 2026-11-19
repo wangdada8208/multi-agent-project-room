@@ -200,6 +200,7 @@ test("detectLocalAgents：Magpie 托管的 Claude 免登录态，其余托管 Ag
   assert.equal(claude?.loginState, "likely-ready");
   const mm = list.find((a) => a.key === "magpie:minimax-code");
   assert.equal(mm?.kind, "openai-compatible");
+  assert.equal(mm?.displayName, "MiniMax Code");
   assert.equal(mm?.baseUrl, "http://127.0.0.1:3425/v1");
   assert.equal(mm?.model, "group/cursor-grok-4.7-500k");
   // Codex 未被托管且没有二进制 → 不出现

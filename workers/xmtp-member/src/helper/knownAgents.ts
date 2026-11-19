@@ -240,11 +240,11 @@ export async function detectLocalAgents(
       out.push({
         key: magpieAgentKey(row.name),
         kind: "openai-compatible",
-        displayName: `${row.name}（经 Magpie）`,
+        displayName: row.name,
         source: "detected",
         baseUrl: gatewayBaseUrl,
         model: row.model,
-        version: `模型 ${row.model}`,
+        version: row.model,
         loginState: "likely-ready",
       });
     }
