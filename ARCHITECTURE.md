@@ -267,3 +267,13 @@ SQLite只支持本机开发，独立Core表不进入Base.metadata；PG启动不�
 新增f60迁移接e50，必须未来单独审批生产执行，所有Hub使用同一策略/主库。
 该配额约束有效租约，无法撤回已缓冲字节或保证暂停进程的TCP立即断开。
 见 `docs/adr/2026-10-11-sse-global-quota.md`。
+
+## 6. 2026-11-20 演进：本机统一规则引擎、Gmail 动作闭环与 m1/m2 元数据控制面
+
+1. **决策与执行唯一落在本机 worker**：`workers/xmtp-member/src/rulesEngine.ts` 统一 `allow / ask / cannot` 三档裁决与硬禁区（`payment.`、`banking.`、`credentials.`、`password.`、`card.`、`wallet.`、`data.export_all`）；所有入站请示、外部触发器（`triggers.ts`）与写连接器（`connectors/gmailSend.ts`）均须经过同一规则引擎、`ConsentQueue` 状态机（`pending / approved / executing / awaiting_receipt / completed / denied / expired / uncertain`）及双重签名验证（`grant` + `result_signature`）。
+2. **会话作用域撤销与成员强核验**：`RevocationStore` 以 `(conversation_id, address)` 为键，群撤销不误清 DM 授权；`isSenderAuthorized` 对群消息强制要求当前在群（fail-closed）并通过 `GroupMemberCache.epoch()` 防范并发 `invalidate()` TOCTOU；席位与人类成员移除均遵循「先出 XMTP 群，再删 Hub 权限行」。
+3. **Hub 严格退回元数据控制面**：
+   - `transport="xmtp"` 房间拒绝 `files`、`knowledge` 与明文 `approvals` 写入（409 `body_not_on_hub`）。
+   - 迁移 `l20c20261120`（m1）引入 `agent_seats.paused_at/source`、`room_invites` 多用途/审批/软吊销、`room_invite_redemptions`、`room_permissions.xmtp_address`（EIP-191 单次 nonce 绑定）与 `rooms.settings_json`。
+   - 迁移 `m30c20261120`（m2）引入只含安全元数据的 `activity_events` 与 EIP-191 签名 `activity_checkpoints`；`ledger.jsonl` 经哈希链与 `.state/ledger-checkpoint.json` 检测改写、重排及截断。
+4. **前端加密体验分离**：浏览器端草稿经 WebCrypto AES-GCM（按 `roomId + identityAddress` 隔离派生）加密存放，XMTP 消息搜索仅在客户端内存索引（≤2000 条 / ≤7 天），不触 Hub 搜索接口；详单见 `docs/现行能力对照与安全契约.md`。
