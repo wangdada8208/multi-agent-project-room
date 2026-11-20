@@ -3,6 +3,7 @@
 import pytest
 from httpx import AsyncClient
 from app.core.security import create_access_token
+from app.models.room import Room
 from app.models.user import User
 
 
@@ -31,13 +32,17 @@ async def test_agent_register_and_list(client: AsyncClient, db):
 
 
 @pytest.mark.asyncio
-async def test_knowledge_create_list_search(client: AsyncClient, auth_headers: dict[str, str]):
+async def test_knowledge_create_list_search(client: AsyncClient, auth_headers: dict[str, str], db):
     room_resp = await client.post(
         "/api/v1/rooms",
         json={"name": "Knowledge Room", "description": "docs"},
         headers=auth_headers,
     )
     room_id = room_resp.json()["room"]["id"]
+    # Knowledge docs are plaintext-on-Hub; only hub-transport rooms keep them.
+    room = await db.get(Room, room_id)
+    room.transport = "hub"
+    await db.commit()
 
     resp = await client.post(
         f"/api/v1/rooms/{room_id}/docs",

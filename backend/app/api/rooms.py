@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import json
 from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,11 +18,130 @@ from app.models.room_permission import RoomPermission
 
 router = APIRouter(prefix="/api/v1/rooms", tags=["rooms"])
 
+# settings_json size guard: metadata only, never a place for document bodies.
+_MAX_SETTINGS_BYTES = 8 * 1024
+
 
 class CreateRoomRequest(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     description: str = ""
     transport: Literal["xmtp"] = "xmtp"
+
+
+class RoomSettingsRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    settings: dict = Field(default_factory=dict)
+
+
+def _settings_scope_strings(value, _depth: int = 0):
+    """Yield every scope string under a '*scope*'-named key, list OR dict key."""
+    if _depth > 6:
+        raise HTTPException(status_code=422, detail="settings_json is too deeply nested")
+    if isinstance(value, dict):
+        for key, item in value.items():
+            if isinstance(key, str) and "scope" in key.lower():
+                if isinstance(item, (list, tuple)):
+                    for entry in item:
+                        if not isinstance(entry, str):
+                            raise HTTPException(
+                                status_code=422, detail="scope lists must contain strings"
+                            )
+                        yield entry
+                elif isinstance(item, dict):
+                    for k, v in item.items():
+                        if not isinstance(k, str):
+                            raise HTTPException(
+                                status_code=422, detail="scope maps must have string keys"
+                            )
+                        if k.strip() != "*":
+                            yield k
+                        yield from _settings_scope_strings(v, _depth + 1)
+                else:
+                    yield from _settings_scope_strings(item, _depth + 1)
+            else:
+                yield from _settings_scope_strings(item, _depth + 1)
+    elif isinstance(value, (list, tuple)):
+        for item in value:
+            yield from _settings_scope_strings(item, _depth + 1)
+
+
+def _walk_forbidden_settings_tokens(value, scope_is_forbidden, _depth: int = 0) -> None:
+    """Unconditionally reject bare forbidden scope tokens in keys or values."""
+    if _depth > 6:
+        raise HTTPException(status_code=422, detail="settings_json is too deeply nested")
+    if isinstance(value, str):
+        if scope_is_forbidden(value):
+            raise HTTPException(
+                status_code=422, detail=f"settings contains forbidden scope: {value}"
+            )
+    elif isinstance(value, dict):
+        for k, item in value.items():
+            if isinstance(k, str) and scope_is_forbidden(k):
+                raise HTTPException(
+                    status_code=422, detail=f"settings contains forbidden scope: {k}"
+                )
+            _walk_forbidden_settings_tokens(item, scope_is_forbidden, _depth + 1)
+    elif isinstance(value, (list, tuple)):
+        for item in value:
+            _walk_forbidden_settings_tokens(item, scope_is_forbidden, _depth + 1)
+
+
+def validate_room_settings_payload(settings: dict) -> dict:
+    """Validate safe metadata + hard-forbidden scope rules for settings_json."""
+    from app.api.invites import scope_is_forbidden, validate_scope_list
+
+    try:
+        serialized = json.dumps(settings, ensure_ascii=False)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=422, detail="settings must be JSON-serializable") from None
+    if len(serialized.encode("utf-8")) > _MAX_SETTINGS_BYTES:
+        raise HTTPException(status_code=422, detail="settings payload too large")
+
+    if isinstance(settings.get("house_rules"), dict):
+        from app.api.templates import _validate_house_rules
+
+        _validate_house_rules(settings["house_rules"])
+
+    scoped = list(_settings_scope_strings(settings))
+    if scoped:
+        validate_scope_list(scoped, field="settings scopes")
+    _walk_forbidden_settings_tokens(settings, scope_is_forbidden)
+    return settings
+
+
+@router.patch("/{room_id}/settings")
+async def update_room_settings(
+    room_id: str,
+    payload: RoomSettingsRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Store safe room metadata (house-rules suggestions, template metadata).
+
+    m1/WP9: settings_json may carry template keys, house_rules suggestions and
+    scope *suggestions* — but never plaintext content, and any scope-shaped
+    string or dict key must clear the same hard-forbidden list as invite
+    proposed_scopes (Hub suggestions can tighten, never widen, member-side
+    rules). Each write bumps settings_version so helpers detect the change via
+    heartbeat.
+    """
+    await require_role(room_id, current_user, db, min_role="owner")
+
+    room = await db.get(Room, room_id)
+    if room is None or not room.is_active:
+        raise HTTPException(status_code=404, detail="Room not found")
+
+    validate_room_settings_payload(payload.settings)
+
+    room.settings_json = payload.settings
+    room.settings_version = (room.settings_version or 0) + 1
+    await db.commit()
+    return {
+        "room_id": room.id,
+        "settings_version": room.settings_version,
+        "settings_json": room.settings_json,
+    }
 
 
 @router.get("")

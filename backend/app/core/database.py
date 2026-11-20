@@ -57,6 +57,9 @@ async def init_db():
     import app.models.room_share  # noqa: F401
     import app.helper.models  # noqa: F401
     import app.models.oauth_account  # noqa: F401
+    import app.models.room_invite  # noqa: F401
+    import app.models.room_invite_redemption  # noqa: F401
+    import app.models.xmtp_auth_nonce  # noqa: F401
 
     env = (settings.environment or "").strip().lower()
     if env in ("development", "test", "testing", "dev") or engine.dialect.name == "sqlite":
@@ -91,7 +94,7 @@ async def check_database_connection() -> dict:
         return {"status": "error", "reason": "Database unavailable"}
 
 
-EXPECTED_ALEMBIC_HEAD = "k10c20261118"
+EXPECTED_ALEMBIC_HEAD = "m30c20261120"
 CRITICAL_TABLES = ("users",)
 
 
