@@ -27,6 +27,7 @@ import {
   createRoomFromTemplate,
   fetchTemplates,
 } from "../lib/api";
+import { TemplatePreview } from "../components/TemplatePreview";
 import {
   TRUST_TIER_LABEL,
   trustTierOf,
@@ -101,6 +102,7 @@ export function SetupPage() {
   const [creating, setCreating] = useState<string | null>(null);
   const [createError, setCreateError] = useState("");
   const [blankName, setBlankName] = useState("");
+  const [previewTplKey, setPreviewTplKey] = useState<string | null>(null);
 
   const templatesQuery = useQuery({ queryKey: ["templates"], queryFn: fetchTemplates });
   const templates = templatesQuery.data ?? [];
@@ -232,6 +234,8 @@ export function SetupPage() {
           roomId,
           groupId,
           currentUserId: myId,
+          // 走配置向导建房的人就是房主：同时负责把受邀入群的云端席位拉进群。
+          isRoomOwner: room.created_by === myId,
           deps: { listSeats: async () => list, markAdded: markSeatGroupAdded },
         });
       } catch {
@@ -321,21 +325,33 @@ export function SetupPage() {
               )}
               <div className="tpl-grid">
                 {templates.map((t) => (
-                  <button
-                    key={t.key}
-                    type="button"
-                    className="tpl-card"
-                    disabled={creating !== null}
-                    onClick={() =>
-                      void pickTemplate(t.key, `${t.name} · ${new Date().toLocaleDateString("zh-CN")}`)
-                    }
-                  >
-                    <span className="tpl-icon" style={{ color: "var(--accent)" }}>
-                      {renderSetupTemplateIcon(t.key, t.name)}
-                    </span>
-                    <strong>{creating === t.key ? "创建中…" : t.name}</strong>
-                    <small>{t.description}</small>
-                  </button>
+                  <div key={t.key} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    <button
+                      type="button"
+                      className="tpl-card"
+                      disabled={creating !== null}
+                      onClick={() =>
+                        void pickTemplate(t.key, `${t.name} · ${new Date().toLocaleDateString("zh-CN")}`)
+                      }
+                    >
+                      <span className="tpl-icon" style={{ color: "var(--accent)" }}>
+                        {renderSetupTemplateIcon(t.key, t.name)}
+                      </span>
+                      <strong>{creating === t.key ? "创建中…" : t.name}</strong>
+                      <small>{t.description}</small>
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      style={{ alignSelf: "flex-start", fontSize: 11, padding: "1px 8px" }}
+                      onClick={() =>
+                        setPreviewTplKey((prev) => (prev === t.key ? null : t.key))
+                      }
+                    >
+                      {previewTplKey === t.key ? "收起预置内容" : "预览预置内容"}
+                    </button>
+                    {previewTplKey === t.key && <TemplatePreview template={t} />}
+                  </div>
                 ))}
               </div>
               <div className="field">

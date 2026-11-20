@@ -23,8 +23,8 @@ const LOCAL_CALL_TIMEOUT_MS = 5000;
 /** POST /api/seats 要生成密钥、调 Hub、起进程，放宽到 30 秒。 */
 const JOIN_TIMEOUT_MS = 30000;
 
-/** 与 workers/xmtp-member/src/engines/types.ts 的 AgentKind 保持一致。 */
-export type AgentKind = "claude-code" | "codex" | "gemini-cli" | "cli-agent" | "openai-compatible" | "webhook" | "http-model";
+/** 与 workers/xmtp-member/src/engines/types.ts 的 AgentKind 保持一致（cloud-agent = 邀请入房的云端 Agent）。 */
+export type AgentKind = "claude-code" | "codex" | "gemini-cli" | "cli-agent" | "openai-compatible" | "webhook" | "http-model" | "cloud-agent";
 
 export interface HelperHello {
   app: "mapr-helper";
@@ -72,6 +72,10 @@ export interface HubSeatView {
   trust_tier?: TrustTier;
   xmtp_address: string;
   group_status: "pending" | "added" | "removed";
+  /** helper=本机助手席位；invite=云端邀请入房席位。旧版 Hub 无此字段时视为 helper。 */
+  source?: "helper" | "invite";
+  /** 被显式暂停的时间；null/缺省 = 未暂停。 */
+  paused_at?: string | null;
 }
 
 /** 信任分级：席位回话时明文流向的边界（借鉴 agentroom.chat 的诚实分级）。 */
@@ -84,6 +88,7 @@ const TIER_BY_KIND: Record<AgentKind, TrustTier> = {
   "cli-agent": "local-cli",
   "openai-compatible": "cloud-api",
   "http-model": "cloud-api",
+  "cloud-agent": "cloud-api",
   webhook: "custom-webhook",
 };
 
@@ -117,6 +122,45 @@ export interface RoomInviteView {
   used_at: string | null;
   redeemed_by_address: string | null;
   created_at: string;
+  max_uses?: number;
+  use_count?: number;
+  requires_approval?: boolean;
+  role?: "member" | "viewer";
+  revoked_at?: string | null;
+}
+
+export type RedemptionStatus =
+  | "pending"
+  | "approved"
+  | "consumed"
+  | "denied"
+  | "expired"
+  | "revoked";
+
+export interface RedemptionView {
+  id: string;
+  token: string;
+  kind: "human" | "agent" | string;
+  status: RedemptionStatus | string;
+  redeemer_user_id: string | null;
+  redeemer_address: string | null;
+  agent_user_id: string | null;
+  seat_id: string | null;
+  approved_scopes: string[] | null;
+  decided_by: string | null;
+  decided_at: string | null;
+  deny_reason: string | null;
+  expires_at: string | null;
+  created_at: string | null;
+}
+
+/** POST /api/v1/invites/nonce 支持的签名动作域。 */
+export type SignatureNonceAction = "invite-redeem" | "invite-agent-register" | "bind-address";
+
+export interface SignatureNonce {
+  nonce: string;
+  message: string;
+  expires_at: string;
 }
 
 // ── 本机助手（127.0.0.1:8790） ──
@@ -347,14 +391,69 @@ export async function removeRoomSeat(roomId: string, seatId: string): Promise<vo
   }
 }
 
-/** POST /api/v1/rooms/{room_id}/invites：房主生成加密入群邀请令牌。 */
-export async function createRoomInvite(roomId: string, expiresHours = 72): Promise<RoomInviteView> {
+/** POST .../seats/{seat_id}/pause：暂停席位（停本机进程，不删席位；房主或席位主人，204）。 */
+export async function pauseRoomSeat(roomId: string, seatId: string): Promise<void> {
+  const res = await hubFetch(
+    `/api/v1/rooms/${encodeURIComponent(roomId)}/seats/${encodeURIComponent(seatId)}/pause`,
+    { method: "POST" },
+  );
+  if (!res.ok) {
+    await readHubJson(res, "暂停席位失败，请重试");
+  }
+}
+
+/** POST .../seats/{seat_id}/resume：恢复被显式暂停的席位（204）。 */
+export async function resumeRoomSeat(roomId: string, seatId: string): Promise<void> {
+  const res = await hubFetch(
+    `/api/v1/rooms/${encodeURIComponent(roomId)}/seats/${encodeURIComponent(seatId)}/resume`,
+    { method: "POST" },
+  );
+  if (!res.ok) {
+    await readHubJson(res, "恢复席位失败，请重试");
+  }
+}
+
+export interface CreateInviteOptions {
+  /** 有效期（小时），默认 72，后端上限 720。 */
+  expires_hours?: number;
+  /** 可核销次数上限，1..32，默认 1。 */
+  max_uses?: number;
+  /** true = 每次核销都需房主批准后生效。 */
+  requires_approval?: boolean;
+  /** 受邀人入房角色；invites 不能创建 owner。 */
+  role?: "member" | "viewer";
+  /** 建议授权范围（仅元数据，后端对硬禁 scope 强制过滤）。 */
+  proposed_scopes?: string[];
+}
+
+/** POST /api/v1/rooms/{room_id}/invites：房主生成可复用加密入群邀请令牌。 */
+export async function createRoomInvite(
+  roomId: string,
+  options: CreateInviteOptions = {},
+): Promise<RoomInviteView> {
   const res = await hubFetch(`/api/v1/rooms/${encodeURIComponent(roomId)}/invites`, {
     method: "POST",
-    body: JSON.stringify({ proposed_scopes: [], expires_hours: expiresHours }),
+    body: JSON.stringify({
+      proposed_scopes: options.proposed_scopes ?? [],
+      expires_hours: options.expires_hours ?? 72,
+      max_uses: options.max_uses ?? 1,
+      requires_approval: options.requires_approval ?? false,
+      role: options.role ?? "member",
+    }),
   });
   const body = (await readHubJson(res, "生成加密入群邀请链接失败，请重试")) as { invite: RoomInviteView };
   return body.invite;
+}
+
+/** DELETE /api/v1/rooms/{room_id}/invites/{token}：软吊销邀请（pending 核销级联 revoked）。 */
+export async function revokeRoomInvite(roomId: string, token: string): Promise<void> {
+  const res = await hubFetch(
+    `/api/v1/rooms/${encodeURIComponent(roomId)}/invites/${encodeURIComponent(token)}`,
+    { method: "DELETE" },
+  );
+  if (!res.ok) {
+    await readHubJson(res, "吊销邀请失败，请重试");
+  }
 }
 
 /** GET /api/v1/rooms/{room_id}/invites：房主读取房间内邀请记录（含已核销地址）。 */
@@ -394,17 +493,107 @@ export function formatInviteAcceptError(err: unknown): string {
   return rawMessage.trim() || "接受房间入群邀请失败";
 }
 
-/** POST /api/v1/invites/{token}/redeem：协作者提交本机 XMTP 地址核销邀请令牌。 */
+/** POST /api/v1/invites/nonce：领取一次性 EIP-191 挑战，服务端按 action+resource+address 重建待签名文本。 */
+export async function issueSignatureNonce(input: {
+  action: SignatureNonceAction;
+  resource: string;
+  address: string;
+}): Promise<SignatureNonce> {
+  const res = await hubFetch("/api/v1/invites/nonce", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+  return (await readHubJson(res, "获取签名挑战失败，请重试")) as SignatureNonce;
+}
+
+export interface RedeemInviteResult {
+  /** consumed=已生效；pending=等待房主批准；approved=已批准待生效。 */
+  status?: "consumed" | "pending" | "approved" | string;
+  redemption_id?: string;
+  room_id?: string;
+  xmtp_group_id?: string | null;
+  proposed_scopes?: string[];
+}
+
+/** POST /api/v1/invites/{token}/redeem：提交本机 XMTP 地址 + EIP-191 签名核销邀请。 */
 export async function redeemRoomInvite(
   token: string,
-  xmtpAddress: string,
-): Promise<{ room_id: string; xmtp_group_id: string | null }> {
+  input: { xmtp_address: string; nonce: string; signature: string },
+): Promise<RedeemInviteResult> {
   const res = await hubFetch(`/api/v1/invites/${encodeURIComponent(token)}/redeem`, {
     method: "POST",
-    body: JSON.stringify({ xmtp_address: xmtpAddress }),
+    body: JSON.stringify(input),
   });
-  return (await readHubJson(res, "核销加密入群邀请失败")) as {
-    room_id: string;
-    xmtp_group_id: string | null;
+  return (await readHubJson(res, "核销加密入群邀请失败")) as RedeemInviteResult;
+}
+
+/** PUT /api/v1/rooms/{room_id}/members/me/xmtp-address：把本人已验证的 XMTP 地址绑定到成员行。 */
+export async function bindMyXmtpAddress(
+  roomId: string,
+  input: { xmtp_address: string; nonce: string; signature: string },
+): Promise<{ ok: boolean; xmtp_address: string }> {
+  const res = await hubFetch(
+    `/api/v1/rooms/${encodeURIComponent(roomId)}/members/me/xmtp-address`,
+    {
+      method: "PUT",
+      body: JSON.stringify(input),
+    },
+  );
+  return (await readHubJson(res, "绑定加密地址失败，请重试")) as {
+    ok: boolean;
+    xmtp_address: string;
   };
+}
+
+/** GET /api/v1/rooms/{room_id}/redemptions：房主查看核销队列；默认全部，可传 status=pending。 */
+export async function listRoomRedemptions(
+  roomId: string,
+  status?: RedemptionStatus,
+): Promise<RedemptionView[]> {
+  const suffix = status ? `?status=${encodeURIComponent(status)}` : "";
+  const res = await hubFetch(
+    `/api/v1/rooms/${encodeURIComponent(roomId)}/redemptions${suffix}`,
+  );
+  const body = (await readHubJson(res, "读取入群申请失败")) as {
+    redemptions?: RedemptionView[];
+  };
+  return body.redemptions ?? [];
+}
+
+/** POST .../redemptions/{id}/approve：房主批准一条 pending 核销（approved_scopes ⊆ proposed_scopes）。 */
+export async function approveRedemption(
+  roomId: string,
+  redemptionId: string,
+  options: { approved_scopes?: string[]; display_name?: string } = {},
+): Promise<RedemptionView> {
+  const res = await hubFetch(
+    `/api/v1/rooms/${encodeURIComponent(roomId)}/redemptions/${encodeURIComponent(redemptionId)}/approve`,
+    {
+      method: "POST",
+      body: JSON.stringify(options),
+    },
+  );
+  const body = (await readHubJson(res, "批准入群申请失败，请重试")) as {
+    redemption: RedemptionView;
+  };
+  return body.redemption;
+}
+
+/** POST .../redemptions/{id}/deny：房主拒绝一条 pending 核销。 */
+export async function denyRedemption(
+  roomId: string,
+  redemptionId: string,
+  reason?: string,
+): Promise<RedemptionView> {
+  const res = await hubFetch(
+    `/api/v1/rooms/${encodeURIComponent(roomId)}/redemptions/${encodeURIComponent(redemptionId)}/deny`,
+    {
+      method: "POST",
+      body: JSON.stringify(reason ? { reason } : {}),
+    },
+  );
+  const body = (await readHubJson(res, "拒绝入群申请失败，请重试")) as {
+    redemption: RedemptionView;
+  };
+  return body.redemption;
 }

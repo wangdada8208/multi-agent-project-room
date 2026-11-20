@@ -3,6 +3,7 @@ import { useParams, Link, useNavigate, useSearchParams } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query";
 import type { Client } from "@xmtp/browser-sdk";
 import {
+  Activity,
   AlertCircle,
   ArrowLeft,
   Bell,
@@ -17,6 +18,7 @@ import {
   PanelRight,
   Paperclip,
   RefreshCw,
+  Reply,
   Search,
   Shield,
   Users,
@@ -26,7 +28,7 @@ import { useWebSocket } from "../hooks/useWebSocket";
 import { useNotification } from "../hooks/useNotification";
 import { useAnalytics } from "../hooks/useAnalytics";
 import { ChatMessageItem, type ChatMessageWithTrust } from "../components/ChatMessage";
-import { ChatInput } from "../components/ChatInput";
+import { ChatInput, type ReplyTargetInfo } from "../components/ChatInput";
 import { CopyButton } from "../components/CopyButton";
 import { XmtpUnlock } from "../components/XmtpUnlock";
 import { MembersPanel } from "../components/panels/MembersPanel";
@@ -34,6 +36,8 @@ import { TasksPanel } from "../components/panels/TasksPanel";
 import { DialoguePanel } from "../components/panels/DialoguePanel";
 import { FilesPanel } from "../components/panels/FilesPanel";
 import { PermissionsPanel } from "../components/panels/PermissionsPanel";
+import { OwnerApprovalPanel } from "../components/panels/OwnerApprovalPanel";
+import { ActivityPanel } from "../components/panels/ActivityPanel";
 import {
   fetchMessages,
   fetchAgents,
@@ -42,13 +46,22 @@ import {
   apiFetch,
   bindXmtpGroup,
 } from "../lib/api";
-import { createLocalXmtpClient, inboxAddress } from "../lib/xmtpLocalIdentity";
-import { sendXmtpMessage, toLocalChatMessage } from "../lib/xmtpSend";
+import {
+  clearUnlockedXmtpKey,
+  createLocalXmtpClient,
+  inboxAddress,
+  setUnlockedXmtpKey,
+  signXmtpMessage,
+} from "../lib/xmtpLocalIdentity";
+import { sendXmtpMessage, sendXmtpReply, toLocalChatMessage } from "../lib/xmtpSend";
+import { extractXmtpMessageText, XmtpSearchIndex } from "../lib/xmtpSearch";
 import {
   acceptRoomInvite,
   formatInviteAcceptError,
+  issueSignatureNonce,
   listLocalSeats,
   listRoomInvites,
+  listRoomRedemptions,
   listRoomSeats,
   markSeatGroupAdded,
   openHelperPage,
@@ -56,9 +69,14 @@ import {
   redeemRoomInvite,
   type HubSeatView,
 } from "../lib/localHelper";
-import { syncPendingSeatsToGroup, syncRedeemedInvitesToGroup } from "../lib/seatGroupSync";
+import {
+  collectGroupSyncAddresses,
+  syncPendingSeatsToGroup,
+  syncRedeemedInvitesToGroup,
+} from "../lib/seatGroupSync";
 import { buildInboxAddressMap, resolveXmtpSender } from "../lib/roomIdentity";
 import { describeEnvelope } from "../lib/envelopeView";
+import { tabVisibleInRoom, type RoomTabId } from "../lib/roomTabs";
 import { useAuthStore } from "../stores/authStore";
 import { useChatStore } from "../stores/chatStore";
 import type { Room, SenderType } from "../types/chat";
@@ -71,7 +89,7 @@ const CONNECTION_LABEL: Record<string, string> = {
   idle: "等待中",
 };
 
-type TabId = "members" | "tasks" | "dialogue" | "files" | "permissions";
+type TabId = RoomTabId;
 
 const TABS: { id: TabId; label: string; icon: ReactNode }[] = [
   { id: "members", label: "成员", icon: <Users size={15} strokeWidth={1.8} /> },
@@ -79,6 +97,8 @@ const TABS: { id: TabId; label: string; icon: ReactNode }[] = [
   { id: "dialogue", label: "对话", icon: <MessageSquare size={15} strokeWidth={1.8} /> },
   { id: "files", label: "文件", icon: <Paperclip size={15} strokeWidth={1.8} /> },
   { id: "permissions", label: "权限", icon: <Shield size={15} strokeWidth={1.8} /> },
+  { id: "approvals", label: "审批", icon: <CheckCircle2 size={15} strokeWidth={1.8} /> },
+  { id: "activity", label: "动态", icon: <Activity size={15} strokeWidth={1.8} /> },
 ];
 
 interface RawXmtpMessage {
@@ -86,7 +106,13 @@ interface RawXmtpMessage {
   senderInboxId: string;
   content: string;
   createdAt: string;
+  replyToId?: string;
 }
+
+type XmtpChatMessage = ChatMessageWithTrust & {
+  replyToId?: string;
+  xmtpSenderInboxId?: string;
+};
 
 function shallowEqualRecord(a: Record<string, string>, b: Record<string, string>): boolean {
   const keysA = Object.keys(a);
@@ -111,6 +137,7 @@ export function RoomPage() {
   const [inviteAcceptError, setInviteAcceptError] = useState<string | null>(null);
   const [pendingInviteToken, setPendingInviteToken] = useState(inviteTokenFromUrl);
   const [inviteRedeemedWaiting, setInviteRedeemedWaiting] = useState(false);
+  const [invitePendingApproval, setInvitePendingApproval] = useState(false);
   const [inviteRedeemError, setInviteRedeemError] = useState("");
   const redeemedTokensRef = useRef<Set<string>>(new Set());
 
@@ -186,6 +213,7 @@ export function RoomPage() {
   const [bindingGroup, setBindingGroup] = useState(false);
 
   const [rawXmtpMessages, setRawXmtpMessages] = useState<RawXmtpMessage[]>([]);
+  const [replyTarget, setReplyTarget] = useState<ReplyTargetInfo | null>(null);
   const [inboxAddresses, setInboxAddresses] = useState<Record<string, string>>({});
   const inboxAddressesRef = useRef<Record<string, string>>({});
   const seatsRef = useRef<HubSeatView[]>([]);
@@ -293,35 +321,49 @@ export function RoomPage() {
     const tokenToRedeem = pendingInviteToken;
     setInviteRedeemError("");
 
-    redeemRoomInvite(tokenToRedeem, myXmtpAddress)
-      .then(() => {
-        setInviteRedeemedWaiting(true);
-        setPendingInviteToken("");
+    const clearInviteParam = () => {
+      setPendingInviteToken("");
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          next.delete("invite");
+          return next;
+        },
+        { replace: true },
+      );
+    };
+
+    // EIP-191 签名核销：先领一次性 nonce，再用已解锁的本机身份签名提交。
+    (async () => {
+      const challenge = await issueSignatureNonce({
+        action: "invite-redeem",
+        resource: tokenToRedeem,
+        address: myXmtpAddress,
+      });
+      const signature = await signXmtpMessage(challenge.message);
+      return redeemRoomInvite(tokenToRedeem, {
+        xmtp_address: myXmtpAddress,
+        nonce: challenge.nonce,
+        signature,
+      });
+    })()
+      .then((result) => {
+        if (result.status === "pending") {
+          // 需房主批准：申请已登记，等房主在「权限」面板批准
+          setInvitePendingApproval(true);
+        } else {
+          setInviteRedeemedWaiting(true);
+        }
+        clearInviteParam();
         void permissionsQuery.refetch();
-        setSearchParams(
-          (prev) => {
-            const next = new URLSearchParams(prev);
-            next.delete("invite");
-            return next;
-          },
-          { replace: true },
-        );
       })
       .catch((err) => {
         const status = (err as { status?: number } | null)?.status;
         setInviteRedeemError(err instanceof Error ? err.message : "核销入群邀请失败");
-        if (status === 404 || status === 410) {
-          setPendingInviteToken("");
-          setSearchParams(
-            (prev) => {
-              const next = new URLSearchParams(prev);
-              next.delete("invite");
-              return next;
-            },
-            { replace: true },
-          );
+        if (status === 404 || status === 410 || status === 409) {
+          clearInviteParam();
         } else {
-          // 临时网络波动：保留地址栏参数允许重试
+          // 临时网络波动或签名失败：保留地址栏参数允许重试
           redeemedTokensRef.current.delete(tokenToRedeem);
         }
       });
@@ -360,6 +402,12 @@ export function RoomPage() {
     };
   }, [isEncrypted, unlockedKey, roomId, clientRetry, permissionsQuery.isPending]);
 
+  // 已解锁私钥登记到内存会话，供 EIP-191 签名（绑定地址/核销邀请）使用；离开房间即清除。
+  useEffect(() => {
+    setUnlockedXmtpKey(unlockedKey);
+    return () => clearUnlockedXmtpKey();
+  }, [unlockedKey]);
+
   // 订阅加密群消息 + 读取成员映射
   useEffect(() => {
     const targetGroupId = room?.xmtp_group_id;
@@ -369,14 +417,15 @@ export function RoomPage() {
     const client = xmtpClient;
 
     function toRawEntry(message: any): RawXmtpMessage | null {
-      if (!message || message.conversationId !== targetGroupId || typeof message.content !== "string") {
-        return null;
-      }
+      if (!message || message.conversationId !== targetGroupId) return null;
+      const extracted = extractXmtpMessageText(message);
+      if (!extracted) return null;
       return {
         id: String(message.id),
         senderInboxId: String(message.senderInboxId ?? ""),
-        content: describeEnvelope(message.content) ?? message.content,
+        content: describeEnvelope(extracted.text) ?? extracted.text,
         createdAt: message.sentAt instanceof Date ? message.sentAt.toISOString() : new Date().toISOString(),
+        ...(extracted.replyToId ? { replyToId: extracted.replyToId } : {}),
       };
     }
 
@@ -518,6 +567,7 @@ export function RoomPage() {
           roomId,
           groupId: targetGroupId,
           currentUserId,
+          isRoomOwner: myRoomRole === "owner",
           deps: { listSeats: listRoomSeats, markAdded: markSeatGroupAdded },
         });
 
@@ -527,7 +577,22 @@ export function RoomPage() {
             client: xmtpClient,
             roomId,
             groupId: targetGroupId,
-            listInvites: listRoomInvites,
+            // 地址来源：已批准/已核销的 redemptions + 成员行已绑定地址 + 旧版邀请字段。
+            // 绝不包含 pending 核销——未批准的申请者不能进加密群。
+            listAddresses: async (rid) => {
+              const [invites, redemptions, permsRes] = await Promise.all([
+                listRoomInvites(rid).catch(() => []),
+                listRoomRedemptions(rid).catch(() => []),
+                apiFetch(`/api/v1/rooms/${rid}/permissions`)
+                  .then((r) => (r.ok ? r.json() : { members: [] }))
+                  .catch(() => ({ members: [] })),
+              ]);
+              return collectGroupSyncAddresses({
+                invites,
+                redemptions,
+                members: permsRes?.members ?? [],
+              });
+            },
           });
           addedCollaborators = inviteOutcome.addedAddresses.length;
         }
@@ -568,7 +633,7 @@ export function RoomPage() {
   ]);
 
   // 动态映射加密消息：当 roomSeatsQuery.data 或 inboxAddresses 稍后就绪时立即更新真实名称与信任徽章
-  const xmtpMessages: ChatMessageWithTrust[] = useMemo(() => {
+  const xmtpMessages: XmtpChatMessage[] = useMemo(() => {
     const myInboxId = xmtpClient?.inboxId ?? "";
     const myUsername = user?.display_name || user?.username || "我";
     const seats = roomSeatsQuery.data ?? [];
@@ -590,11 +655,20 @@ export function RoomPage() {
         senderType: resolved.senderType,
         createdAt: raw.createdAt,
       });
-      return resolved.trustTier ? { ...base, trustTier: resolved.trustTier } : base;
+      const extended: XmtpChatMessage = {
+        ...base,
+        xmtpSenderInboxId: raw.senderInboxId,
+        ...(raw.replyToId ? { replyToId: raw.replyToId } : {}),
+      };
+      return resolved.trustTier ? { ...extended, trustTier: resolved.trustTier } : extended;
     });
   }, [rawXmtpMessages, inboxAddresses, roomSeatsQuery.data, xmtpClient?.inboxId, user, roomId]);
 
-  const displayMessages: ChatMessageWithTrust[] = isEncrypted ? xmtpMessages : wsMessages;
+  const displayMessages: XmtpChatMessage[] = isEncrypted ? xmtpMessages : wsMessages;
+  const displayMessageById = useMemo(
+    () => new Map(displayMessages.map((m) => [m.id, m])),
+    [displayMessages],
+  );
 
   // 当加密群尚在建立客户端或拉取初始消息历史时标记为加载中，防止历史消息触发桌面通知风暴
   const xmtpLoading = Boolean(
@@ -667,6 +741,25 @@ export function RoomPage() {
   const [showSearch, setShowSearch] = useState(false);
   const [searchResults, setSearchResults] = useState<typeof wsMessages>([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [searchSender, setSearchSender] = useState("");
+
+  // XMTP 本机搜索索引：随加密群切换重建，只吃历史+流增量，绝不触 Hub。
+  const xmtpSearchIndex = useMemo(() => new XmtpSearchIndex(), [room?.xmtp_group_id]);
+  useEffect(() => {
+    if (!isEncrypted) return;
+    xmtpSearchIndex.ingest(rawXmtpMessages);
+  }, [xmtpSearchIndex, isEncrypted, rawXmtpMessages]);
+
+  // 加密房发送者过滤下拉选项：inboxId → 已解析显示名
+  const xmtpSenderOptions = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const m of xmtpMessages) {
+      if (m.xmtpSenderInboxId && !map.has(m.xmtpSenderInboxId)) {
+        map.set(m.xmtpSenderInboxId, m.sender_name ?? m.sender_id.slice(0, 8));
+      }
+    }
+    return [...map.entries()];
+  }, [xmtpMessages]);
 
   const listRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -675,14 +768,29 @@ export function RoomPage() {
 
   const handleSend = (content: string, senderType: SenderType = "human") => {
     track("message_send", roomId, { sender_type: senderType });
-    return sendMessage({
+    const target = isEncrypted ? replyTarget : null;
+    const delivered = sendMessage({
       content,
       transport: room?.transport,
       xmtpGroupId: room?.xmtp_group_id,
       sendToXmtp: xmtpClient
-        ? (groupId, text) => sendXmtpMessage({ groupId, content: text, client: xmtpClient })
+        ? (groupId, text) =>
+            target
+              ? sendXmtpReply({
+                  groupId,
+                  content: text,
+                  referenceId: target.id,
+                  referenceInboxId: target.senderInboxId,
+                  fallbackQuote: `↩ ${target.senderName}：${target.excerpt}`,
+                  client: xmtpClient,
+                })
+              : sendXmtpMessage({ groupId, content: text, client: xmtpClient })
         : undefined,
     });
+    void Promise.resolve(delivered).then((ok) => {
+      if (ok && target) setReplyTarget(null);
+    });
+    return delivered;
   };
 
   async function handleQuickBindGroup() {
@@ -720,6 +828,28 @@ export function RoomPage() {
   async function handleSearch() {
     if (!searchQuery.trim()) return;
     setIsSearching(true);
+    // 加密房：纯本机内存索引检索，绝不请求 Hub 搜索接口、不落盘明文索引。
+    if (isEncrypted) {
+      const entries = xmtpSearchIndex.search(searchQuery.trim(), {
+        senderInboxId: searchSender || undefined,
+      });
+      setSearchResults(
+        entries.map((e) => {
+          const display = displayMessageById.get(e.id);
+          return toLocalChatMessage({
+            id: e.id,
+            roomId,
+            content: e.content,
+            senderId: e.senderInboxId,
+            senderName: display?.sender_name ?? `${e.senderInboxId.slice(0, 8)}`,
+            senderType: display?.sender_type ?? "human",
+            createdAt: e.createdAt,
+          });
+        }),
+      );
+      setIsSearching(false);
+      return;
+    }
     try {
       const results = await searchMessages(roomId, searchQuery.trim());
       setSearchResults(results);
@@ -729,6 +859,11 @@ export function RoomPage() {
       setIsSearching(false);
     }
   }
+
+  // 加密房切换发送者过滤时按当前关键词自动重查
+  useEffect(() => {
+    if (isEncrypted && showSearch && searchQuery.trim()) void handleSearch();
+  }, [searchSender, isEncrypted, showSearch, searchQuery]);
 
   if (inviteAccepting) {
     return (
@@ -809,25 +944,23 @@ export function RoomPage() {
                 <Bell size={17} strokeWidth={1.8} />
               </button>
             )}
+            <button
+              type="button"
+              className="icon-btn"
+              onClick={() => setShowSearch(!showSearch)}
+              title={isEncrypted ? "本机搜索加密消息" : "搜索消息"}
+            >
+              <Search size={17} strokeWidth={1.8} />
+            </button>
             {!isEncrypted && (
-              <>
-                <button
-                  type="button"
-                  className="icon-btn"
-                  onClick={() => setShowSearch(!showSearch)}
-                  title="搜索消息"
-                >
-                  <Search size={17} strokeWidth={1.8} />
-                </button>
-                <button
-                  type="button"
-                  className="icon-btn"
-                  onClick={() => void handleShare()}
-                  title="分享只读链接"
-                >
-                  <Link2 size={17} strokeWidth={1.8} />
-                </button>
-              </>
+              <button
+                type="button"
+                className="icon-btn"
+                onClick={() => void handleShare()}
+                title="分享只读链接"
+              >
+                <Link2 size={17} strokeWidth={1.8} />
+              </button>
             )}
             <button
               type="button"
@@ -903,9 +1036,25 @@ export function RoomPage() {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && void handleSearch()}
-              placeholder="搜索消息…"
+              placeholder={isEncrypted ? "本机搜索加密消息…" : "搜索消息…"}
               autoFocus
             />
+            {isEncrypted && xmtpSenderOptions.length > 0 && (
+              <select
+                className="input"
+                style={{ width: "auto", maxWidth: 150, flexShrink: 0 }}
+                value={searchSender}
+                onChange={(e) => setSearchSender(e.target.value)}
+                title="按发送者过滤"
+              >
+                <option value="">全部发送者</option>
+                {xmtpSenderOptions.map(([id, name]) => (
+                  <option key={id} value={id}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+            )}
             <button
               type="button"
               className="btn btn-ghost btn-sm"
@@ -921,6 +1070,7 @@ export function RoomPage() {
                 setShowSearch(false);
                 setSearchResults([]);
                 setSearchQuery("");
+                setSearchSender("");
               }}
             >
               <X size={16} strokeWidth={1.9} />
@@ -929,7 +1079,9 @@ export function RoomPage() {
         )}
         {showSearch && searchResults.length > 0 && (
           <div className="search-results">
-            <p className="hint" style={{ marginBottom: 6 }}>找到 {searchResults.length} 条结果：</p>
+            <p className="hint" style={{ marginBottom: 6 }}>
+              找到 {searchResults.length} 条结果{isEncrypted ? "（本机加密搜索，仅覆盖本端已同步消息）" : ""}：
+            </p>
             {searchResults.map((msg) => (
               <div key={msg.id} className="search-result">
                 <strong>{msg.sender_name ?? msg.sender_id}</strong>
@@ -1063,6 +1215,40 @@ export function RoomPage() {
               }}
             >
               邀请链接核销提示：{inviteRedeemError}。你也可以直接复制下方加密地址发给房主拉你入群。
+            </div>
+          )}
+
+          {/* 受邀协作者的核销申请已登记，等待房主在「权限」面板批准 */}
+          {isEncrypted && xmtpNotInGroup && invitePendingApproval && (
+            <div
+              className="card"
+              style={{
+                alignSelf: "center",
+                maxWidth: 540,
+                width: "100%",
+                padding: "18px 20px",
+                display: "flex",
+                flexDirection: "column",
+                gap: 10,
+                background: "#ffffff",
+                border: "1px solid rgba(217, 119, 6, 0.28)",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#d97706", fontWeight: 600, fontSize: 14 }}>
+                <Shield size={16} strokeWidth={2} />
+                <span>入群申请已提交，等待房主批准</span>
+              </div>
+              <p style={{ fontSize: 13, color: "#6e6e73", lineHeight: 1.5 }}>
+                这条邀请链接要求房主逐一批准。批准后房主页面会自动把你拉进加密群，无需再次打开邀请链接。
+              </p>
+              {myXmtpAddress && (
+                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                  <code style={{ fontSize: 12, color: "#6e6e73", background: "#f5f5f7", padding: "4px 8px", borderRadius: 6 }}>
+                    {myXmtpAddress}
+                  </code>
+                  <CopyButton text={myXmtpAddress} label="复制我的加密地址" />
+                </div>
+              )}
             </div>
           )}
 
@@ -1233,13 +1419,56 @@ export function RoomPage() {
             </div>
           )}
 
-          {displayMessages.map((msg) => (
-            <ChatMessageItem
-              key={msg.id}
-              message={msg}
-              isOwn={msg.sender_type !== "agent" && msg.sender_id === (user?.id ?? "")}
-            />
-          ))}
+          {displayMessages.map((msg) => {
+            const isOwn = msg.sender_type !== "agent" && msg.sender_id === (user?.id ?? "");
+            const replyTo = msg.replyToId ? displayMessageById.get(msg.replyToId) : undefined;
+            return (
+              <div key={msg.id} style={{ display: "flex", flexDirection: "column" }}>
+                {msg.replyToId && msg.msg_type !== "system" && (
+                  <div
+                    style={{
+                      fontSize: 12,
+                      color: "var(--text-muted)",
+                      padding: isOwn ? "0 4px 2px" : "0 42px 2px",
+                      alignSelf: isOwn ? "flex-end" : "flex-start",
+                      textAlign: isOwn ? "right" : "left",
+                      maxWidth: "min(76%, 680px)",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    ↩ 回复 {replyTo ? (replyTo.sender_name ?? "一条消息") : "一条消息"}
+                    {replyTo ? `：${replyTo.content.replace(/\s+/g, " ").slice(0, 60)}` : ""}
+                  </div>
+                )}
+                <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                  <div style={{ flex: "1 1 auto", minWidth: 0, display: "flex", flexDirection: "column" }}>
+                    <ChatMessageItem message={msg} isOwn={isOwn} />
+                  </div>
+                  {isEncrypted && !isObserver && msg.msg_type !== "system" && (
+                    <button
+                      type="button"
+                      className="icon-btn"
+                      style={{ width: 26, height: 26, opacity: 0.45, flexShrink: 0 }}
+                      title="回复此消息"
+                      aria-label="回复此消息"
+                      onClick={() =>
+                        setReplyTarget({
+                          id: msg.id,
+                          senderInboxId: msg.xmtpSenderInboxId,
+                          senderName: msg.sender_name ?? msg.sender_id.slice(0, 8),
+                          excerpt: msg.content.replace(/\s+/g, " ").slice(0, 60),
+                        })
+                      }
+                    >
+                      <Reply size={13} strokeWidth={1.9} />
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
         </div>
 
         {isObserver ? (
@@ -1249,6 +1478,13 @@ export function RoomPage() {
             disabled={isEncrypted ? !xmtpConnected : connectionStatus !== "open"}
             onlineAgents={onlineAgentNames}
             onSend={handleSend}
+            roomId={roomId}
+            identityAddress={isEncrypted ? myXmtpAddress || null : user?.id ?? null}
+            draftKeyMaterial={
+              isEncrypted ? unlockedKey : localStorage.getItem("mapr-auth-token")
+            }
+            replyTarget={replyTarget}
+            onCancelReply={() => setReplyTarget(null)}
           />
         )}
       </section>
@@ -1262,7 +1498,7 @@ export function RoomPage() {
           />
           <aside className="side-panel open">
             <nav className="side-panel__tabs panel-tabs">
-              {TABS.map((tab) => (
+              {TABS.filter((tab) => tabVisibleInRoom(tab.id, isEncrypted)).map((tab) => (
                 <button
                   key={tab.id}
                   type="button"
@@ -1291,6 +1527,8 @@ export function RoomPage() {
                   roomId={roomId}
                   currentUserId={user?.id}
                   isOwner={myRoomRole === "owner"}
+                  xmtpClient={xmtpClient}
+                  xmtpGroupId={room?.xmtp_group_id}
                   onSeatRemoved={() => void roomSeatsQuery.refetch()}
                 />
               )}
@@ -1298,7 +1536,7 @@ export function RoomPage() {
                 <TasksPanel tasks={tasks.filter((t) => !t.room_id || t.room_id === roomId)} />
               )}
               {activeTab === "dialogue" && <DialoguePanel roomId={roomId} onlineAgents={onlineAgentNames} />}
-              {activeTab === "files" && <FilesPanel roomId={roomId} />}
+              {activeTab === "files" && !isEncrypted && <FilesPanel roomId={roomId} />}
               {activeTab === "permissions" && (
                 <PermissionsPanel
                   roomId={roomId}
@@ -1306,9 +1544,13 @@ export function RoomPage() {
                   isOwner={myRoomRole === "owner"}
                   xmtpClient={xmtpClient}
                   xmtpGroupId={room?.xmtp_group_id}
+                  myXmtpAddress={myXmtpAddress || null}
+                  room={room ?? undefined}
                   onPermissionsChanged={() => void permissionsQuery.refetch()}
                 />
               )}
+              {activeTab === "approvals" && <OwnerApprovalPanel roomId={roomId} />}
+              {activeTab === "activity" && <ActivityPanel roomId={roomId} />}
             </div>
           </aside>
         </>

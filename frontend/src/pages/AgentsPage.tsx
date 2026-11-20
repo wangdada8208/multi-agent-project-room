@@ -59,6 +59,7 @@ const KIND_LABEL: Record<AgentKind, string> = {
   "openai-compatible": "云端接口",
   webhook: "Webhook",
   "http-model": "HTTP 模型",
+  "cloud-agent": "云端 Agent",
 };
 
 const SEAT_STATUS_LABEL: Record<SeatViewLocal["status"], string> = {

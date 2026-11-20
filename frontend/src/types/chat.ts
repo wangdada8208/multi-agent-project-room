@@ -19,6 +19,9 @@ export interface Room {
   created_at: string;
   transport?: string;
   xmtp_group_id?: string | null;
+  settings_version?: number;
+  /** 仅模板建房接口的回包携带；GET /rooms/{id} 目前不回读 settings_json。 */
+  settings_json?: Record<string, unknown> | null;
 }
 
 export interface ChatMessage {
