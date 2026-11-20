@@ -14,6 +14,8 @@ export interface XmtpGroupLike {
   sync?(): Promise<unknown>;
   members?(): Promise<{ inboxId?: string; accountIdentifiers?: { identifier?: string }[] }[]>;
   addMembersByIdentifiers(identifiers: Identifier[]): Promise<unknown>;
+  removeMembersByIdentifiers?(identifiers: Identifier[]): Promise<unknown>;
+  send?(text: string): Promise<unknown>;
 }
 
 export interface XmtpClientLike {
@@ -43,6 +45,16 @@ export function pendingOwnSeats(seats: HubSeatView[], currentUserId: string): Hu
   );
 }
 
+/** 云端邀请入房的待入群席位（source="invite"）：云端 Agent 没有本机助手，入群只能由房主客户端完成。 */
+export function pendingInviteSeats(seats: HubSeatView[]): HubSeatView[] {
+  return seats.filter(
+    (s) =>
+      s.group_status === "pending" &&
+      s.source === "invite" &&
+      isEthAddress(s.xmtp_address),
+  );
+}
+
 function memberAddressSet(members: { accountIdentifiers?: { identifier?: string }[] }[]): Set<string> {
   const set = new Set<string>();
   for (const m of members) {
@@ -67,6 +79,8 @@ export async function syncPendingSeatsToGroup(input: {
   roomId: string;
   groupId: string | null | undefined;
   currentUserId: string | null | undefined;
+  /** 当前用户是房主时，第三趟顺带拉起云端邀请席（它们没有本机助手，入群只能等房主客户端）。 */
+  isRoomOwner?: boolean;
   deps: SeatSyncDeps;
 }): Promise<SeatSyncOutcome> {
   const outcome: SeatSyncOutcome = { added: [], reported: [] };
@@ -76,7 +90,14 @@ export async function syncPendingSeatsToGroup(input: {
   const group = await resolveGroup(client, groupId);
   if (!group || typeof group.addMembersByIdentifiers !== "function") return outcome;
 
-  const targets = pendingOwnSeats(await deps.listSeats(roomId), currentUserId);
+  const seats = await deps.listSeats(roomId);
+  const targets = pendingOwnSeats(seats, currentUserId);
+  if (input.isRoomOwner) {
+    const seen = new Set(targets.map((s) => s.seat_id));
+    for (const seat of pendingInviteSeats(seats)) {
+      if (!seen.has(seat.seat_id)) targets.push(seat);
+    }
+  }
   if (targets.length === 0) return outcome;
 
   await group.sync?.();
@@ -105,16 +126,49 @@ export async function syncPendingSeatsToGroup(input: {
 }
 
 /**
- * 房主端自动把已核销邀请链接的协作者加密地址拉入 XMTP 群。
+ * 汇总「应该已经在加密群里」的受邀地址（纯函数，可测）：
+ * - 已批准/已核销 redemptions 的 redeemer_address；
+ * - 成员行上已绑定的 xmtp_address；
+ * - 旧版邀请行的 redeemed_by_address（过渡字段）。
+ * 绝不包含 pending/denied/expired/revoked 的核销地址——未批准的申请者不能进加密群。
+ */
+export function collectGroupSyncAddresses(input: {
+  invites?: { redeemed_by_address?: string | null }[];
+  redemptions?: { status?: string; redeemer_address?: string | null }[];
+  members?: { xmtp_address?: string | null }[];
+}): string[] {
+  const candidates: string[] = [];
+  const seen = new Set<string>();
+  const push = (raw: string | null | undefined) => {
+    const trimmed = raw?.trim();
+    if (!trimmed || !isEthAddress(trimmed)) return;
+    const lower = trimmed.toLowerCase();
+    if (seen.has(lower)) return;
+    seen.add(lower);
+    candidates.push(lower);
+  };
+  for (const inv of input.invites ?? []) push(inv.redeemed_by_address);
+  for (const red of input.redemptions ?? []) {
+    if (red.status === "approved" || red.status === "consumed") {
+      push(red.redeemer_address);
+    }
+  }
+  for (const member of input.members ?? []) push(member.xmtp_address);
+  return candidates;
+}
+
+/**
+ * 房主端自动把已核销/已批准邀请的协作者加密地址拉入 XMTP 群。
+ * 地址来源由调用方用 collectGroupSyncAddresses 组装（redemptions + 成员行 + 旧邀请字段）。
  */
 export async function syncRedeemedInvitesToGroup(input: {
   client: XmtpClientLike;
   roomId: string;
   groupId: string | null | undefined;
-  listInvites: (roomId: string) => Promise<{ redeemed_by_address: string | null }[]>;
+  listAddresses: (roomId: string) => Promise<(string | null | undefined)[]>;
 }): Promise<{ addedAddresses: string[] }> {
   const addedAddresses: string[] = [];
-  const { client, roomId, groupId, listInvites } = input;
+  const { client, roomId, groupId, listAddresses } = input;
   if (!groupId) return { addedAddresses };
 
   const group = await resolveGroup(client, groupId);
@@ -122,13 +176,13 @@ export async function syncRedeemedInvitesToGroup(input: {
     return { addedAddresses };
   }
 
-  const invites = await listInvites(roomId);
+  const rawAddresses = await listAddresses(roomId);
   const candidates: string[] = [];
   const seen = new Set<string>();
-  for (const inv of invites) {
-    const raw = inv.redeemed_by_address?.trim();
-    if (!raw || !isEthAddress(raw)) continue;
-    const lower = raw.toLowerCase();
+  for (const raw of rawAddresses) {
+    const trimmed = raw?.trim();
+    if (!trimmed || !isEthAddress(trimmed)) continue;
+    const lower = trimmed.toLowerCase();
     if (seen.has(lower)) continue;
     seen.add(lower);
     candidates.push(lower);
@@ -191,4 +245,59 @@ export async function addAddressToXmtpGroup(
 
   await group.addMembersByIdentifiers([identifier]);
   return "added";
+}
+
+/**
+ * 构造 member_revoked 群广播正文（与 workers/xmtp-member 的 MAPR1 信封同构）。
+ * 收到的一方只把它当作「重新核实群成员」的提示，不据此直接信任。
+ */
+export function memberRevokedNotice(address: string, reason = "owner_removed"): string {
+  const requestId =
+    typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+      ? `mr-${crypto.randomUUID()}`
+      : `mr-${Date.now()}`;
+  return `MAPR1 ${JSON.stringify({
+    kind: "member_revoked",
+    request_id: requestId,
+    to: "*",
+    address: address.toLowerCase(),
+    reason,
+  })}`;
+}
+
+/**
+ * 把某个加密地址移出 XMTP 群，并向群内广播 member_revoked 通知。
+ * 「移除」必须先出群、后删 Hub 行——顺序反了会留下仍可解密新消息的孤儿成员。
+ */
+export async function removeAddressFromXmtpGroup(
+  client: XmtpClientLike,
+  groupId: string,
+  rawAddress: string,
+  opts: { notify?: boolean; reason?: string } = {},
+): Promise<"removed" | "not-member"> {
+  const trimmed = rawAddress.trim();
+  if (!isEthAddress(trimmed)) {
+    throw new Error("无效的加密身份地址");
+  }
+  const addr = trimmed.toLowerCase();
+  const group = await resolveGroup(client, groupId);
+  if (!group || typeof group.removeMembersByIdentifiers !== "function") {
+    throw new Error("当前浏览器尚未连接房间加密群，请先解锁身份后重试");
+  }
+
+  await group.sync?.();
+  const present = memberAddressSet((await group.members?.()) ?? []);
+  if (!present.has(addr)) {
+    return "not-member";
+  }
+
+  await group.removeMembersByIdentifiers([memberIdentifier(addr)]);
+  if (opts.notify !== false && typeof group.send === "function") {
+    try {
+      await group.send(memberRevokedNotice(addr, opts.reason));
+    } catch {
+      // 广播失败不影响移除本身；其余成员下一次 members() 拉取同样会失效缓存。
+    }
+  }
+  return "removed";
 }

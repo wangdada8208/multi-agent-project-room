@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.permissions import require_role
 from app.core.database import get_db
 from app.core.security import get_current_user
+from app.models.room import Room
 from app.models.user import User
 from .models import RoomFile
 
@@ -26,6 +27,13 @@ UPLOAD_DIR = Path(__file__).resolve().parents[3] / "uploads"
 MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
 
 
+async def _reject_encrypted_room(db: AsyncSession, room_id: str) -> None:
+    """Encrypted rooms keep file bytes off the Hub entirely."""
+    room = await db.get(Room, room_id)
+    if room is not None and room.transport == "xmtp":
+        raise HTTPException(status_code=409, detail="body_not_on_hub")
+
+
 @router.get("")
 async def list_files(
     room_id: str,
@@ -33,6 +41,7 @@ async def list_files(
     current_user: User = Depends(get_current_user),
 ) -> dict:
     await require_role(room_id, current_user, db)
+    await _reject_encrypted_room(db, room_id)
     stmt = (
         select(RoomFile)
         .where(RoomFile.room_id == room_id)
@@ -51,6 +60,7 @@ async def upload_file(
     current_user: User = Depends(get_current_user),
 ) -> dict:
     await require_role(room_id, current_user, db, min_role="member")
+    await _reject_encrypted_room(db, room_id)
     if not file.filename:
         raise HTTPException(status_code=400, detail="No filename provided")
 
@@ -112,6 +122,7 @@ async def download_file(
     current_user: User = Depends(get_current_user),
 ):
     await require_role(room_id, current_user, db)
+    await _reject_encrypted_room(db, room_id)
     record = await db.get(RoomFile, file_id)
     if not record or record.room_id != room_id:
         raise HTTPException(status_code=404, detail="File not found")

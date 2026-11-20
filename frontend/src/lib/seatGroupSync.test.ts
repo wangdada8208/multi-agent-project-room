@@ -2,6 +2,10 @@ import { describe, expect, it, vi } from "vitest";
 import type { Identifier } from "@xmtp/browser-sdk";
 import {
   addAddressToXmtpGroup,
+  collectGroupSyncAddresses,
+  memberRevokedNotice,
+  pendingInviteSeats,
+  removeAddressFromXmtpGroup,
   syncPendingSeatsToGroup,
   syncRedeemedInvitesToGroup,
 } from "./seatGroupSync";
@@ -57,6 +61,7 @@ function syncWith(input: {
   client: XmtpClientLike;
   groupId?: string | null;
   seats?: HubSeatView[];
+  isRoomOwner?: boolean;
   markAdded?: (roomId: string, seatId: string) => Promise<void>;
 }) {
   const listSeats = vi.fn(async () => input.seats ?? []);
@@ -70,6 +75,7 @@ function syncWith(input: {
         roomId: "room-1",
         groupId: input.groupId === undefined ? "group-1" : input.groupId,
         currentUserId: ME,
+        isRoomOwner: input.isRoomOwner,
         deps: { listSeats, markAdded },
       }),
   };
@@ -195,22 +201,79 @@ describe("syncPendingSeatsToGroup", () => {
   });
 });
 
+describe("pendingInviteSeats / owner third pass", () => {
+  it("only selects invite-source pending seats with a valid address", () => {
+    const seats = [
+      seat({ seat_id: "invite-pending", source: "invite" }),
+      seat({ seat_id: "helper-pending", source: "helper" }),
+      seat({ seat_id: "invite-added", source: "invite", group_status: "added" }),
+      seat({ seat_id: "invite-bad-addr", source: "invite", xmtp_address: "junk" }),
+      seat({ seat_id: "no-source" }),
+    ];
+    expect(pendingInviteSeats(seats).map((s) => s.seat_id)).toEqual(["invite-pending"]);
+  });
+
+  it("房主客户端额外拉起云端邀请席；非房主只拉自己的席位", async () => {
+    const { group, addCalls } = fakeGroup();
+    const seats = [
+      seat({ seat_id: "own-pending", xmtp_address: ADDR_A }),
+      seat({ seat_id: "invite-pending", source: "invite", owner_user_id: OTHER, xmtp_address: ADDR_B }),
+      seat({ seat_id: "other-helper", source: "helper", owner_user_id: OTHER, xmtp_address: ADDR_B }),
+    ];
+    const asOwner = await syncWith({
+      client: fakeClient(group),
+      seats,
+      isRoomOwner: true,
+    }).run();
+    expect(asOwner.added.sort()).toEqual(["invite-pending", "own-pending"]);
+    expect(addCalls).toEqual([[ADDR_A], [ADDR_B]]);
+
+    const { group: group2, addCalls: addCalls2 } = fakeGroup();
+    const asMember = await syncWith({
+      client: fakeClient(group2),
+      seats,
+      isRoomOwner: false,
+    }).run();
+    expect(asMember.added).toEqual(["own-pending"]);
+    expect(addCalls2).toEqual([[ADDR_A]]);
+  });
+});
+
+describe("collectGroupSyncAddresses", () => {
+  const HUMAN = "0xcccccccccccccccccccccccccccccccccccccccc";
+
+  it("仅收 approved/consumed 核销 + 成员行地址 + 旧邀请字段，绝不收 pending/denied", () => {
+    const out = collectGroupSyncAddresses({
+      invites: [{ redeemed_by_address: ADDR_A }],
+      redemptions: [
+        { status: "consumed", redeemer_address: ADDR_B },
+        { status: "approved", redeemer_address: HUMAN },
+        { status: "pending", redeemer_address: "0xdddddddddddddddddddddddddddddddddddddddd" },
+        { status: "denied", redeemer_address: "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee" },
+        { status: "revoked", redeemer_address: "0xffffffffffffffffffffffffffffffffffffffff" },
+      ],
+      members: [{ xmtp_address: `0x${ADDR_A.slice(2).toUpperCase()}` }, { xmtp_address: null }],
+    });
+    expect(out).toEqual([ADDR_A, ADDR_B, HUMAN]);
+  });
+});
+
 describe("syncRedeemedInvitesToGroup", () => {
-  it("deduplicates valid redeemed addresses, skips existing members, and adds new ones sequentially", async () => {
+  it("deduplicates valid addresses, skips existing members, and adds new ones sequentially", async () => {
     const { group, addCalls } = fakeGroup([ADDR_A]);
-    const listInvites = vi.fn(async () => [
-      { redeemed_by_address: null },
-      { redeemed_by_address: "invalid" },
-      { redeemed_by_address: ADDR_A.toUpperCase().replace("0X", "0x") },
-      { redeemed_by_address: `0x${ADDR_B.slice(2).toUpperCase()}` },
-      { redeemed_by_address: ADDR_B },
+    const listAddresses = vi.fn(async () => [
+      null,
+      "invalid",
+      ADDR_A.toUpperCase().replace("0X", "0x"),
+      `0x${ADDR_B.slice(2).toUpperCase()}`,
+      ADDR_B,
     ]);
 
     const outcome = await syncRedeemedInvitesToGroup({
       client: fakeClient(group),
       roomId: "room-1",
       groupId: "group-1",
-      listInvites,
+      listAddresses,
     });
 
     expect(outcome.addedAddresses).toEqual([ADDR_B]);
@@ -223,7 +286,7 @@ describe("syncRedeemedInvitesToGroup", () => {
       client: fakeClient(group, { inboxId: null }),
       roomId: "room-1",
       groupId: "group-1",
-      listInvites: async () => [{ redeemed_by_address: ADDR_A }],
+      listAddresses: async () => [ADDR_A],
     });
     expect(outcome.addedAddresses).toEqual([]);
     expect(addCalls).toEqual([]);
@@ -261,5 +324,78 @@ describe("addAddressToXmtpGroup", () => {
     const res = await addAddressToXmtpGroup(fakeClient(group), "group-1", ADDR_B);
     expect(res).toBe("added");
     expect(addCalls).toEqual([[ADDR_B]]);
+  });
+});
+
+function fakeRemovableGroup(initialMembers: string[] = []) {
+  const memberAddrs = [...initialMembers];
+  const removeCalls: string[][] = [];
+  const sent: string[] = [];
+  const group = {
+    sync: vi.fn(async () => {}),
+    members: vi.fn(async () =>
+      memberAddrs.map((a) => ({ accountIdentifiers: [{ identifier: a }] }))),
+    removeMembersByIdentifiers: vi.fn(async (ids: Identifier[]) => {
+      for (const id of ids) {
+        const idx = memberAddrs.indexOf(id.identifier.toLowerCase());
+        if (idx !== -1) memberAddrs.splice(idx, 1);
+      }
+      removeCalls.push(ids.map((i) => i.identifier));
+    }),
+    send: vi.fn(async (text: string) => {
+      sent.push(text);
+    }),
+  };
+  return { group, removeCalls, sent };
+}
+
+describe("memberRevokedNotice", () => {
+  it("builds a MAPR1 broadcast envelope decodable shape", () => {
+    const text = memberRevokedNotice(ADDR_A.toUpperCase());
+    expect(text.startsWith("MAPR1 ")).toBe(true);
+    const raw = JSON.parse(text.slice(6));
+    expect(raw.kind).toBe("member_revoked");
+    expect(raw.to).toBe("*");
+    expect(raw.address).toBe(ADDR_A);
+    expect(raw.reason).toBe("owner_removed");
+  });
+});
+
+describe("removeAddressFromXmtpGroup", () => {
+  it("removes a present member and broadcasts member_revoked", async () => {
+    const { group, removeCalls, sent } = fakeRemovableGroup([ADDR_A, ADDR_B]);
+    const res = await removeAddressFromXmtpGroup(fakeClient(group), "group-1", ADDR_A);
+    expect(res).toBe("removed");
+    expect(removeCalls).toEqual([[ADDR_A]]);
+    expect(sent).toHaveLength(1);
+    const raw = JSON.parse(sent[0].slice(6));
+    expect(raw.kind).toBe("member_revoked");
+    expect(raw.address).toBe(ADDR_A);
+  });
+
+  it("returns not-member and sends nothing when address absent", async () => {
+    const { group, removeCalls, sent } = fakeRemovableGroup([ADDR_A]);
+    const res = await removeAddressFromXmtpGroup(fakeClient(group), "group-1", ADDR_B);
+    expect(res).toBe("not-member");
+    expect(removeCalls).toEqual([]);
+    expect(sent).toEqual([]);
+  });
+
+  it("throws on invalid address and missing group", async () => {
+    const { group } = fakeRemovableGroup([ADDR_A]);
+    await expect(
+      removeAddressFromXmtpGroup(fakeClient(group), "group-1", "not-an-address"),
+    ).rejects.toThrow("无效的加密身份地址");
+    await expect(
+      removeAddressFromXmtpGroup(fakeClient(null), "group-1", ADDR_A),
+    ).rejects.toThrow("当前浏览器尚未连接房间加密群");
+  });
+
+  it("still removes when the group cannot send the notice", async () => {
+    const { group, removeCalls } = fakeRemovableGroup([ADDR_A]);
+    delete (group as { send?: unknown }).send;
+    const res = await removeAddressFromXmtpGroup(fakeClient(group), "group-1", ADDR_A);
+    expect(res).toBe("removed");
+    expect(removeCalls).toEqual([[ADDR_A]]);
   });
 });
