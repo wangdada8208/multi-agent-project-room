@@ -15,9 +15,31 @@ test("findConnector returns matching connector by scope", () => {
   };
   const connectors = [local, mockConnector];
 
-  assert.equal(findConnector("calendar.free_busy", connectors), local);
-  assert.equal(findConnector("email.receipt", connectors), mockConnector);
-  assert.equal(findConnector("unknown.scope", connectors), null);
+  assert.equal(findConnector(connectors, "calendar.free_busy"), local);
+  assert.equal(findConnector(connectors, "email.receipt"), mockConnector);
+  assert.equal(findConnector(connectors, "unknown.scope"), null);
+});
+
+test("findConnector routes by accountId; unbound connectors never serve bound requests", () => {
+  const legacy = {
+    id: "legacy",
+    scopes: ["gmail.send"],
+    fetch: async () => ({}),
+    execute: async () => ({ status: "executed" as const }),
+  };
+  const work = { ...legacy, id: "work", accountId: "work-mail" };
+  const personal = { ...legacy, id: "personal", accountId: "personal-mail" };
+  const connectors = [work, personal, legacy];
+
+  // 不指定账户：只命中无绑定的连接器，绝不静默借用某个账户的凭据（M4 fail closed）
+  assert.equal(findConnector(connectors, "gmail.send"), legacy);
+  assert.equal(findConnector([work, personal], "gmail.send"), null);
+  // 指定账户：只命中 accountId 完全一致的连接器
+  assert.equal(findConnector(connectors, "gmail.send", "personal-mail"), personal);
+  assert.equal(findConnector(connectors, "gmail.send", "work-mail"), work);
+  // 未知账户与「无绑定的旧连接器」都不能替绑定账户干活
+  assert.equal(findConnector(connectors, "gmail.send", "other"), null);
+  assert.equal(findConnector([legacy], "gmail.send", "work-mail"), null);
 });
 
 test("LocalCalendarConnector fetches freeBusy and filters correctly", async () => {

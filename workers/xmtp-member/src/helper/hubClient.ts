@@ -1,3 +1,4 @@
+import type { SignedLedgerCheckpoint } from "../activity.ts";
 import type {
   CreateSeatRequest,
   HeartbeatResponse,
@@ -6,6 +7,24 @@ import type {
   SeatGrant,
   SeatStatus,
 } from "./types.ts";
+
+export interface HubSafeActivityEvent {
+  id: string;
+  room_id: string;
+  actor_kind: "human" | "agent" | "helper" | "system";
+  actor_id: string;
+  kind: string;
+  app?: string | null;
+  status?: string | null;
+  subject_id?: string | null;
+  stream_seq?: number | null;
+  created_at: string;
+}
+
+export interface HubActivityIngestResult {
+  accepted: number;
+  duplicates: number;
+}
 
 /**
  * 本机助手访问 Hub 的唯一出口。除 pair 外，全部带 `Authorization: Bearer <helperToken>`。
@@ -39,6 +58,10 @@ export interface HubClient {
     agents: { key: string; kind: string; version?: string }[];
     seats: { seat_id: string; status: SeatStatus }[];
   }): Promise<HeartbeatResponse>;
+  /** POST /api/v1/helpers/me/activity：批量上报仅元数据活动事件（WP4） */
+  reportActivity(events: HubSafeActivityEvent[]): Promise<HubActivityIngestResult>;
+  /** POST /api/v1/helpers/me/activity/checkpoints：上报 EIP-191 签名账本锚点（WP4） */
+  reportCheckpoints(checkpoints: SignedLedgerCheckpoint[]): Promise<HubActivityIngestResult>;
 }
 
 /** 所有 Hub 调用共用的超时；本机助手不能被一个卡住的 Hub 拖死。 */
@@ -92,5 +115,9 @@ export function createHubClient(hubOrigin: string, helperToken: string | null, f
       call<{ agent_token: string }>("POST", `/api/v1/helpers/me/seats/${encodeURIComponent(seatId)}/token`),
     deleteSeat: (seatId) => call<void>("DELETE", `/api/v1/helpers/me/seats/${encodeURIComponent(seatId)}`),
     heartbeat: (body) => call<HeartbeatResponse>("POST", "/api/v1/helpers/me/heartbeat", body),
+    reportActivity: (events) =>
+      call<HubActivityIngestResult>("POST", "/api/v1/helpers/me/activity", { events }),
+    reportCheckpoints: (checkpoints) =>
+      call<HubActivityIngestResult>("POST", "/api/v1/helpers/me/activity/checkpoints", { checkpoints }),
   };
 }

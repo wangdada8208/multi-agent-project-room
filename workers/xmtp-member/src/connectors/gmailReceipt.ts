@@ -6,17 +6,22 @@ import type { Connector, EmailReceiptConstraints, EmailReceiptPayload } from "./
 export interface GmailReceiptConnectorOptions {
   credentialPath: string;
   fetchImpl?: typeof fetch;
+  /** 本凭据文件对应的账户 id；路由按 accountId 精确匹配（WP7 多账户）。 */
+  accountId?: string;
 }
 
 export class GmailReceiptConnector implements Connector {
-  readonly id = "gmail-receipt";
+  readonly id: string;
   readonly scopes = ["email.receipt"];
+  readonly accountId?: string;
   private readonly credentialPath: string;
   private readonly fetchImpl: typeof fetch;
 
   constructor(options: GmailReceiptConnectorOptions) {
+    this.id = options.accountId ? `gmail-receipt:${options.accountId}` : "gmail-receipt";
     this.credentialPath = options.credentialPath;
     this.fetchImpl = options.fetchImpl ?? fetch;
+    this.accountId = options.accountId;
   }
 
   private async loadToken(): Promise<string> {

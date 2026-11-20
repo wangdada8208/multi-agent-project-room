@@ -87,6 +87,7 @@ function fakeSupervisor(store: SeatStore, opts: { failStart?: boolean } = {}) {
         consolePort: r.consolePort,
         status: started.has(r.seatId) ? "running" : "stopped",
         lastError: null,
+        pausedAt: r.pausedAt ?? null,
       }));
     },
   };
@@ -113,6 +114,12 @@ function fakeHub(overrides: Partial<HubClient> = {}): HubClient {
     async deleteSeat() {},
     async heartbeat() {
       return { revoked: false, seats_to_stop: [] };
+    },
+    async reportActivity() {
+      return { accepted: 0, duplicates: 0 };
+    },
+    async reportCheckpoints() {
+      return { accepted: 0, duplicates: 0 };
     },
     ...overrides,
   };
@@ -768,4 +775,80 @@ test("HELPER_PAGE_HTML：已配对助手打开 #pair=mpc_old&preset=grok&room=r1
   assert.equal(getEl("m-name").value, "Grok");
   assert.equal(getEl("m-room").value, "r1");
   assert.equal(locationObj.hash, "");
+});
+
+// ── WP5：本机席位暂停/恢复（pause 只停进程不删数据）──
+
+function seatRecordFor(seatId: string, over: Partial<SeatRecord> = {}): SeatRecord {
+  return {
+    seatId,
+    agentKey: "claude-code",
+    roomId: "room-1",
+    roomName: "一号房",
+    agentUsername: "agent-1",
+    xmtpWalletKey: "0x" + "11".repeat(32),
+    xmtpDbEncryptionKey: "0x" + "22".repeat(32),
+    xmtpAddress: "0x" + "a".repeat(40),
+    xmtpGroupId: null,
+    allowedSenders: [],
+    agentToken: "tok-1",
+    consolePort: SEAT_PORT_BASE,
+    createdAt: "2026-11-20T00:00:00.000Z",
+    ...over,
+  };
+}
+
+test("helper server：/api/seats/:id/pause 只停进程不删数据，resume 恢复并清标记", async () => {
+  await withTmp(async (root) => {
+    const store = createSeatStore(root);
+    const sup = fakeSupervisor(store);
+    await store.save(seatRecordFor("seat-1"));
+    const deps = fakeDeps(store, sup.supervisor, fakeHub());
+    await withServer(deps, async (port) => {
+      // 没有 owner 头 → guard 拦截
+      const noAuth = await rawRequest(port, { method: "POST", path: "/api/seats/seat-1/pause" });
+      assert.equal(noAuth.status, 403);
+      // hubOrigin 伪造 owner 头 → 拦截
+      const forged = await rawRequest(port, {
+        method: "POST",
+        path: "/api/seats/seat-1/pause",
+        headers: { "X-MAPR-Owner": "1", Origin: "https://hub.example" },
+      });
+      assert.equal(forged.status, 403);
+      // 不存在的席位 → 404
+      const missing = await rawRequest(port, {
+        method: "POST",
+        path: "/api/seats/nope/pause",
+        headers: { "X-MAPR-Owner": "1" },
+      });
+      assert.equal(missing.status, 404);
+      // pause → 200：进程停了，但 seat.json 完整保留（绝不走删除语义）
+      const paused = await rawRequest(port, {
+        method: "POST",
+        path: "/api/seats/seat-1/pause",
+        headers: { "X-MAPR-Owner": "1" },
+      });
+      assert.equal(paused.status, 200);
+      assert.deepEqual(sup.calls.stops, ["seat-1"]);
+      const rec = await store.get("seat-1");
+      assert.ok(rec, "暂停绝不能删除席位数据");
+      assert.ok(rec.pausedAt);
+      assert.equal(rec.pausedSource, "local");
+      assert.equal(paused.body.pausedAt, rec.pausedAt);
+      assert.equal((await stat(path.join(root, "seats", "seat-1", "seat.json"))).mode & 0o777, 0o600);
+      // resume → 200：标记清除、进程拉起、视图如实
+      const resumed = await rawRequest(port, {
+        method: "POST",
+        path: "/api/seats/seat-1/resume",
+        headers: { "X-MAPR-Owner": "1" },
+      });
+      assert.equal(resumed.status, 200);
+      assert.deepEqual(sup.calls.starts, ["seat-1"]);
+      const rec2 = await store.get("seat-1");
+      assert.equal(rec2?.pausedAt, null);
+      assert.equal(rec2?.pausedSource, null);
+      assert.equal(resumed.body.status, "running");
+      assert.equal(resumed.body.pausedAt, null);
+    });
+  });
 });

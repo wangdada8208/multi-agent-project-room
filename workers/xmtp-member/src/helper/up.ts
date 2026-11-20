@@ -1,13 +1,22 @@
 import { spawn } from "node:child_process";
-import { randomUUID } from "node:crypto";
-import { access, chmod, constants as fsConstants, mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { createHash, randomUUID } from "node:crypto";
+import { access, chmod, constants as fsConstants, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { buildSafeActivityEvent, isSignedLedgerCheckpoint, ledgerEntryStatus } from "../activity.ts";
 import { isAllowedOpenAiBaseUrl, openAiCompatibleEngine, webhookEngine } from "../engines/httpEngines.ts";
 import type { EngineConfig } from "../engines/types.ts";
-import { createHubClient, type HubClient } from "./hubClient.ts";
+import { readLedger } from "../ledger.ts";
+import { writeJsonSecure } from "../secureFile.ts";
+import { createHubClient, type HubClient, type HubSafeActivityEvent } from "./hubClient.ts";
 import { defaultDetectDeps, detectLocalAgents, type DetectDeps } from "./knownAgents.ts";
-import { createSeatStore, createSeatSupervisor, type SeatStore, type SeatSupervisor } from "./seats.ts";
+import {
+  createSeatStore,
+  createSeatSupervisor,
+  SEAT_ID_RE,
+  type SeatStore,
+  type SeatSupervisor,
+} from "./seats.ts";
 import {
   createHelperServer,
   HelperHttpError,
@@ -16,7 +25,7 @@ import {
   type AgentTestResult,
   type HelperServerDeps,
 } from "./server.ts";
-import type { HelperConfig, LocalAgent, ManualAgent, SeatRecord } from "./types.ts";
+import type { HeartbeatRoom, HelperConfig, LocalAgent, ManualAgent, SeatRecord } from "./types.ts";
 
 /**
  * `mapr up` 的入口：一条命令启动本机助手。
@@ -49,6 +58,8 @@ export interface HelperRuntimeOptions {
   platform?: NodeJS.Platform;
   checkExecutable?: (filePath: string) => Promise<boolean>;
   hubClientFactory?: (origin: string, token: string | null) => HubClient;
+  /** 测试注入：默认由本模块创建真实进程管理器。 */
+  supervisor?: SeatSupervisor;
 }
 
 export interface HelperRuntime {
@@ -58,7 +69,7 @@ export interface HelperRuntime {
   heartbeat: () => Promise<void>;
 }
 
-const DEFAULT_HUB_ORIGIN = "https://hub.wangdada8208.xyz";
+export const DEFAULT_HUB_ORIGIN = "https://hub.wangdada8208.xyz";
 const HEARTBEAT_INTERVAL_MS = 30_000;
 /** 成员进程单次回复的默认超时，与 engines/index.ts 的 DEFAULT_TIMEOUT_MS 一致。 */
 const ENGINE_TIMEOUT_MS = 120_000;
@@ -68,6 +79,149 @@ const TEST_PROBE_TIMEOUT_MS = 15_000;
 const HELPER_VERSION = "0.1.0";
 /** 打开过本机页面后写这个标记文件，之后开机自启不再弹浏览器。 */
 const BROWSER_MARKER = ".ui-opened";
+
+/** 房间元数据本机副本的文件名，位于 <rootDir>/seats/<seatId>/state/ 下。 */
+export const ROOM_SETTINGS_FILENAME = "hub-room-settings.json";
+
+/**
+ * 把心跳下发的房间安全元数据写进每个本机席位的 state 目录。
+ * 只在 settings_version 严格前进时重写（防止旧心跳回滚）；
+ * 经 secureFile.ts 原子落盘（0600）。数据始终是建议性质，本机规则优先。
+ */
+async function syncRoomSettings(rootDir: string, store: SeatStore, rooms: HeartbeatRoom[]): Promise<void> {
+  if (rooms.length === 0) return;
+  const seats = await store.list();
+  for (const room of rooms) {
+    if (!room || typeof room.id !== "string" || !Number.isInteger(room.settings_version)) continue;
+    for (const seat of seats) {
+      if (seat.roomId !== room.id || !SEAT_ID_RE.test(seat.seatId)) continue;
+      const file = path.join(rootDir, "seats", seat.seatId, "state", ROOM_SETTINGS_FILENAME);
+      let currentVersion = -1;
+      try {
+        const cur = JSON.parse(await readFile(file, "utf8")) as Record<string, unknown> | null;
+        if (typeof cur?.settings_version === "number") currentVersion = cur.settings_version;
+      } catch {
+        // 首次写入或损坏副本——覆盖重写即可。
+      }
+      if (currentVersion >= room.settings_version) continue;
+      await writeJsonSecure(file, {
+        settings_version: room.settings_version,
+        settings_json: room.settings_json ?? null,
+      });
+    }
+  }
+}
+
+export interface ActivitySyncProgress {
+  checkpointSeq: Map<string, number>;
+  activitySeq: Map<string, number>;
+}
+
+const MAX_ACTIVITY_EVENTS_PER_SEAT = 50;
+
+/**
+ * WP4：把各席位本机账本里的安全元数据事件与签名检查点增量上报给 Hub。
+ * 严格只发白名单元数据与签名链头（绝不带 params/正文/params_hash）；
+ * 单个席位报错不阻断其它席位或心跳，只有上传成功才推进游标。
+ */
+export async function syncSeatActivityToHub(
+  rootDir: string,
+  store: SeatStore,
+  client: HubClient,
+  progress: ActivitySyncProgress
+): Promise<void> {
+  const seats = await store.list();
+  for (const rec of seats) {
+    if (!rec.roomId || rec.roomId.length > 36 || !SEAT_ID_RE.test(rec.seatId)) continue;
+    const stateDir = path.join(rootDir, "seats", rec.seatId, "state");
+
+    try {
+      const rawCp = JSON.parse(await readFile(path.join(stateDir, "ledger-checkpoint.json"), "utf8"));
+      if (
+        isSignedLedgerCheckpoint(rawCp) &&
+        rawCp.room_id === rec.roomId &&
+        rawCp.stream_id.length > 0 &&
+        rawCp.stream_id.length <= 64
+      ) {
+        const prevSeq = progress.checkpointSeq.get(rec.seatId) ?? -1;
+        if (rawCp.head_seq > prevSeq) {
+          await client.reportCheckpoints([rawCp]);
+          progress.checkpointSeq.set(rec.seatId, rawCp.head_seq);
+        }
+      }
+    } catch {
+      // 检查点文件缺失、损坏或网络/Hub 暂不可用不打断心跳，下次继续对齐。
+    }
+
+    try {
+      const entries = await readLedger(path.join(stateDir, "ledger.jsonl"));
+      const lastSeq = progress.activitySeq.get(rec.seatId) ?? 0;
+      const fresh = entries
+        .filter(
+          (e): e is typeof e & { seq: number; entry_hash: string } =>
+            typeof e.seq === "number" &&
+            Number.isInteger(e.seq) &&
+            e.seq > lastSeq &&
+            typeof e.entry_hash === "string" &&
+            e.entry_hash.length > 0
+        )
+        .sort((a, b) => a.seq - b.seq)
+        .slice(0, MAX_ACTIVITY_EVENTS_PER_SEAT);
+
+      if (fresh.length > 0) {
+        const actorId = (rec.xmtpAddress || rec.seatId).slice(0, 128);
+        const batch: HubSafeActivityEvent[] = fresh.map((entry) => {
+          const id = createHash("sha256")
+            .update(`${rec.seatId}:${entry.seq}:${entry.entry_hash}`)
+            .digest("hex")
+            .slice(0, 36);
+          const parsedMs = Date.parse(entry.at);
+          const safe = buildSafeActivityEvent({
+            id,
+            room_id: rec.roomId,
+            actor_kind: "agent",
+            actor_id: actorId,
+            kind: entry.kind,
+            status: ledgerEntryStatus(entry),
+            subject_id:
+              typeof entry.request_id === "string" && entry.request_id.length > 0
+                ? entry.request_id.slice(0, 64)
+                : null,
+            now: Number.isFinite(parsedMs) ? new Date(parsedMs) : new Date(0),
+          });
+          return { ...safe, stream_seq: entry.seq };
+        });
+        await client.reportActivity(batch);
+        progress.activitySeq.set(rec.seatId, fresh[fresh.length - 1].seq);
+      }
+    } catch {
+      // 账本不存在或上传失败时不推进 activitySeq，下一轮幂等重传。
+    }
+  }
+}
+
+/**
+ * helper 启动时恢复席位进程。显式暂停（pausedAt 非空）的席位保持停止：
+ * 「暂停」语义是保留数据但进程不跑，重启机器或 helper 也不应把它拉起来。
+ */
+export async function restoreSeats(
+  store: SeatStore,
+  supervisor: SeatSupervisor,
+  log: (msg: string) => void = (m) => console.error(m)
+): Promise<void> {
+  for (const seat of await store.list()) {
+    if (seat.pausedAt) {
+      log(`[helper] seat ${seat.seatId} is paused; leaving stopped`);
+      continue;
+    }
+    try {
+      await supervisor.start(seat.seatId);
+    } catch (err) {
+      // 单个席位起不来不阻塞其余席位；状态在 views() 里如实可见。
+      log(`[helper] seat ${seat.seatId} failed to start: ${messageOf(err)}`);
+    }
+  }
+}
 
 export function parseUpArgs(flags: Record<string, string>, env: NodeJS.ProcessEnv, homeDir: string): UpOptions {
   const hubOrigin = (flags.hub || env.MAPR_HUB_ORIGIN || DEFAULT_HUB_ORIGIN).trim().replace(/\/+$/, "");
@@ -96,13 +250,6 @@ async function readJsonSecure(file: string): Promise<unknown | null> {
   if (!st.isFile()) return null;
   if (st.mode & 0o077) throw new Error(`${file} has unsafe permissions (want 0600)`);
   return JSON.parse(await readFile(file, "utf8"));
-}
-
-async function writeJsonSecure(file: string, data: unknown): Promise<void> {
-  const tmp = `${file}.tmp-${process.pid}-${randomUUID().slice(0, 8)}`;
-  await writeFile(tmp, JSON.stringify(data, null, 2), { encoding: "utf8", mode: 0o600 });
-  await chmod(tmp, 0o600);
-  await rename(tmp, file);
 }
 
 function messageOf(err: unknown): string {
@@ -257,7 +404,7 @@ export async function createHelperRuntime(options: HelperRuntimeOptions): Promis
     return { kind: "webhook", url: manual.url, secret: secret.secret, timeoutMs: ENGINE_TIMEOUT_MS };
   };
 
-  const supervisor: SeatSupervisor = createSeatSupervisor({
+  const supervisor: SeatSupervisor = options.supervisor ?? createSeatSupervisor({
     store,
     helper: () => {
       if (!config?.helperToken) throw new Error("helper not paired");
@@ -479,6 +626,10 @@ export async function createHelperRuntime(options: HelperRuntimeOptions): Promis
     removeManualAgent,
     testAgent,
   };
+  const activityProgress: ActivitySyncProgress = {
+    checkpointSeq: new Map(),
+    activitySeq: new Map(),
+  };
 
   const heartbeat = async (): Promise<void> => {
     const client = hub;
@@ -502,6 +653,30 @@ export async function createHelperRuntime(options: HelperRuntimeOptions): Promis
       for (const seatId of res.seats_to_stop) {
         await removeSeatFully(seatId);
       }
+      // WP5：seats_to_pause 只停进程不删数据——绝不复用 seats_to_stop（后者物理删除）。
+      // Hub 端恢复 = 席位不再出现在列表里，此时清标记并重启；本机手动暂停（"local"）不受对账影响。
+      const pauseSet = new Set(res.seats_to_pause ?? []);
+      for (const rec of await store.list()) {
+        if (pauseSet.has(rec.seatId)) {
+          if (!rec.pausedAt) rec.pausedAt = new Date().toISOString();
+          if (rec.pausedSource !== "local") rec.pausedSource = "hub";
+          await store.save(rec);
+          await supervisor.stop(rec.seatId);
+        } else if (rec.pausedAt && rec.pausedSource !== "local") {
+          rec.pausedAt = null;
+          rec.pausedSource = null;
+          await store.save(rec);
+          try {
+            await supervisor.start(rec.seatId);
+          } catch (err) {
+            console.error(`[helper] seat ${rec.seatId} failed to resume: ${messageOf(err)}`);
+          }
+        }
+      }
+      // WP9：房间安全元数据随心跳下发；settings_version 前进才重写，写进席位 state 目录。
+      await syncRoomSettings(rootDir, store, res.rooms ?? []);
+      // WP4：增量上报各席位的安全元数据活动事件与签名检查点（不带正文，失败不影响心跳）。
+      await syncSeatActivityToHub(rootDir, store, client, activityProgress);
       // 房主晚于入座才建群：补上缺失的群号并重启成员进程让它生效。
       for (const rec of await store.list()) {
         if (rec.xmtpGroupId) continue;
@@ -557,15 +732,8 @@ export async function runHelper(options: UpOptions): Promise<number> {
   }
   console.log(`[helper] listening on http://${HELPER_BIND}:${HELPER_PORT}/`);
 
-  // ── 4. 恢复席位 ──
-  for (const seat of await store.list()) {
-    try {
-      await supervisor.start(seat.seatId);
-    } catch (err) {
-      // 单个席位起不来不阻塞其余席位；状态在 views() 里如实可见。
-      console.error(`[helper] seat ${seat.seatId} failed to start: ${messageOf(err)}`);
-    }
-  }
+  // ── 4. 恢复席位（已暂停的跳过，不自动拉起） ──
+  await restoreSeats(store, supervisor);
 
   // ── 5. 心跳 ──
   const heartbeatTimer = setInterval(() => {
