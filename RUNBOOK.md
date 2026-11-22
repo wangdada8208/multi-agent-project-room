@@ -190,3 +190,11 @@ enrollment, HTTP A2A, WebSocket/presence/chat, reconnect or task cancellation.
 curl -s -X POST http://127.0.0.1:8787/api/requests -H 'X-MAPR-Owner: 1' -H 'Content-Type: application/json' \
   -d '{"to":"0x对方地址","scope":"calendar.free_busy","purpose":"用途","date_from":"2026-10-05","date_to":"2026-10-09"}'
 ```
+
+### 2026-11-20 新增运维要点（m1/m2 迁移、Gmail 凭据、对账与账本锚点）
+
+- **数据库迁移与依赖**：新增依赖 `eth-account`（`backend/requirements.txt`）；当前 Alembic 链头为 `m30c20261120`（经 `l20c20261120` 接 `k10c20261118`）。升级生产 PostgreSQL 前须经人类单独批准并完成 `pg_dump` 备份，升级后用 `alembic current` 与 `/readyz` 核对链头。
+- **Gmail 凭据与 `auth_required` 轮换**：发信连接器从 `.state/credentials/gmail.json`（或 `.state/accounts.json` 登记且严格位于凭据根目录内的 `0600` 文件）读取令牌。遇到 `action_finished{reason:"auth_required"}` 时，在本机更新 `0600` 凭据（含 `access_token` 或 OAuth `refresh_token`/`client_id`/`client_secret`），切勿将凭据放入环境变量日志或 Git。
+- **`uncertain` 发信人工对账**：所有 `gmail.send` 原文都携带 `X-MAPR-Request-Id: <request_id>` 邮件头。若发信期间断网、超时或进程崩溃导致审批停在 `uncertain`，先在发信邮箱「已发送 (Sent)」检索该头确认是否已发出，绝不依赖系统自动重发。
+- **账本完整性与检查点**：worker 周期性把链头签名为 `.state/ledger-checkpoint.json` 并经 helper/agent 上报 Hub；`GET /api/activity` 与前端「动态」页签出现 `anchor_truncated` / `entry_hash_mismatch` 等异常时，暂停该席位并核查本机 `.state/ledger.jsonl` 与 Hub `activity_checkpoints`。
+- **云端席位与恢复**：云端 Agent 通过 `mapr join <invite-url>` 生成 `0600` `.env` 与 `policy.json` 并轮询 `/api/v1/agent-seats/{seat_id}`；轮询 `GET /api/v1/invites/{token}/agent-register` 时优先使用请求头 `X-MAPR-Address` / `X-MAPR-Nonce` / `X-MAPR-Signature` 传递签名证明（避免进入 URL 访问日志，查询参数仅保留作向后兼容）；若控制台对崩溃后遗留的 `approved` 未执行条目需取消，可直接在审批面板点击「拒绝」。

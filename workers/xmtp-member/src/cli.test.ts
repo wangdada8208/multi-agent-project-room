@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { mkdtemp, readFile } from "node:fs/promises";
+import { mkdtemp, readFile, stat } from "node:fs/promises";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import os from "node:os";
@@ -194,5 +194,213 @@ test("mapr task dispatches task to local console", async () => {
   } finally {
     server.close();
   }
+});
+
+// ── mapr join：云端 Agent 持邀请链接自助注册（WP6）──
+
+interface FakeHubState {
+  registerCalls: any[];
+  nonceCalls: any[];
+  pollCalls: number;
+  registerResponse: { status: number; body: unknown };
+  pollResponses: { status: number; body: unknown }[];
+}
+
+/** 假 Hub：nonce 签发 + agent-register 注册/轮询，逐条记录请求体供断言。 */
+function fakeInviteHub(state: FakeHubState) {
+  return http.createServer((req, res) => {
+    const url = new URL(req.url ?? "/", "http://x");
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", () => {
+      const json = (status: number, payload: unknown) => {
+        res.writeHead(status, { "Content-Type": "application/json" });
+        res.end(JSON.stringify(payload));
+      };
+      if (req.method === "POST" && url.pathname === "/api/v1/invites/nonce") {
+        state.nonceCalls.push(JSON.parse(body || "{}"));
+        json(201, {
+          nonce: `nonce-${state.nonceCalls.length}`,
+          message: "MAPR-XP1\naction: invite-agent-register\nresource: tok-join-1\naddress: 0x0\nnonce: x\nexpires_at: y",
+          expires_at: "2026-11-20T00:10:00+00:00",
+        });
+        return;
+      }
+      if (req.method === "POST" && url.pathname === "/api/v1/invites/tok-join-1/agent-register") {
+        state.registerCalls.push(JSON.parse(body || "{}"));
+        json(state.registerResponse.status, state.registerResponse.body);
+        return;
+      }
+      if (req.method === "GET" && url.pathname === "/api/v1/invites/tok-join-1/agent-register") {
+        const idx = Math.min(state.pollCalls, state.pollResponses.length - 1);
+        state.pollCalls += 1;
+        const r = state.pollResponses[idx];
+        json(r.status, r.body);
+        return;
+      }
+      json(404, { detail: "not_found" });
+    });
+  });
+}
+
+const CONSUMED = {
+  status: "consumed",
+  redemption_id: "red-1",
+  approved_scopes: ["task.run", "gmail.send", "payment.send"],
+  agent_token: "agent-tok-9",
+  seat_id: "seat-9",
+  room_id: "room-9",
+  xmtp_group_id: "group-9",
+  agent_user_id: "u-agent-9",
+};
+
+test("mapr join：完整邀请 URL 注册成功，.env 与 policy.json 0600 落盘且输出不泄密", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "mapr-join-"));
+  const state: FakeHubState = {
+    registerCalls: [],
+    nonceCalls: [],
+    pollCalls: 0,
+    registerResponse: { status: 200, body: CONSUMED },
+    pollResponses: [],
+  };
+  const server = fakeInviteHub(state);
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const port = (server.address() as AddressInfo).port;
+
+  const stdout: string[] = [];
+  const stderr: string[] = [];
+  try {
+    const code = await runCli(
+      ["join", `http://127.0.0.1:${port}/rooms/room-9?invite=tok-join-1`, "--state-dir", dir, "--name", "云端小助手"],
+      { stdout: (m) => stdout.push(m), stderr: (m) => stderr.push(m) }
+    );
+    assert.equal(code, 0);
+    assert.deepEqual(stderr, []);
+
+    // nonce 请求形态：action/resource/address 齐全且地址是小写 0x+40hex
+    assert.equal(state.nonceCalls.length, 1);
+    assert.equal(state.nonceCalls[0].action, "invite-agent-register");
+    assert.equal(state.nonceCalls[0].resource, "tok-join-1");
+    assert.match(state.nonceCalls[0].address, /^0x[0-9a-f]{40}$/);
+
+    // 注册请求形态：地址 + nonce + 0x 签名 + display_name
+    assert.equal(state.registerCalls.length, 1);
+    const reg = state.registerCalls[0];
+    assert.equal(reg.xmtp_address, state.nonceCalls[0].address);
+    assert.match(reg.signature, /^0x[0-9a-f]{130}$/);
+    assert.equal(reg.display_name, "云端小助手");
+
+    // stdout 只含安全字段：不含 64hex 私钥、令牌、签名
+    const out = JSON.parse(stdout.join(""));
+    assert.equal(out.status, "consumed");
+    assert.equal(out.seat_id, "seat-9");
+    assert.equal(out.room_id, "room-9");
+    const outStr = stdout.join("");
+    assert.doesNotMatch(outStr, /[0-9a-fA-F]{64}/);
+    assert.equal(outStr.includes("agent-tok-9"), false);
+    assert.equal(outStr.includes(reg.signature), false);
+
+    // .env：0600 + 全量席位配置
+    const envFile = path.join(dir, ".env");
+    assert.equal((await stat(envFile)).mode & 0o777, 0o600);
+    const envText = await readFile(envFile, "utf8");
+    for (const needle of [
+      "XMTP_WALLET_KEY=0x",
+      "XMTP_DB_ENCRYPTION_KEY=0x",
+      "MAPR_SEAT_ID=seat-9",
+      "MAPR_AGENT_TOKEN=agent-tok-9",
+      `MAPR_HUB_URL=http://127.0.0.1:${port}`,
+      "HUB_ROOM_ID=room-9",
+      "HUB_TOKEN=agent-tok-9",
+      "XMTP_GROUP_ID=group-9",
+      "XMTP_ALLOW_GROUP_MEMBERS=1",
+    ]) {
+      assert.ok(envText.includes(needle), needle);
+    }
+
+    // policy.json：0600 + approved_scopes 落成本机 actor 建议 ask；硬禁区被滤掉
+    const policyFile = path.join(dir, ".state", "policy.json");
+    assert.equal((await stat(policyFile)).mode & 0o777, 0o600);
+    const policy = JSON.parse(await readFile(policyFile, "utf8"));
+    const actorRules = policy.rules.actors[state.nonceCalls[0].address];
+    assert.equal(actorRules["task.run"], "ask");
+    assert.equal(actorRules["gmail.send"], "ask");
+    assert.equal(actorRules["payment.send"], undefined, "hard-forbidden scope must be filtered");
+  } finally {
+    server.close();
+  }
+});
+
+test("mapr join：pending 时用签名 GET 轮询直到 consumed", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "mapr-join-pending-"));
+  const state: FakeHubState = {
+    registerCalls: [],
+    nonceCalls: [],
+    pollCalls: 0,
+    registerResponse: { status: 200, body: { status: "pending", redemption_id: "red-1" } },
+    pollResponses: [
+      { status: 200, body: { status: "pending", redemption_id: "red-1" } },
+      { status: 200, body: CONSUMED },
+    ],
+  };
+  const server = fakeInviteHub(state);
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const port = (server.address() as AddressInfo).port;
+
+  const stdout: string[] = [];
+  try {
+    const code = await runCli(
+      ["join", "tok-join-1", "--hub", `http://127.0.0.1:${port}`, "--state-dir", dir, "--wait", "10", "--poll", "50"],
+      { stdout: (m) => stdout.push(m), stderr: () => {} }
+    );
+    assert.equal(code, 0);
+    assert.ok(state.pollCalls >= 1, "pending must be polled with fresh signed nonces");
+    const out = JSON.parse(stdout.join(""));
+    assert.equal(out.status, "consumed");
+    const envText = await readFile(path.join(dir, ".env"), "utf8");
+    assert.ok(envText.includes("MAPR_SEAT_ID=seat-9"));
+  } finally {
+    server.close();
+  }
+});
+
+test("mapr join：审批被拒（409）时干净退出且不落盘令牌", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "mapr-join-denied-"));
+  const state: FakeHubState = {
+    registerCalls: [],
+    nonceCalls: [],
+    pollCalls: 0,
+    registerResponse: { status: 200, body: { status: "pending", redemption_id: "red-1" } },
+    pollResponses: [{ status: 409, body: { detail: "Redemption request was denied" } }],
+  };
+  const server = fakeInviteHub(state);
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const port = (server.address() as AddressInfo).port;
+
+  const stderr: string[] = [];
+  try {
+    const code = await runCli(
+      ["join", "tok-join-1", "--hub", `http://127.0.0.1:${port}`, "--state-dir", dir, "--wait", "10", "--poll", "50"],
+      { stdout: () => {}, stderr: (m) => stderr.push(m) }
+    );
+    assert.equal(code, 1);
+    const err = JSON.parse(stderr.join(""));
+    assert.equal(err.reason, "register_failed");
+    assert.equal(err.status, 409);
+    await assert.rejects(() => stat(path.join(dir, ".env")), ".env must not be written on denial");
+  } finally {
+    server.close();
+  }
+});
+
+test("mapr join：邀请 URL 无 token 时报 invite_token_not_found", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "mapr-join-bad-"));
+  const stderr: string[] = [];
+  const code = await runCli(["join", "https://hub.example/rooms/r-1", "--state-dir", dir], {
+    stdout: () => {},
+    stderr: (m) => stderr.push(m),
+  });
+  assert.equal(code, 1);
+  assert.equal(JSON.parse(stderr.join("")).reason, "invite_token_not_found");
 });
 

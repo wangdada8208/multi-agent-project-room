@@ -4,17 +4,22 @@ import type { Connector, DateRange, FreeBusyPayload } from "./types.ts";
 export interface GoogleCalendarConnectorOptions {
   credentialPath: string;
   fetchImpl?: typeof fetch;
+  /** 本凭据文件对应的账户 id；路由按 accountId 精确匹配（WP7 多账户）。 */
+  accountId?: string;
 }
 
 export class GoogleCalendarConnector implements Connector {
-  readonly id = "google-calendar";
+  readonly id: string;
   readonly scopes = ["calendar.free_busy"];
+  readonly accountId?: string;
   private readonly credentialPath: string;
   private readonly fetchImpl: typeof fetch;
 
   constructor(options: GoogleCalendarConnectorOptions) {
+    this.id = options.accountId ? `google-calendar:${options.accountId}` : "google-calendar";
     this.credentialPath = options.credentialPath;
     this.fetchImpl = options.fetchImpl ?? fetch;
+    this.accountId = options.accountId;
   }
 
   private async loadToken(): Promise<string> {

@@ -34,10 +34,12 @@ from app.api.permissions import require_role
 from app.core.security import create_access_token
 from app.helper.models import AgentSeat, HelperCode, HelperDevice
 from app.helper.schemas import (
+    AgentSeatStatus,
     CreateSeatRequest,
     CreateSeatViaTicket,
     HeartbeatRequest,
     HeartbeatResponse,
+    HeartbeatRoom,
     HelperDeviceView,
     HubRoom,
     JoinTicketRequest,
@@ -239,7 +241,30 @@ def _seat_view(seat: AgentSeat, owner_user_id: str, agent_display_name: str) -> 
         trust_tier=trust_tier(seat.kind),
         xmtp_address=seat.xmtp_address,
         group_status="removed" if seat.removed_at is not None else seat.group_status,
+        source=seat.source,
+        paused_at=_as_utc(seat.paused_at).isoformat() if seat.paused_at else None,
     )
+
+
+async def _seat_owner_user_id(db: AsyncSession, seat: AgentSeat) -> str | None:
+    """The human allowed to manage this seat on behalf of its owner.
+
+    helper seats: the paired helper's owner. invite (cloud) seats: the inviting
+    user stored as the agent account's owner_user_id.
+    """
+    if seat.helper_id is not None:
+        helper = await db.get(HelperDevice, seat.helper_id)
+        return helper.owner_user_id if helper is not None else None
+    agent = await db.get(User, seat.agent_user_id)
+    return agent.owner_user_id if agent is not None else None
+
+
+async def _can_manage_seat(db: AsyncSession, seat: AgentSeat, user: User) -> bool:
+    """Seat owner or room owner may pause/resume/report group state."""
+    if (await _seat_owner_user_id(db, seat)) == user.id:
+        return True
+    perm = await _room_permission(db, seat.room_id, user.id)
+    return perm is not None and perm.role == "owner"
 
 
 # ── human side ──
@@ -328,8 +353,8 @@ async def list_room_seats(db: AsyncSession, user: User, room_id: str) -> list[Se
     """Any room member may list. The room page auto-adds only seats whose owner_user_id is the viewer."""
     await require_role(room_id, user, db, min_role="viewer")
     rows = (await db.execute(
-        select(AgentSeat, HelperDevice.owner_user_id, User.display_name)
-        .join(HelperDevice, AgentSeat.helper_id == HelperDevice.id)
+        select(AgentSeat, func.coalesce(HelperDevice.owner_user_id, User.owner_user_id), User.display_name)
+        .outerjoin(HelperDevice, AgentSeat.helper_id == HelperDevice.id)
         .join(User, AgentSeat.agent_user_id == User.id)
         .where(AgentSeat.room_id == room_id)
         .order_by(AgentSeat.created_at, AgentSeat.id))).all()
@@ -358,19 +383,22 @@ async def list_seat_peers(db: AsyncSession, user: User, room_id: str) -> list[Se
         .where(AgentSeat.room_id == room_id, AgentSeat.removed_at.is_(None))
         .order_by(AgentSeat.created_at, AgentSeat.id))).all()
     return [SeatPeer(agent_display_name=display_name, kind=seat.kind,
-                     trust_tier=trust_tier(seat.kind), xmtp_address=seat.xmtp_address)
+                     trust_tier=trust_tier(seat.kind), xmtp_address=seat.xmtp_address,
+                     source=seat.source,
+                     paused_at=_as_utc(seat.paused_at).isoformat() if seat.paused_at else None)
             for seat, display_name in rows]
 
 
 async def mark_group_added(db: AsyncSession, user: User, room_id: str, seat_id: str) -> None:
-    """Only the seat's owner may report pending → added (idempotent). Hub cannot verify XMTP state;
-    this flag only stops repeated add attempts."""
+    """Seat owner or room owner may report pending → added (idempotent). Hub cannot
+    verify XMTP state; this flag only stops repeated add attempts. Room-owner
+    access exists so the owner's client can pull cloud (source='invite') seats
+    into the group and record the result."""
     seat = await db.get(AgentSeat, seat_id)
     if seat is None or seat.room_id != room_id:
         raise HTTPException(404, "Seat not found")
-    helper = await db.get(HelperDevice, seat.helper_id)
-    if helper is None or helper.owner_user_id != user.id:
-        raise HTTPException(403, "Only the seat owner may report group membership")
+    if not await _can_manage_seat(db, seat, user):
+        raise HTTPException(403, "Requires seat owner or room owner")
     if seat.removed_at is not None:
         raise HTTPException(409, "Seat removed")
     if seat.group_status == "added":
@@ -395,13 +423,70 @@ async def remove_seat_by_human(db: AsyncSession, user: User, room_id: str, seat_
     seat = await db.get(AgentSeat, seat_id)
     if seat is None or seat.room_id != room_id:
         raise HTTPException(404, "Seat not found")
-    helper = await db.get(HelperDevice, seat.helper_id)
-    if helper is None or helper.owner_user_id != user.id:
-        perm = await _room_permission(db, room_id, user.id)
-        if perm is None or perm.role != "owner":
-            raise HTTPException(403, "Requires seat owner or room owner")
+    if not await _can_manage_seat(db, seat, user):
+        raise HTTPException(403, "Requires seat owner or room owner")
     await _retire_seat(db, seat)
     await db.commit()
+
+
+async def set_seat_paused(db: AsyncSession, user: User, room_id: str, seat_id: str, paused: bool) -> None:
+    """Owner-controlled pause/resume (WP5).
+
+    Pause only stops the member process — the seat row, its identity and its
+    audit trail stay (never conflated with removal). The helper learns about it
+    through HeartbeatResponse.seats_to_pause; resume only revives seats that
+    were explicitly paused. Idempotent.
+    """
+    seat = await db.get(AgentSeat, seat_id)
+    if seat is None or seat.room_id != room_id:
+        raise HTTPException(404, "Seat not found")
+    if not await _can_manage_seat(db, seat, user):
+        raise HTTPException(403, "Requires seat owner or room owner")
+    if seat.removed_at is not None:
+        raise HTTPException(409, "Seat removed")
+    now = _now()
+    if paused and seat.paused_at is None:
+        seat.paused_at = now
+    elif not paused and seat.paused_at is not None:
+        seat.paused_at = None
+    await db.commit()
+
+
+# ── cloud agent self-service (WP5/WP6): the agent JWT, not a helper token ──
+
+async def get_agent_seat_status(db: AsyncSession, user: User, seat_id: str) -> AgentSeatStatus:
+    """Cloud agent reads its own seat lifecycle, including after removal.
+
+    Deliberately does NOT require an active seat (unlike seat-peers): a removed
+    agent must still learn removed_at so it can fail closed instead of
+    believing it is still in the group.
+    """
+    seat = await db.get(AgentSeat, seat_id)
+    if seat is None or seat.agent_user_id != user.id:
+        raise HTTPException(404, "Seat not found")
+    return AgentSeatStatus(
+        seat_id=seat.id,
+        room_id=seat.room_id,
+        source=seat.source,
+        group_status="removed" if seat.removed_at is not None else seat.group_status,
+        paused_at=_as_utc(seat.paused_at).isoformat() if seat.paused_at else None,
+        removed_at=_as_utc(seat.removed_at).isoformat() if seat.removed_at else None,
+    )
+
+
+async def refresh_agent_seat_token(db: AsyncSession, user: User, seat_id: str) -> str:
+    """Renew the agent JWT for a seat the caller itself occupies.
+
+    A removed seat gets no new tokens (403/409 — never silently re-armed).
+    """
+    seat = await db.get(AgentSeat, seat_id)
+    if seat is None or seat.agent_user_id != user.id:
+        raise HTTPException(404, "Seat not found")
+    if seat.removed_at is not None:
+        raise HTTPException(409, "Seat removed")
+    if seat.paused_at is not None:
+        raise HTTPException(409, "Seat paused")
+    return create_access_token(seat.agent_user_id, "agent")
 
 
 # ── helper side ──
@@ -600,6 +685,8 @@ async def refresh_agent_token(db: AsyncSession, helper: HelperDevice, seat_id: s
         raise HTTPException(404, "Seat not found")
     if seat.removed_at is not None:
         raise HTTPException(409, "Seat removed")
+    if seat.paused_at is not None:
+        raise HTTPException(409, "Seat paused")
     return create_access_token(seat.agent_user_id, "agent")
 
 
@@ -612,9 +699,29 @@ async def delete_seat_by_helper(db: AsyncSession, helper: HelperDevice, seat_id:
 
 
 async def heartbeat(db: AsyncSession, helper: HelperDevice, req: HeartbeatRequest) -> HeartbeatResponse:
-    """seats_to_stop = seats of this helper with removed_at set."""
+    """seats_to_stop = seats of this helper with removed_at set.
+
+    seats_to_pause is a SEPARATE list (paused_at set, not removed): the helper
+    must stop the member process but keep all local seat data — reusing
+    seats_to_stop would trigger local cleanup. rooms carries the owner's room
+    metadata versions so workers can re-pull settings_json on change.
+    """
     rows = (await db.execute(select(AgentSeat.id).where(
         AgentSeat.helper_id == helper.id,
         AgentSeat.removed_at.isnot(None)).order_by(AgentSeat.id))).scalars().all()
-    return HeartbeatResponse(revoked=helper.revoked_at is not None,
-                             seats_to_stop=list(rows))
+    paused = (await db.execute(select(AgentSeat.id).where(
+        AgentSeat.helper_id == helper.id,
+        AgentSeat.paused_at.isnot(None),
+        AgentSeat.removed_at.is_(None)).order_by(AgentSeat.id))).scalars().all()
+    room_rows = (await db.execute(
+        select(Room.id, Room.settings_version, Room.settings_json)
+        .join(RoomPermission, (RoomPermission.room_id == Room.id)
+              & (RoomPermission.user_id == helper.owner_user_id))
+        .where(Room.is_active == True)  # noqa: E712
+        .order_by(Room.created_at, Room.id))).all()
+    return HeartbeatResponse(
+        revoked=helper.revoked_at is not None,
+        seats_to_stop=list(rows),
+        seats_to_pause=list(paused),
+        rooms=[HeartbeatRoom(id=room_id, settings_version=version, settings_json=settings)
+               for room_id, version, settings in room_rows])

@@ -2,6 +2,7 @@ import { composeReply } from "./composeReply.ts";
 import { ingest, type LocalLoopState } from "./localLoop.ts";
 import { filterOutbound } from "./outboundFilter.ts";
 import { buildOwnerNote, type OwnerNote, type OwnerNoteAction } from "./ownerNote.ts";
+import { teamConfigPromptBlock } from "./rulesEngine.ts";
 
 export interface OnInboundTextInput {
   state: LocalLoopState;
@@ -13,6 +14,8 @@ export interface OnInboundTextInput {
   sendText: (body: string) => Promise<void>;
   saveState: (state: LocalLoopState) => Promise<void>;
   complete?: (prompt: string) => Promise<string>;
+  /** 房间 team_config_markdown：注入提示词时包裹为非授权参考，绝不扩权。 */
+  teamConfigMarkdown?: string;
   approvedDays?: string[];
   sensitiveKeywords?: string[];
   recordOwner?: (note: OwnerNote) => Promise<void>;
@@ -36,11 +39,16 @@ export async function onInboundText(input: OnInboundTextInput): Promise<LocalLoo
       action = "sent";
     }
   } else if (result.outbound !== null) {
+    const teamBlock = teamConfigPromptBlock(input.teamConfigMarkdown);
+    const complete =
+      input.complete && teamBlock
+        ? (prompt: string) => input.complete!(`${teamBlock}\n\n${prompt}`)
+        : input.complete;
     const rawReply = await composeReply({
       shouldReply: true,
       selfName: input.state.selfName,
       inbound: input.text,
-      complete: input.complete,
+      complete,
     });
 
     if (rawReply !== null) {

@@ -175,6 +175,7 @@ function viewOfRecord(rec: SeatRecord, status: SeatStatus, lastError: string | n
     consolePort: rec.consolePort,
     status,
     lastError,
+    pausedAt: rec.pausedAt ?? null,
   };
 }
 
@@ -365,6 +366,8 @@ function classify(method: string, pathname: string): RequestClass | "seat-write"
   if (method === "DELETE" && /^\/api\/agents\/manual\/[^/]+$/.test(pathname)) return "owner-write";
   if (method === "POST" && pathname === "/api/seats") return "seat-write";
   if (method === "DELETE" && /^\/api\/seats\/[^/]+$/.test(pathname)) return "owner-write";
+  // WP5：本机暂停/恢复席位进程（owner-write：只允许回环页面或命令行 + X-MAPR-Owner）。
+  if (method === "POST" && /^\/api\/seats\/[^/]+\/(pause|resume)$/.test(pathname)) return "owner-write";
   return null;
 }
 
@@ -1845,6 +1848,41 @@ export function createHelperServer(deps: HelperServerDeps): http.Server {
       }
       if (method === "POST" && url.pathname === "/api/seats") {
         send(200, await handleCreateSeat(deps, body));
+        return;
+      }
+      // WP5 本机暂停/恢复：只停/起成员进程并写 pausedAt 标记，席位数据与私钥一律保留。
+      // Hub 侧的 pause/resume 端点只收人类登录令牌（helper 令牌无权调用），
+      // Hub 发起的暂停经心跳 seats_to_pause 下发到 up.ts 对账，两条路径在此汇合。
+      const pauseMatch = url.pathname.match(/^\/api\/seats\/([^/]+)\/pause$/);
+      if (method === "POST" && pauseMatch) {
+        const seatId = decodeSegment(pauseMatch[1]);
+        const rec = await deps.store.get(seatId);
+        if (!rec) throw new HelperHttpError(404, "seat_not_found");
+        if (!rec.pausedAt) {
+          rec.pausedAt = new Date().toISOString();
+          rec.pausedSource = "local";
+          await deps.store.save(rec);
+        }
+        await deps.supervisor.stop(seatId);
+        send(200, await seatViewOf(deps, seatId));
+        return;
+      }
+      const resumeMatch = url.pathname.match(/^\/api\/seats\/([^/]+)\/resume$/);
+      if (method === "POST" && resumeMatch) {
+        const seatId = decodeSegment(resumeMatch[1]);
+        const rec = await deps.store.get(seatId);
+        if (!rec) throw new HelperHttpError(404, "seat_not_found");
+        if (rec.pausedAt || rec.pausedSource) {
+          rec.pausedAt = null;
+          rec.pausedSource = null;
+          await deps.store.save(rec);
+        }
+        try {
+          await deps.supervisor.start(seatId);
+        } catch {
+          // 起不来不假报成功：seatViewOf 会如实返回 crashed/stopped 视图。
+        }
+        send(200, await seatViewOf(deps, seatId));
         return;
       }
       const del = url.pathname.match(/^\/api\/seats\/([^/]+)$/);

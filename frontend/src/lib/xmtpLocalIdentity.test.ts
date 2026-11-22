@@ -1,11 +1,17 @@
 import { describe, expect, it } from "vitest";
+import { recoverMessageAddress } from "viem";
 import {
+  clearUnlockedXmtpKey,
   createBrowserSigner,
   decryptPrivateKey,
   encryptPrivateKey,
+  hasUnlockedXmtpKey,
   hubSafeIdentity,
   inboxAddress,
+  setUnlockedXmtpKey,
+  signXmtpMessage,
   unlockOrCreateInboxKey,
+  unlockedXmtpAddress,
   LEGACY_STORAGE_KEY,
   storeEncryptedKey,
   unlockPrivateKey,
@@ -140,5 +146,41 @@ describe("WebCrypto Vault Password Protection (Task E-4)", () => {
 
     const key2 = await unlockPrivateKey(password, storage);
     expect(key2).toBe(sampleKey);
+  });
+});
+
+describe("signXmtpMessage (unlocked-session signing)", () => {
+  const key = "0x" + "cd".repeat(32);
+
+  it("throws a friendly error when the local identity is locked", async () => {
+    clearUnlockedXmtpKey();
+    await expect(signXmtpMessage("MAPR 签名测试")).rejects.toThrow(/未解锁/);
+    expect(hasUnlockedXmtpKey()).toBe(false);
+    expect(unlockedXmtpAddress()).toBeNull();
+  });
+
+  it("signs a verifiable EIP-191 message and derives the matching address", async () => {
+    setUnlockedXmtpKey(key);
+    try {
+      expect(hasUnlockedXmtpKey()).toBe(true);
+      expect(unlockedXmtpAddress()).toBe(inboxAddress(key));
+      const message = "MAPR bind-address\nnonce: abc";
+      const signature = await signXmtpMessage(message);
+      expect(signature).toMatch(/^0x[0-9a-fA-F]{130}$/);
+      const recovered = await recoverMessageAddress({
+        message,
+        signature: signature as `0x${string}`,
+      });
+      expect(recovered.toLowerCase()).toBe(inboxAddress(key));
+    } finally {
+      clearUnlockedXmtpKey();
+    }
+  });
+
+  it("clearUnlockedXmtpKey revokes signing without touching storage", async () => {
+    setUnlockedXmtpKey(key);
+    clearUnlockedXmtpKey();
+    await expect(signXmtpMessage("again")).rejects.toThrow(/未解锁/);
+    expect(unlockedXmtpAddress()).toBeNull();
   });
 });

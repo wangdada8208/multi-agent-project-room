@@ -35,6 +35,7 @@ from app.api.permissions import router as permissions_router
 from app.api.templates import router as templates_router
 from app.api.agent_bindings import router as agent_bindings_router
 from app.api.invites import router as invites_router
+from app.activity.routes import router as activity_router
 from app.helper.routes import router as helper_router
 from app.chat.ws_handler import handle_chat
 
@@ -152,6 +153,7 @@ app.include_router(analytics_router) # /api/v1/analytics
 app.include_router(permissions_router)  # /api/v1/rooms/{id}/permissions
 app.include_router(templates_router)   # /api/v1/templates
 app.include_router(helper_router)      # /api/v1/helpers & /api/v1/rooms/{id}/seats
+app.include_router(activity_router)    # /api/v1/helpers/me/activity & /api/v1/rooms/{id}/activity
 
 # A2A v1.0 — official SDK protocol routes (Agent Card + JSON-RPC)
 mount_a2a(app)

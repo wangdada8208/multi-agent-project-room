@@ -25,8 +25,16 @@ import {
   createRoomFromTemplate,
   fetchRooms,
   fetchTemplates,
+  type HouseRuleDecision,
+  type HouseRules,
   type RoomTemplateInfo,
 } from "../lib/api";
+import {
+  draftFromTemplate,
+  HOUSE_RULE_LABEL,
+  TemplatePreview,
+  type TemplateOverrideDraft,
+} from "../components/TemplatePreview";
 import { useAuthStore } from "../stores/authStore";
 import { useAnalytics } from "../hooks/useAnalytics";
 import type { Room } from "../types/chat";
@@ -66,6 +74,9 @@ export function HomePage() {
   const [roomDesc, setRoomDesc] = useState("");
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState("");
+  // 模板建议内容自定义：null = 直接使用模板预置值
+  const [customizing, setCustomizing] = useState(false);
+  const [overrideDraft, setOverrideDraft] = useState<TemplateOverrideDraft | null>(null);
 
   const roomsQuery = useQuery({
     queryKey: ["rooms"],
@@ -97,15 +108,20 @@ export function HomePage() {
     setRoomName("");
     setRoomDesc("");
     setCreateError("");
+    setCustomizing(false);
+    setOverrideDraft(null);
     setCreateOpen(true);
   }
 
   function selectTemplate(tpl: RoomTemplateInfo | null) {
     if (!tpl) {
       setSelectedTplKey(null);
+      setCustomizing(false);
+      setOverrideDraft(null);
       return;
     }
     setSelectedTplKey(tpl.key);
+    setOverrideDraft(draftFromTemplate(tpl));
     if (!roomName.trim()) {
       setRoomName(`${tpl.name} · ${new Date().toLocaleDateString("zh-CN")}`);
     }
@@ -124,8 +140,25 @@ export function HomePage() {
     setCreating(true);
     setCreateError("");
     try {
+      const overrides =
+        selectedTplKey && customizing && overrideDraft
+          ? {
+              house_rules: {
+                scopes: Object.fromEntries(
+                  Object.entries(overrideDraft.house_rules.scopes)
+                    .map(([k, v]) => [k.trim().toLowerCase(), v] as const)
+                    .filter(([k]) => k),
+                ) as Record<string, HouseRuleDecision>,
+                notes: overrideDraft.house_rules.notes.map((n) => n.trim()).filter(Boolean),
+              } satisfies HouseRules,
+              team_config_markdown: overrideDraft.team_config_markdown,
+              ...(overrideDraft.default_max_rounds
+                ? { default_max_rounds: overrideDraft.default_max_rounds }
+                : {}),
+            }
+          : undefined;
       const created = selectedTplKey
-        ? await createRoomFromTemplate(selectedTplKey, trimmedName)
+        ? await createRoomFromTemplate(selectedTplKey, trimmedName, overrides)
         : await createRoom(trimmedName, roomDesc.trim() || undefined);
       track("room_create", created.id, { via: selectedTplKey ? "home_template_modal" : "home_blank_modal" });
       await queryClient.invalidateQueries({ queryKey: ["rooms"] });
@@ -486,6 +519,171 @@ export function HomePage() {
                     />
                   </div>
                 )}
+
+                {(() => {
+                  const tpl = templates.find((t) => t.key === selectedTplKey);
+                  if (!tpl || !overrideDraft) return null;
+                  return (
+                    <div className="field" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                      <TemplatePreview template={tpl} />
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm"
+                        style={{ alignSelf: "flex-start", fontSize: 11.5 }}
+                        onClick={() => setCustomizing((v) => !v)}
+                      >
+                        {customizing ? "收起自定义，改用模板预置值" : "自定义此房间的配置与规则建议"}
+                      </button>
+                      {customizing && (
+                        <div
+                          style={{
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: 8,
+                            padding: "10px 12px",
+                            borderRadius: 10,
+                            border: "1px solid rgba(0, 113, 227, 0.18)",
+                          }}
+                        >
+                          {Object.entries(overrideDraft.house_rules.scopes).map(
+                            ([scope, decision]) => (
+                              <div key={scope} style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                                <input
+                                  className="input"
+                                  value={scope}
+                                  onChange={(e) =>
+                                    setOverrideDraft((prev) => {
+                                      if (!prev) return prev;
+                                      const entries = Object.entries(prev.house_rules.scopes).map(
+                                        ([k, v]) => [k === scope ? e.target.value : k, v] as const,
+                                      );
+                                      return {
+                                        ...prev,
+                                        house_rules: {
+                                          ...prev.house_rules,
+                                          scopes: Object.fromEntries(entries),
+                                        },
+                                      };
+                                    })
+                                  }
+                                  placeholder="scope，如 gmail.send"
+                                  style={{ fontSize: 11.5, fontFamily: "var(--mono)", flex: 1 }}
+                                />
+                                <select
+                                  className="role-select"
+                                  value={decision}
+                                  onChange={(e) =>
+                                    setOverrideDraft((prev) =>
+                                      prev
+                                        ? {
+                                            ...prev,
+                                            house_rules: {
+                                              ...prev.house_rules,
+                                              scopes: {
+                                                ...prev.house_rules.scopes,
+                                                [scope]: e.target.value as HouseRuleDecision,
+                                              },
+                                            },
+                                          }
+                                        : prev,
+                                    )
+                                  }
+                                >
+                                  <option value="ask">{HOUSE_RULE_LABEL.ask}</option>
+                                  <option value="cannot">{HOUSE_RULE_LABEL.cannot}</option>
+                                </select>
+                                <button
+                                  type="button"
+                                  className="icon-btn"
+                                  style={{ width: 24, height: 24 }}
+                                  onClick={() =>
+                                    setOverrideDraft((prev) =>
+                                      prev
+                                        ? {
+                                            ...prev,
+                                            house_rules: {
+                                              ...prev.house_rules,
+                                              scopes: Object.fromEntries(
+                                                Object.entries(prev.house_rules.scopes).filter(
+                                                  ([k]) => k !== scope,
+                                                ),
+                                              ),
+                                            },
+                                          }
+                                        : prev,
+                                    )
+                                  }
+                                  title="删除此条建议"
+                                >
+                                  <X size={12} strokeWidth={1.9} />
+                                </button>
+                              </div>
+                            ),
+                          )}
+                          <button
+                            type="button"
+                            className="btn btn-ghost btn-sm"
+                            style={{ alignSelf: "flex-start", fontSize: 11.5 }}
+                            onClick={() =>
+                              setOverrideDraft((prev) => {
+                                if (!prev) return prev;
+                                let n = 1;
+                                while (`custom.rule_${n}` in prev.house_rules.scopes) n += 1;
+                                return {
+                                  ...prev,
+                                  house_rules: {
+                                    ...prev.house_rules,
+                                    scopes: {
+                                      ...prev.house_rules.scopes,
+                                      [`custom.rule_${n}`]: "ask",
+                                    },
+                                  },
+                                };
+                              })
+                            }
+                          >
+                            + 添加范围建议
+                          </button>
+                          <textarea
+                            className="input"
+                            value={overrideDraft.team_config_markdown}
+                            onChange={(e) =>
+                              setOverrideDraft((prev) =>
+                                prev ? { ...prev, team_config_markdown: e.target.value } : prev,
+                              )
+                            }
+                            placeholder="分工说明（Markdown，纯建议文字）"
+                            rows={4}
+                            style={{ fontSize: 12, fontFamily: "var(--mono)" }}
+                          />
+                          <label style={{ fontSize: 12, color: "#1d1d1f", display: "flex", alignItems: "center", gap: 6 }}>
+                            默认辩论轮次上限
+                            <input
+                              className="input"
+                              type="number"
+                              min={1}
+                              max={64}
+                              value={overrideDraft.default_max_rounds ?? ""}
+                              onChange={(e) =>
+                                setOverrideDraft((prev) =>
+                                  prev
+                                    ? {
+                                        ...prev,
+                                        default_max_rounds: e.target.value
+                                          ? Math.min(64, Math.max(1, Number(e.target.value)))
+                                          : undefined,
+                                      }
+                                    : prev,
+                                )
+                              }
+                              style={{ width: 72, fontSize: 12.5 }}
+                            />
+                          </label>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
 
                 {createError && (
                   <p className="error-text" role="alert">

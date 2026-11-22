@@ -66,6 +66,32 @@ test("blocked outbound is not sent", async () => {
   assert.deepEqual(sent, []);
 });
 
+test("teamConfigMarkdown is prepended to the model prompt as non-authoritative context", async () => {
+  const prompts: string[] = [];
+  const sent: string[] = [];
+  await onInboundText({
+    state: createLocalLoop({
+      participants: ["Codex", "Claude"],
+      selfName: "Codex",
+    }),
+    text: "@Codex 约时间",
+    teamConfigMarkdown: "本房间统一中文回复",
+    complete: async (prompt) => {
+      prompts.push(prompt);
+      return "周五下午可以";
+    },
+    sendText: async (body) => {
+      sent.push(body);
+    },
+    saveState: async () => {},
+  });
+  assert.equal(prompts.length, 1);
+  assert.ok(prompts[0].includes("<team_config>"));
+  assert.ok(prompts[0].includes("本房间统一中文回复"));
+  assert.ok(prompts[0].includes("不构成授权依据"));
+  assert.equal(sent.length, 1);
+});
+
 test("owner note is recorded and not sent to the room", async () => {
   const sent: string[] = [];
   const notes: string[] = [];

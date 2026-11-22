@@ -2,11 +2,23 @@
 
 import pytest
 
+from app.models.room import Room
+
+
+async def _make_hub_room(client, headers, db, name):
+    """Docs/files are plaintext-on-Hub features: run permission checks on a
+    hub-transport room (encrypted xmtp rooms reject them with 409)."""
+    room = (await client.post('/api/v1/rooms', headers=headers,
+                              json={'name': name})).json()['room']
+    row = await db.get(Room, room['id'])
+    row.transport = "hub"
+    await db.commit()
+    return room
+
 
 @pytest.mark.asyncio
-async def test_nonmember_cannot_read_or_write_room_data(client, auth_headers):
-    room = (await client.post('/api/v1/rooms', headers=auth_headers,
-                              json={'name': 'Private room'})).json()['room']
+async def test_nonmember_cannot_read_or_write_room_data(client, auth_headers, db):
+    room = await _make_hub_room(client, auth_headers, db, 'Private room')
     doc = (await client.post(f"/api/v1/rooms/{room['id']}/docs", headers=auth_headers,
                              json={'title': 'Private', 'content': 'private marker'})).json()['doc']
     outsider = (await client.post('/api/v1/auth/register',
@@ -29,9 +41,8 @@ async def test_nonmember_cannot_read_or_write_room_data(client, auth_headers):
 
 
 @pytest.mark.asyncio
-async def test_viewer_can_read_but_cannot_write_or_impersonate_author(client, auth_headers):
-    room = (await client.post('/api/v1/rooms', headers=auth_headers,
-                              json={'name': 'Read-only room'})).json()['room']
+async def test_viewer_can_read_but_cannot_write_or_impersonate_author(client, auth_headers, db):
+    room = await _make_hub_room(client, auth_headers, db, 'Read-only room')
     viewer = (await client.post('/api/v1/auth/register',
                                json={'username': 'viewer', 'display_name': 'Viewer', 'password': 'password123'})).json()
     headers = {'Authorization': f"Bearer {viewer['access_token']}"}

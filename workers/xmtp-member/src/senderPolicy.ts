@@ -1,3 +1,5 @@
+import type { RevocationStore } from "./revocations.ts";
+
 export function parseAllowedSenders(raw: string | undefined): string[] {
   return (raw || "")
     .split(",")
@@ -27,16 +29,21 @@ export interface GroupLike {
 export class GroupMemberCache {
   private readonly ttlMs: number;
   private readonly cache = new Map<string, { at: number; members: Set<string> }>();
+  private readonly invalidations = new Map<string, number>();
 
   constructor(ttlMs = 60_000) {
     this.ttlMs = ttlMs;
   }
 
-  async allows(sender: string, group: GroupLike): Promise<boolean> {
-    if (typeof group?.members !== "function") return false;
-    const key = group.id ?? "";
+  epoch(groupId: string): number {
+    return this.invalidations.get(groupId) ?? 0;
+  }
+
+  async allows(sender: string, group: GroupLike, opts: { forceRefresh?: boolean } = {}): Promise<boolean> {
+    if (typeof group?.members !== "function" || !group.id) return false;
+    const key = group.id;
     const entry = this.cache.get(key);
-    if (entry && Date.now() - entry.at < this.ttlMs) {
+    if (!opts.forceRefresh && entry && Date.now() - entry.at < this.ttlMs) {
       if (entry.members.has(sender)) return true;
     }
     const fresh = await this.refresh(key, group);
@@ -44,23 +51,71 @@ export class GroupMemberCache {
   }
 
   invalidate(groupId: string): void {
+    this.invalidations.set(groupId, this.epoch(groupId) + 1);
     this.cache.delete(groupId);
   }
 
   private async refresh(key: string, group: GroupLike): Promise<Set<string>> {
+    const gen = this.epoch(key);
     const members = new Set<string>();
     try {
-      const list = (await group.members?.()) ?? [];
-      for (const member of list as any[]) {
-        for (const identifier of member?.accountIdentifiers ?? []) {
-          const address = identifier?.identifier;
-          if (typeof address === "string") members.add(address.toLowerCase());
+      const list = await group.members?.();
+      if (!Array.isArray(list) || list.length === 0) return members;
+      for (const member of list) {
+        if (!member || typeof member !== "object" || !("accountIdentifiers" in member)
+          || !Array.isArray(member.accountIdentifiers) || member.accountIdentifiers.length === 0) {
+          return new Set<string>();
+        }
+        for (const identifier of member.accountIdentifiers) {
+          if (!identifier || typeof identifier !== "object" || !("identifier" in identifier)
+            || typeof identifier.identifier !== "string"
+            || !/^0x[0-9a-f]{40}$/.test(identifier.identifier.toLowerCase())) {
+            return new Set<string>();
+          }
+          members.add(identifier.identifier.toLowerCase());
         }
       }
     } catch {
       return members;
     }
-    this.cache.set(key, { at: Date.now(), members });
+    if (this.epoch(key) === gen) {
+      this.cache.set(key, { at: Date.now(), members });
+    }
     return members;
+  }
+}
+
+export interface SenderAuthorizationDeps {
+  allowedSenders: string[];
+  allowGroupMembers: boolean;
+  groupMembers: GroupMemberCache;
+  revoked: Pick<RevocationStore, "has" | "remove">;
+}
+
+/** DM 不查群成员；群发送者必须已授权且当前仍在群内，撤销记录只作用于同一 conversation。 */
+export async function isSenderAuthorized(
+  input: { sender: string; isGroup: boolean | null | undefined; conversation: GroupLike },
+  deps: SenderAuthorizationDeps
+): Promise<boolean> {
+  if (typeof input.isGroup !== "boolean") return false;
+  const sender = input.sender.toLowerCase();
+  if (!/^0x[0-9a-f]{40}$/.test(sender)) return false;
+  const explicitlyAllowed = isAllowedSender(sender, deps.allowedSenders);
+  if (!input.isGroup) return explicitlyAllowed;
+  if (!explicitlyAllowed && !deps.allowGroupMembers) return false;
+  const conversationId = input.conversation.id;
+  if (!conversationId) return false;
+
+  const wasRevoked = deps.revoked.has(sender, conversationId);
+  const epochBefore = deps.groupMembers.epoch(conversationId);
+  const present = await deps.groupMembers.allows(sender, input.conversation, { forceRefresh: wasRevoked });
+  if (!present) return false;
+  if (deps.groupMembers.epoch(conversationId) !== epochBefore) return false;
+  if (!wasRevoked) return true;
+  try {
+    await deps.revoked.remove(sender, conversationId);
+    return true;
+  } catch {
+    return false;
   }
 }

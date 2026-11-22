@@ -1,14 +1,32 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowUpRight, Bot, Cpu, Globe, Plus, Trash2, User, Webhook } from "lucide-react";
+import {
+  ArrowUpRight,
+  Bot,
+  Cpu,
+  Globe,
+  Pause,
+  Play,
+  Plus,
+  Trash2,
+  User,
+  Webhook,
+} from "lucide-react";
 import type { PresenceParticipant } from "../../types/chat";
 import {
+  pauseRoomSeat,
   removeRoomSeat,
+  resumeRoomSeat,
   TRUST_TIER_LABEL,
   trustTierOf,
   type HubSeatView,
   type TrustTier,
 } from "../../lib/localHelper";
+import {
+  removeAddressFromXmtpGroup,
+  type XmtpClientLike,
+} from "../../lib/seatGroupSync";
+import { isEthAddress } from "../../lib/xmtpGroup";
 import { useAuthStore } from "../../stores/authStore";
 
 const TIER_TITLE: Record<TrustTier, string> = {
@@ -35,6 +53,8 @@ export interface MembersPanelProps {
   roomId?: string;
   currentUserId?: string;
   isOwner?: boolean;
+  xmtpClient?: XmtpClientLike | null;
+  xmtpGroupId?: string | null;
   onSeatRemoved?: () => void;
 }
 
@@ -44,6 +64,8 @@ export function MembersPanel({
   roomId,
   currentUserId,
   isOwner,
+  xmtpClient,
+  xmtpGroupId,
   onSeatRemoved,
 }: MembersPanelProps) {
   const storeUserId = useAuthStore((s) => s.user?.id);
@@ -51,6 +73,8 @@ export function MembersPanel({
 
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [removeError, setRemoveError] = useState("");
+  const [pausingId, setPausingId] = useState<string | null>(null);
+  const [pauseError, setPauseError] = useState("");
 
   const activeSeats = (seats ?? []).filter((s) => s.group_status !== "removed");
   const seatNames = new Set(activeSeats.map((s) => s.agent_display_name));
@@ -65,12 +89,45 @@ export function MembersPanel({
     setRemovingId(seat.seat_id);
     setRemoveError("");
     try {
+      // 先出加密群、再删 Hub 席位行——顺序反了会留下仍可解密新消息的孤儿成员。
+      // group_status="pending" 的席位从未入群，不需要、也不应该做 XMTP 移除。
+      const mustLeaveGroup = seat.group_status !== "pending" && isEthAddress(seat.xmtp_address);
+      if (xmtpGroupId && mustLeaveGroup) {
+        if (!xmtpClient) {
+          throw new Error("请先在聊天区解锁你的加密身份，才能把该席位移出加密群");
+        }
+        try {
+          await removeAddressFromXmtpGroup(xmtpClient, xmtpGroupId, seat.xmtp_address);
+        } catch {
+          throw new Error(
+            "无法把该席位地址移出加密群（移出他人地址通常需要房主客户端执行）。席位记录未删除——等待房主客户端移出加密群。",
+          );
+        }
+      }
       await removeRoomSeat(seat.room_id, seat.seat_id);
       onSeatRemoved?.();
     } catch (err) {
       setRemoveError(err instanceof Error ? err.message : "移出席位失败");
     } finally {
       setRemovingId(null);
+    }
+  }
+
+  async function handleSetPaused(seat: HubSeatView, paused: boolean) {
+    setPausingId(seat.seat_id);
+    setPauseError("");
+    try {
+      // 只改 Hub 席位状态；本机助手在下次心跳（约 30 秒）里停/起进程，席位行不删除。
+      if (paused) {
+        await pauseRoomSeat(seat.room_id, seat.seat_id);
+      } else {
+        await resumeRoomSeat(seat.room_id, seat.seat_id);
+      }
+      onSeatRemoved?.();
+    } catch (err) {
+      setPauseError(err instanceof Error ? err.message : "更新席位状态失败");
+    } finally {
+      setPausingId(null);
     }
   }
 
@@ -98,8 +155,14 @@ export function MembersPanel({
           const canRemove = Boolean(
             isOwner || (effectiveUserId && s.owner_user_id === effectiveUserId),
           );
+          const isPaused = Boolean(s.paused_at);
+          const isInviteSeat = s.source === "invite";
           return (
-            <div key={s.seat_id} className="member-row member-row--card">
+            <div
+              key={s.seat_id}
+              className="member-row member-row--card"
+              style={isPaused ? { opacity: 0.65 } : undefined}
+            >
               <span className="agent-row__icon" style={{ width: 28, height: 28, borderRadius: 8 }}>
                 <SeatKindIcon tier={tier} />
               </span>
@@ -124,6 +187,24 @@ export function MembersPanel({
                   >
                     {TRUST_TIER_LABEL[tier]}
                   </span>
+                  {isInviteSeat && (
+                    <span
+                      className="trust-badge"
+                      title="通过邀请链接入房的云端 Agent，没有本机助手进程"
+                      style={{ marginLeft: 0, border: "1px solid rgba(0,0,0,0.12)" }}
+                    >
+                      云端
+                    </span>
+                  )}
+                  {isPaused && (
+                    <span
+                      className="trust-badge"
+                      title="席位已暂停：本机进程已停，席位记录保留；随时可恢复"
+                      style={{ marginLeft: 0, border: "1px solid rgba(0,0,0,0.12)" }}
+                    >
+                      已暂停
+                    </span>
+                  )}
                 </div>
                 <div
                   style={{
@@ -153,16 +234,32 @@ export function MembersPanel({
                 </div>
               </div>
               {canRemove && (
-                <button
-                  type="button"
-                  className="icon-btn"
-                  disabled={removingId === s.seat_id}
-                  onClick={() => void handleRemoveSeat(s)}
-                  title="移出房间"
-                  style={{ width: 28, height: 28 }}
-                >
-                  <Trash2 size={14} strokeWidth={1.75} />
-                </button>
+                <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                  <button
+                    type="button"
+                    className="icon-btn"
+                    disabled={pausingId === s.seat_id || removingId === s.seat_id}
+                    onClick={() => void handleSetPaused(s, !isPaused)}
+                    title={isPaused ? "恢复席位（本机助手下次心跳生效）" : "暂停席位（只停进程，不删席位）"}
+                    style={{ width: 28, height: 28 }}
+                  >
+                    {isPaused ? (
+                      <Play size={14} strokeWidth={1.75} />
+                    ) : (
+                      <Pause size={14} strokeWidth={1.75} />
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    className="icon-btn"
+                    disabled={removingId === s.seat_id || pausingId === s.seat_id}
+                    onClick={() => void handleRemoveSeat(s)}
+                    title="移出房间（先移出加密群，再删席位记录）"
+                    style={{ width: 28, height: 28 }}
+                  >
+                    <Trash2 size={14} strokeWidth={1.75} />
+                  </button>
+                </div>
               )}
             </div>
           );
@@ -178,6 +275,7 @@ export function MembersPanel({
         ))}
 
         {removeError && <p className="panel-error">{removeError}</p>}
+        {pauseError && <p className="panel-error">{pauseError}</p>}
 
         <Link to={agentsTargetUrl} className="btn btn-ghost btn-sm" style={{ marginTop: 4 }}>
           <Plus size={14} strokeWidth={2} />

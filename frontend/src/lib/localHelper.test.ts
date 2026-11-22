@@ -3,15 +3,23 @@ import {
   HELPER_ORIGIN,
   HubHttpError,
   acceptRoomInvite,
+  approveRedemption,
+  bindMyXmtpAddress,
   createRoomInvite,
+  denyRedemption,
   formatInviteAcceptError,
   helperHandoffUrl,
+  issueSignatureNonce,
   joinViaTicket,
   listRoomInvites,
+  listRoomRedemptions,
   localErrorMessage,
+  pauseRoomSeat,
   powershellInstallCommand,
   probeHelper,
   redeemRoomInvite,
+  resumeRoomSeat,
+  revokeRoomInvite,
 } from "./localHelper";
 
 const memoryStorage = new Map<string, string>();
@@ -185,11 +193,91 @@ describe("room invite Hub API helpers", () => {
       });
     }) as typeof fetch;
     try {
-      const invite = await createRoomInvite("room-a", 48);
+      const invite = await createRoomInvite("room-a", { expires_hours: 48 });
       expect(seenUrl).toBe("/api/v1/rooms/room-a/invites");
       expect(seenMethod).toBe("POST");
-      expect(JSON.parse(seenBody)).toEqual({ proposed_scopes: [], expires_hours: 48 });
+      expect(JSON.parse(seenBody)).toEqual({
+        proposed_scopes: [],
+        expires_hours: 48,
+        max_uses: 1,
+        requires_approval: false,
+        role: "member",
+      });
       expect(invite.token).toBe("inv_tok_1");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("createRoomInvite forwards reusable-invite options", async () => {
+    const originalFetch = globalThis.fetch;
+    let seenBody = "";
+    globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+      seenBody = String(init?.body ?? "");
+      return jsonResponse({ invite: { token: "inv_tok_2" } });
+    }) as typeof fetch;
+    try {
+      await createRoomInvite("room-a", {
+        max_uses: 8,
+        requires_approval: true,
+        role: "viewer",
+        proposed_scopes: ["gmail.send"],
+        expires_hours: 24,
+      });
+      expect(JSON.parse(seenBody)).toEqual({
+        proposed_scopes: ["gmail.send"],
+        expires_hours: 24,
+        max_uses: 8,
+        requires_approval: true,
+        role: "viewer",
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("revokeRoomInvite issues DELETE and surfaces 409 as HubHttpError", async () => {
+    const originalFetch = globalThis.fetch;
+    let seenUrl = "";
+    let seenMethod = "";
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      seenUrl = String(input);
+      seenMethod = init?.method ?? "GET";
+      return jsonResponse({ ok: true });
+    }) as typeof fetch;
+    try {
+      await revokeRoomInvite("room-a", "tok x");
+      expect(seenUrl).toBe("/api/v1/rooms/room-a/invites/tok%20x");
+      expect(seenMethod).toBe("DELETE");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+
+    globalThis.fetch = (async () =>
+      jsonResponse({ detail: "Invite already redeemed" }, 409)) as typeof fetch;
+    try {
+      await expect(revokeRoomInvite("room-a", "tok x")).rejects.toThrowError(
+        expect.objectContaining({ status: 409 }),
+      );
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("pauseRoomSeat/resumeRoomSeat POST to the seat lifecycle endpoints", async () => {
+    const originalFetch = globalThis.fetch;
+    const seen: string[] = [];
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      seen.push(`${init?.method ?? "GET"} ${String(input)}`);
+      return new Response(null, { status: 204 });
+    }) as typeof fetch;
+    try {
+      await pauseRoomSeat("room-a", "seat-1");
+      await resumeRoomSeat("room-a", "seat-1");
+      expect(seen).toEqual([
+        "POST /api/v1/rooms/room-a/seats/seat-1/pause",
+        "POST /api/v1/rooms/room-a/seats/seat-1/resume",
+      ]);
     } finally {
       globalThis.fetch = originalFetch;
     }
@@ -243,7 +331,7 @@ describe("room invite Hub API helpers", () => {
     }
   });
 
-  it("redeemRoomInvite posts xmtp_address to /api/v1/invites/:token/redeem", async () => {
+  it("redeemRoomInvite posts address + nonce + signature to /api/v1/invites/:token/redeem", async () => {
     const originalFetch = globalThis.fetch;
     let seenUrl = "";
     let seenBody = "";
@@ -253,18 +341,146 @@ describe("room invite Hub API helpers", () => {
       return jsonResponse({
         room_id: "room-a",
         xmtp_group_id: "grp-1",
+        status: "consumed",
+        redemption_id: "red-1",
       });
     }) as typeof fetch;
     try {
-      const out = await redeemRoomInvite(
-        "tok/with space",
-        "0x2222222222222222222222222222222222222222",
-      );
+      const out = await redeemRoomInvite("tok/with space", {
+        xmtp_address: "0x2222222222222222222222222222222222222222",
+        nonce: "n-1",
+        signature: "0xsig",
+      });
       expect(seenUrl).toBe("/api/v1/invites/tok%2Fwith%20space/redeem");
       expect(JSON.parse(seenBody)).toEqual({
         xmtp_address: "0x2222222222222222222222222222222222222222",
+        nonce: "n-1",
+        signature: "0xsig",
       });
-      expect(out).toEqual({ room_id: "room-a", xmtp_group_id: "grp-1" });
+      expect(out.status).toBe("consumed");
+      expect(out.room_id).toBe("room-a");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("redeemRoomInvite returns pending status for approval-gated invites", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async () =>
+      jsonResponse({ status: "pending", redemption_id: "red-9" })) as typeof fetch;
+    try {
+      const out = await redeemRoomInvite("tok", {
+        xmtp_address: "0x2222222222222222222222222222222222222222",
+        nonce: "n-2",
+        signature: "0xsig",
+      });
+      expect(out).toEqual({ status: "pending", redemption_id: "red-9" });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("issueSignatureNonce posts action+resource+address to /api/v1/invites/nonce", async () => {
+    const originalFetch = globalThis.fetch;
+    let seenUrl = "";
+    let seenBody = "";
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      seenUrl = String(input);
+      seenBody = String(init?.body ?? "");
+      return jsonResponse(
+        { nonce: "n-1", message: "MAPR-XP1\naction: bind-address\n...", expires_at: "2026-11-20T01:00:00Z" },
+        201,
+      );
+    }) as typeof fetch;
+    try {
+      const out = await issueSignatureNonce({
+        action: "bind-address",
+        resource: "room-a",
+        address: "0x2222222222222222222222222222222222222222",
+      });
+      expect(seenUrl).toBe("/api/v1/invites/nonce");
+      expect(JSON.parse(seenBody)).toEqual({
+        action: "bind-address",
+        resource: "room-a",
+        address: "0x2222222222222222222222222222222222222222",
+      });
+      expect(out.nonce).toBe("n-1");
+      expect(out.message).toContain("bind-address");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("bindMyXmtpAddress PUTs the signed payload to members/me/xmtp-address", async () => {
+    const originalFetch = globalThis.fetch;
+    let seenUrl = "";
+    let seenMethod = "";
+    let seenBody = "";
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      seenUrl = String(input);
+      seenMethod = init?.method ?? "GET";
+      seenBody = String(init?.body ?? "");
+      return jsonResponse({ ok: true, xmtp_address: "0x2222222222222222222222222222222222222222" });
+    }) as typeof fetch;
+    try {
+      const out = await bindMyXmtpAddress("room-a", {
+        xmtp_address: "0x2222222222222222222222222222222222222222",
+        nonce: "n-3",
+        signature: "0xsig",
+      });
+      expect(seenUrl).toBe("/api/v1/rooms/room-a/members/me/xmtp-address");
+      expect(seenMethod).toBe("PUT");
+      expect(JSON.parse(seenBody)).toEqual({
+        xmtp_address: "0x2222222222222222222222222222222222222222",
+        nonce: "n-3",
+        signature: "0xsig",
+      });
+      expect(out.ok).toBe(true);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("listRoomRedemptions passes the status filter and unwraps redemptions", async () => {
+    const originalFetch = globalThis.fetch;
+    let seenUrl = "";
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      seenUrl = String(input);
+      return jsonResponse({
+        redemptions: [
+          { id: "red-1", token: "t", kind: "human", status: "pending", redeemer_address: "0xabc" },
+        ],
+      });
+    }) as typeof fetch;
+    try {
+      const list = await listRoomRedemptions("room-a", "pending");
+      expect(seenUrl).toBe("/api/v1/rooms/room-a/redemptions?status=pending");
+      expect(list).toHaveLength(1);
+      expect(list[0].status).toBe("pending");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("approveRedemption and denyRedemption POST to the owner queue endpoints", async () => {
+    const originalFetch = globalThis.fetch;
+    const seen: { url: string; body: string }[] = [];
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      seen.push({ url: String(input), body: String(init?.body ?? "") });
+      return jsonResponse({ redemption: { id: "red-1", status: "consumed" } });
+    }) as typeof fetch;
+    try {
+      const approved = await approveRedemption("room-a", "red-1", {
+        approved_scopes: ["gmail.send"],
+      });
+      expect(seen[0].url).toBe("/api/v1/rooms/room-a/redemptions/red-1/approve");
+      expect(JSON.parse(seen[0].body)).toEqual({ approved_scopes: ["gmail.send"] });
+      expect(approved.status).toBe("consumed");
+
+      const denied = await denyRedemption("room-a", "red-2", "不认识这位申请人");
+      expect(seen[1].url).toBe("/api/v1/rooms/room-a/redemptions/red-2/deny");
+      expect(JSON.parse(seen[1].body)).toEqual({ reason: "不认识这位申请人" });
+      expect(denied.status).toBe("consumed");
     } finally {
       globalThis.fetch = originalFetch;
     }

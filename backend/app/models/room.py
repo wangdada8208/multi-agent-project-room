@@ -2,7 +2,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
-from sqlalchemy import String, Boolean, DateTime, ForeignKey, BigInteger
+from sqlalchemy import String, Boolean, DateTime, ForeignKey, BigInteger, JSON, Integer
 from sqlalchemy.orm import Mapped, mapped_column
 from app.core.database import Base
 
@@ -25,6 +25,13 @@ class Room(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     transport: Mapped[str] = mapped_column(String(16), nullable=False, default="xmtp")
     xmtp_group_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    # m1 (l20c20261120): versioned room metadata — template key + house-rules
+    # suggestions only, never chat/document plaintext. Workers merge it as
+    # restricted suggestions (Hub 'allow' is downgraded to 'ask' locally).
+    settings_json: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    settings_version: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
@@ -42,5 +49,6 @@ class Room(Base):
             "is_active": self.is_active,
             "transport": self.transport,
             "xmtp_group_id": self.xmtp_group_id,
+            "settings_version": self.settings_version,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
