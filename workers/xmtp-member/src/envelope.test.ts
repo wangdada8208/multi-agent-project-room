@@ -48,6 +48,33 @@ test("extra fields on a request are dropped", () => {
   assert.equal(decoded.run, undefined);
 });
 
+test("member_revoked broadcast round-trips with to='*'", () => {
+  const env = {
+    kind: "member_revoked",
+    request_id: "mr-1",
+    to: "*",
+    address: "0xAAAAAAAABBBBBBBBCCCCCCCCDDDDDDDDEEEEEEEE".toLowerCase(),
+    reason: "owner_removed",
+  };
+  assert.deepEqual(decodeEnvelope(encodeEnvelope(env as any)), env);
+});
+
+test("member_revoked rejects bad address and non-broadcast abuse", () => {
+  assert.equal(
+    decodeEnvelope(`${ENVELOPE_PREFIX}{"kind":"member_revoked","request_id":"r","to":"*","address":"0xzz"}`),
+    null
+  );
+  // "*" is only legal on member_revoked — other kinds still need a real address.
+  assert.equal(
+    decodeEnvelope(`${ENVELOPE_PREFIX}{"kind":"request","request_id":"r","to":"*","scope":"task.run","purpose":"","constraints":{"date_from":"2026-10-05","date_to":"2026-10-09"}}`),
+    null
+  );
+  assert.equal(
+    decodeEnvelope(`${ENVELOPE_PREFIX}{"kind":"member_revoked","request_id":"r","to":"*","address":"${TO}","reason":"${"x".repeat(65)}"}`),
+    null
+  );
+});
+
 test("task, result, verdict round-trip through encode and decode", () => {
   const task: any = {
     kind: "task",

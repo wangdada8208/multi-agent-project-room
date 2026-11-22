@@ -55,9 +55,11 @@ const KIND_LABEL: Record<AgentKind, string> = {
   "claude-code": "Claude Code",
   codex: "Codex",
   "gemini-cli": "Gemini CLI",
+  "cli-agent": "命令行 Agent",
   "openai-compatible": "云端接口",
   webhook: "Webhook",
   "http-model": "HTTP 模型",
+  "cloud-agent": "云端 Agent",
 };
 
 const SEAT_STATUS_LABEL: Record<SeatViewLocal["status"], string> = {
@@ -77,7 +79,7 @@ const SEAT_STATUS_CLASS: Record<SeatViewLocal["status"], string> = {
 };
 
 function AgentKindIcon({ kind }: { kind: AgentKind }) {
-  if (kind === "claude-code" || kind === "codex" || kind === "gemini-cli") {
+  if (kind === "claude-code" || kind === "codex" || kind === "gemini-cli" || kind === "cli-agent") {
     return <Terminal size={17} strokeWidth={1.8} />;
   }
   if (kind === "webhook") {
@@ -923,6 +925,7 @@ export function AgentJoinSection({
                       </strong>
                       <small>
                         {agent.version ? `${agent.version} · ` : ""}
+                        {agent.model ? `模型 ${agent.model} · ` : ""}
                         {agent.source === "detected" ? "本机自动发现" : "本机预设配置"}
                       </small>
                     </div>

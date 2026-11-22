@@ -4,6 +4,14 @@ const DENIAL_LABEL: Record<string, string> = {
   out_of_scope: "超出授权范围",
   owner_denied: "主人拒绝",
   expired: "超时未批准",
+  cannot: "规则禁止",
+  busy: "对方待批队列已满，请稍后重试",
+};
+
+const ACTION_STATUS_LABEL: Record<string, string> = {
+  executed: "已执行",
+  failed: "执行失败",
+  uncertain: "结果不明（未自动重试）",
 };
 
 function short(address: unknown): string {
@@ -39,6 +47,12 @@ export function describeEnvelope(text: string): string | null {
       return `【成果】向 ${short(raw.to)} 提交第 ${raw.round} 轮成果：${raw.summary?.slice(0, 40) || ""}`;
     case "verdict":
       return `【裁决】向 ${short(raw.to)} 裁决：${raw.accepted ? "验收通过" : "质疑 - " + (raw.challenge || "")}`;
+    case "action_request":
+      return `【动作请示】请 ${short(raw.to)} 执行 ${raw.action}`;
+    case "action_result":
+      return `【动作回执】${ACTION_STATUS_LABEL[raw.status] ?? raw.status}${raw.summary ? "：" + raw.summary : ""}`;
+    case "member_revoked":
+      return `【成员移出】${short(raw.address)} 已被移出加密群`;
     default:
       return "【无法识别的结构化消息】";
   }

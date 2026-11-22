@@ -7,7 +7,7 @@ import type { HelperConfig, LocalAgent, SeatRecord, SeatStatus, SeatView } from 
 export const SEAT_PORT_BASE = 8791;
 
 /** seatId 来自 Hub（uuid），这里再拦一次，保证它永远不可能拼出越界路径。 */
-const SEAT_ID_RE = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
+export const SEAT_ID_RE = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
 
 /** S5：同组/其他人有任何权限位都拒绝，包括读与执行。 */
 function assertSecureMode(mode: number, what: string): void {
@@ -149,6 +149,12 @@ export function seatEnv(
       // bwrap 挂载清单是可选透传项，原样写回让 engineConfigFromEnv 重新解析。
       if (engine.bwrapRoDirs?.length) env.MEMBER_AGENT_BWRAP_RO = engine.bwrapRoDirs.join(path.delimiter);
       if (engine.bwrapRwDirs?.length) env.MEMBER_AGENT_BWRAP_RW = engine.bwrapRwDirs.join(path.delimiter);
+      break;
+    case "cli-agent":
+      env.MEMBER_AGENT_BIN = engine.binaryPath;
+      env.MEMBER_AGENT_SANDBOX_DIR = engine.sandboxDir;
+      env.MEMBER_AGENT_KEY = engine.agentKey;
+      if (engine.model) env.MEMBER_AGENT_MODEL = engine.model;
       break;
     case "openai-compatible":
       env.MEMBER_AGENT_BASE_URL = engine.baseUrl;
@@ -426,6 +432,7 @@ export function createSeatSupervisor(deps: SupervisorDeps): SeatSupervisor {
           consolePort: rec.consolePort,
           status: state?.status ?? "stopped",
           lastError: state?.lastError ?? null,
+          pausedAt: rec.pausedAt ?? null,
         };
       });
     },

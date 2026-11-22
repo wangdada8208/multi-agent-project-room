@@ -259,3 +259,10 @@ class MessageLoop:
 - 现有 REST API 继续可用
 - WebSocket 事件格式保持不变
 - 前端逐步迁移，不强制一次性替换
+
+---
+
+## 2026-11-20 现行演进状态
+
+上述 v2 早期规划中面向明文 `MessageLoop` 与 Hub 托管层的部分已被成员端 XMTP 加密与本机控制面演进替代：
+- 现行能力对照、Alembic 迁移（`l20c20261120` / `m30c20261120`）、`MAPR1` 协议契约与验收状态请直接查阅 [docs/现行能力对照与安全契约.md](./docs/现行能力对照与安全契约.md) 及 [ARCHITECTURE.md](./ARCHITECTURE.md)。

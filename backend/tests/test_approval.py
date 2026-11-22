@@ -3,19 +3,34 @@
 import pytest
 import uuid
 from httpx import AsyncClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.room import Room
+from app.models.room_permission import RoomPermission
 from app.models.user import User
 from app.approval.service import create_approval, list_approvals, decide_approval
 
 
+async def _tester_id(db: AsyncSession) -> str:
+    result = await db.execute(select(User).where(User.username == "tester"))
+    return result.scalars().one().id
+
+
+async def _hub_room(db: AsyncSession, owner_id: str) -> str:
+    """transport="hub" 的房间才允许走 Hub Approval API 写自由文本。"""
+    room = Room(name="Hub Approval Room", transport="hub")
+    db.add(room)
+    await db.flush()
+    db.add(RoomPermission(room_id=room.id, user_id=owner_id, role="owner"))
+    await db.commit()
+    return room.id
+
+
 @pytest.mark.asyncio
-async def test_approval_flow(client: AsyncClient, auth_headers: dict[str, str]):
-    """Full approval lifecycle via API."""
-    # Create room first
-    resp = await client.post("/api/v1/rooms", json={"name": "Approval Test"}, headers=auth_headers)
-    room_id = resp.json()["room"]["id"]
+async def test_approval_flow(client: AsyncClient, auth_headers: dict[str, str], db: AsyncSession):
+    """Full approval lifecycle via API (hub-transport room keeps the old behaviour)."""
+    room_id = await _hub_room(db, await _tester_id(db))
 
     # Create approval
     resp = await client.post(
@@ -57,6 +72,70 @@ async def test_approval_flow(client: AsyncClient, auth_headers: dict[str, str]):
     )
     assert resp.status_code == 200
     assert resp.json()["approval"]["status"] == "rejected"
+
+
+@pytest.mark.asyncio
+async def test_approval_create_rejected_for_xmtp_room(
+    client: AsyncClient, auth_headers: dict[str, str]
+):
+    """XMTP 加密房的自由文本审批不写入 Hub——409 body_not_on_hub。"""
+    resp = await client.post("/api/v1/rooms", json={"name": "XMTP Room"}, headers=auth_headers)
+    room_id = resp.json()["room"]["id"]
+    assert resp.json()["room"]["transport"] == "xmtp"
+
+    resp = await client.post(
+        f"/api/v1/rooms/{room_id}/approvals",
+        json={"title": "私事正文", "description": "不应落库", "risk_level": "low"},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 409
+    assert resp.json()["detail"] == "body_not_on_hub"
+
+
+@pytest.mark.asyncio
+async def test_approval_list_still_works_for_xmtp_room(
+    client: AsyncClient, auth_headers: dict[str, str], db: AsyncSession
+):
+    """读路径不受 409 影响——历史数据仍可列表（不删除历史数据）。"""
+    tester = await _tester_id(db)
+    room = Room(name="XMTP With History", transport="xmtp")
+    db.add(room)
+    await db.flush()
+    db.add(RoomPermission(room_id=room.id, user_id=tester, role="owner"))
+    await db.commit()
+    await create_approval(
+        db=db, room_id=room.id, requestor_id=tester,
+        title="历史审批", description="迁移前写入的",
+    )
+
+    resp = await client.get(f"/api/v1/rooms/{room.id}/approvals", headers=auth_headers)
+    assert resp.status_code == 200
+    assert len(resp.json()["approvals"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_historical_xmtp_approval_cannot_be_decided_on_hub(
+    client: AsyncClient, auth_headers: dict[str, str], db: AsyncSession
+):
+    tester = await _tester_id(db)
+    room = Room(name="XMTP Pending History", transport="xmtp")
+    db.add(room)
+    await db.flush()
+    db.add(RoomPermission(room_id=room.id, user_id=tester, role="owner"))
+    await db.commit()
+    approval = await create_approval(
+        db=db, room_id=room.id, requestor_id=tester,
+        title="历史待批", description="只能在本机处理",
+    )
+
+    resp = await client.post(
+        f"/api/v1/approvals/{approval.id}/approve",
+        json={"decision": "approved"}, headers=auth_headers,
+    )
+    assert resp.status_code == 409
+    assert resp.json()["detail"] == "body_not_on_hub"
+    await db.refresh(approval)
+    assert approval.status == "pending"
 
 
 @pytest.mark.asyncio

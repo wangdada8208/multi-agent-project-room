@@ -137,3 +137,46 @@ test("hubClient：未配对（无令牌）调用受保护端点直接 401", asyn
     (err: unknown) => err instanceof HubError && err.status === 401
   );
 });
+
+test("hubClient.reportActivity / reportCheckpoints：路径、鉴权与严格安全元数据负载", async () => {
+  const calls: { url: string; body: any; auth: string }[] = [];
+  const fetchImpl = (async (input: any, init: any) => {
+    calls.push({
+      url: String(input),
+      body: JSON.parse(init.body),
+      auth: init.headers.Authorization,
+    });
+    return jsonResponse(200, { accepted: 1, duplicates: 0 });
+  }) as typeof fetch;
+  const hub = createHubClient(HUB, TOKEN, fetchImpl);
+  const ev = {
+    id: "ev-1",
+    room_id: "room-1",
+    actor_kind: "agent" as const,
+    actor_id: "0x" + "a".repeat(40),
+    kind: "action_finished",
+    status: "ok",
+    subject_id: "req-1",
+    stream_seq: 1,
+    created_at: "2026-11-20T10:00:00.000Z",
+  };
+  const cp = {
+    version: 1 as const,
+    room_id: "room-1",
+    stream_id: "0x" + "a".repeat(40),
+    head_seq: 1,
+    head_hash: "b".repeat(64),
+    entry_count: 1,
+    created_at: "2026-11-20T10:00:00.000Z",
+    signer: "0x" + "a".repeat(40),
+    signature: "0x" + "c".repeat(130),
+  };
+
+  assert.deepEqual(await hub.reportActivity([ev]), { accepted: 1, duplicates: 0 });
+  assert.deepEqual(await hub.reportCheckpoints([cp]), { accepted: 1, duplicates: 0 });
+  assert.equal(calls[0].url, `${HUB}/api/v1/helpers/me/activity`);
+  assert.equal(calls[0].auth, `Bearer ${TOKEN}`);
+  assert.deepEqual(calls[0].body, { events: [ev] });
+  assert.equal(calls[1].url, `${HUB}/api/v1/helpers/me/activity/checkpoints`);
+  assert.deepEqual(calls[1].body, { checkpoints: [cp] });
+});

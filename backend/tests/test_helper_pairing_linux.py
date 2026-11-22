@@ -133,7 +133,9 @@ async def test_revoked_helper_401_and_heartbeat_reports_revoked(client, db, owne
     # heartbeat still answers so the helper learns it was revoked
     beat = await client.post(f"{BASE}/me/heartbeat", headers=helper_headers,
                              json={"agents": [], "seats": []})
-    assert beat.status_code == 200 and beat.json() == {"revoked": True, "seats_to_stop": []}
+    assert beat.status_code == 200 and beat.json() == {
+        "revoked": True, "seats_to_stop": [], "seats_to_pause": [], "rooms": []
+    }
     assert (await client.get(BASE, headers=headers(owner))).json()[0]["revoked"] is True
 
 

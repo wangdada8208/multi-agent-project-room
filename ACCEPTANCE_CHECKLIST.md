@@ -144,3 +144,19 @@ Target: `https://hub.wangdada8208.xyz`
 
 仍需人工完成的浏览器/AI 适配器验收项见上表标为 `Needs manual pass` 的行，
 以及 `docs/verification/2026-11-12-live-smoke-acceptance.md` 的「remaining human-only checks」一节。
+
+## 2026-11-20 安全与功能对齐门禁（离线已测 / 真网待批）
+
+### 已在本机离线验证（详单见 `docs/现行能力对照与安全契约.md`）
+
+- [x] **S1–S3 / R0 安全收口**：加密房附件/知识库/Hub 审批明文拦截（409）、会话作用域撤销、出站请求-回执绑定、`GroupMemberCache` 代数防竞态，以及 L1–L4 修复回归。
+- [x] **WP1–WP3 / WP7 Worker**：统一规则引擎与硬禁区、`gmail.send` 参数校验/头注入拦截/`result_signature` 绑定、崩溃 `uncertain` 补签发回执（M1）、过期 Grant 重签（M2）、多账户与触发器首轮基线（L6）。
+- [x] **WP4 审计与活动流**：哈希链防篡改账本、本地检查点锚定（M5）、Hub m2 `activity_events`/`activity_checkpoints`（`extra="forbid"` + EIP-191 验签）与前端 `ActivityPanel`。
+- [x] **m1 / WP5 / WP6 / WP8 / WP9**：`l20c20261120` 与 `m30c20261120` PostgreSQL 17 升降级与 `alembic check`、席位暂停/恢复、EIP-191 地址绑定与可复用邀请审批、加密草稿与本地搜索、模板建议规则下发与降权。
+
+### 仍需人类批准的现场验收（未执行，不得标为已验）
+
+- [ ] **双机 XMTP 真网群驱逐**：移除席位及已绑定人类成员后，在真实 XMTP 网络验证 `removeMembersByIdentifiers` 生效、被移除方无法解密新消息且收到 `member_revoked`。
+- [ ] **双机邀请签名与云端 `mapr join`**：使用真实 `mapr join` 完成 `requires_approval=True` 待批→批准→入群→撤权自停闭环。
+- [ ] **真实 Gmail 发信与 `uncertain` 对账**：使用专用测试账号验证 OAuth `0600` 凭据发信恰好 1 封、401 报 `auth_required`、以及 `X-MAPR-Request-Id` 在 Sent 中的人工核对。
+- [ ] **生产数据库迁移**：人类单独批准后在生产 PostgreSQL 执行 `k10c20261118` → `l20c20261120` → `m30c20261120`。

@@ -101,7 +101,7 @@ case "$OS" in
   Linux|Darwin) ;;
   MINGW*|MSYS*|CYGWIN*)
     die "这是 Windows 环境，请改用 PowerShell 版本：iwr $HUB/install.ps1 -UseBasicParsing | iex" ;;
-  *) die "暂不支持的系统：$OS（本脚本支持 Linux 和 macOS）" ;;
+  *) die "暂不支持的系统：${OS}（本脚本支持 Linux 和 macOS）" ;;
 esac
 
 for c in curl tar; do
@@ -123,7 +123,7 @@ node_minor=${node_rest%%.*}
 case "$node_major" in ''|*[!0-9]*) die "无法解析 node 版本号：$node_ver" ;; esac
 case "$node_minor" in ''|*[!0-9]*) node_minor=0 ;; esac
 if [ "$node_major" -lt 22 ] || { [ "$node_major" -eq 22 ] && [ "$node_minor" -lt 6 ]; }; then
-  die "Node.js 版本太低（当前 v$node_ver，需要 >= $NODE_MIN）。请升级后重新运行。"
+  die "Node.js 版本太低（当前 v${node_ver}，需要 >= ${NODE_MIN}）。请升级后重新运行。"
 fi
 
 # ── 下载并解开发布包到 ~/.mapr/pkg/（升级时整包替换） ──
@@ -330,7 +330,7 @@ setup_autostart() {
   if [ "$OS" = "Darwin" ]; then
     write_launchagent
     AUTOSTART_KIND="launchd"
-    say "已写入 LaunchAgent：$PLIST（下次登录自动启动）"
+    say "已写入 LaunchAgent：${PLIST}（下次登录自动启动）"
   elif systemd_user_ok; then
     write_systemd_unit
     systemctl --user enable mapr-helper.service >/dev/null 2>&1 || true
@@ -339,7 +339,7 @@ setup_autostart() {
   else
     write_desktop_autostart
     AUTOSTART_KIND="desktop"
-    say "已写入桌面会话自启项：$DESKTOP（下次图形登录生效）"
+    say "已写入桌面会话自启项：${DESKTOP}（下次图形登录生效）"
   fi
 }
 
@@ -482,7 +482,7 @@ if [ -n "$PAIR_CODE" ]; then
   case "$PAIR_STATE" in
     paired)
       owner=$(probe_hello | sed -n 's/.*"owner_display_name"[ ]*:[ ]*"\([^"]*\)".*/\1/p')
-      say "配对: 成功${owner:+（账号：$owner）}"
+      say "配对: 成功${owner:+（账号：${owner}）}"
       ;;
     pair-failed)  warn "配对请求被本机助手拒绝（配对码过期或已用？）。可在 http://127.0.0.1:$HELPER_PORT/ 页面里重新输入配对码。" ;;
     pair-pending) warn "本机助手已启动但 15 秒内没确认配对结果。看日志 $MAPR_ROOT/helper.log；也可打开 http://127.0.0.1:$HELPER_PORT/ 检查状态。" ;;

@@ -110,3 +110,9 @@ npm run dev
 - 系统核心架构改动。
 - 向 `main` 主分支合并代码。
 - 生产环境部署上线。
+
+## 7. 2026-11-20 现行状态速览
+
+- **端到端加密房间与本机网关**：用户房间默认采用 `transport="xmtp"`，成员端（`workers/xmtp-member`）运行统一规则引擎、`0600` 凭据连接器（`calendar.free_busy` / `email.receipt` / `gmail.send`）、多账户触发器、哈希链账本与本机审批控制台；云端 Agent 可通过 `mapr join <invite-url>` 以 EIP-191 签名自助接入。
+- **新增后端依赖与迁移头**：后端新增 `eth-account`（见 `backend/requirements.txt`）用于 EIP-191 签名与检查点验签；Alembic 链头推进至 `m30c20261120`（在 `k10c20261118` 之后依次包含 m1 `l20c20261120` 与 m2 `m30c20261120`，生产库迁移仍需人类单独批准）。
+- **现行能力对照**：完整功能、安全边界与测试证据索引见 `docs/现行能力对照与安全契约.md`。

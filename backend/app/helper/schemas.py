@@ -9,9 +9,10 @@ from typing import Literal, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator
 
-AgentKind = Literal["claude-code", "codex", "gemini-cli", "openai-compatible", "webhook", "http-model"]
+AgentKind = Literal["claude-code", "codex", "gemini-cli", "cli-agent", "openai-compatible", "webhook", "http-model", "cloud-agent"]
 GroupStatus = Literal["pending", "added", "removed"]
 SeatStatus = Literal["starting", "running", "crashed", "stopped", "revoked"]
+SeatSource = Literal["helper", "invite"]
 # 信任分级（借鉴 agentroom.chat 的诚实分级）：席位回话时明文会流向的边界。
 # local-cli=只在本机；cloud-api=发给第三方云接口；custom-webhook=发给用户自配地址。
 TrustTier = Literal["local-cli", "cloud-api", "custom-webhook"]
@@ -20,9 +21,12 @@ TRUST_TIER_BY_KIND: dict[str, TrustTier] = {
     "claude-code": "local-cli",
     "codex": "local-cli",
     "gemini-cli": "local-cli",
+    "cli-agent": "local-cli",
     "openai-compatible": "cloud-api",
     "http-model": "cloud-api",
     "webhook": "custom-webhook",
+    # 通过可复用邀请自助注册的云端 Agent：明文会流到对方云端，分级 cloud-api。
+    "cloud-agent": "cloud-api",
 }
 
 
@@ -30,7 +34,9 @@ def trust_tier(kind: str) -> TrustTier:
     return TRUST_TIER_BY_KIND.get(kind, "custom-webhook")
 
 _ADDRESS = re.compile(r"^0x[0-9a-fA-F]{40}$")
-_AGENT_KEY = re.compile(r"^(claude-code|codex|gemini-cli|manual:[0-9a-f-]{36})$")
+# agent_key 会拼进本机文件路径（~/.mapr/agents/<key>.secret），只放行
+# [a-z0-9-] 裸键与 magpie:/manual: 前缀形态，杜绝路径分隔符与冒号滥用。
+_AGENT_KEY = re.compile(r"^([a-z0-9][a-z0-9-]{0,62}|magpie:[a-z0-9][a-z0-9-]{0,62}|manual:[0-9a-f-]{36})$")
 
 
 class _Strict(BaseModel):
@@ -90,6 +96,8 @@ class SeatView(_Strict):
     trust_tier: TrustTier
     xmtp_address: str
     group_status: GroupStatus
+    source: SeatSource
+    paused_at: Optional[str]
 
 
 class SeatPeer(_Strict):
@@ -99,6 +107,8 @@ class SeatPeer(_Strict):
     kind: AgentKind
     trust_tier: TrustTier
     xmtp_address: str
+    source: SeatSource
+    paused_at: Optional[str]
 
 
 # ── helper (Bearer helper token) ──
@@ -162,6 +172,20 @@ class SeatStatusResponse(_Strict):
     group_status: GroupStatus
 
 
+class AgentSeatStatus(_Strict):
+    """云端 Agent 自查视图（GET /api/v1/agent-seats/{id}）。
+
+    被撤席位也必须可读：移除通知可能丢失，云端 Agent 靠这个端点 fail-closed。
+    """
+
+    seat_id: str
+    room_id: str
+    source: SeatSource
+    group_status: GroupStatus
+    paused_at: Optional[str]
+    removed_at: Optional[str]
+
+
 class HeartbeatAgent(_Strict):
     key: str = Field(max_length=64)
     kind: str = Field(max_length=32)
@@ -178,6 +202,21 @@ class HeartbeatRequest(_Strict):
     seats: list[HeartbeatSeat] = Field(default_factory=list, max_length=256)
 
 
+class HeartbeatRoom(_Strict):
+    """心跳顺带下发的房间安全元数据（Hub 建议；本机规则永远优先）。
+
+    settings_json 只装模板键与 House Rules 建议，绝不装正文。
+    """
+
+    id: str
+    settings_version: int
+    settings_json: Optional[dict]
+
+
 class HeartbeatResponse(_Strict):
     revoked: bool
     seats_to_stop: list[str]
+    # WP5：暂停只停进程不删数据，绝不复用 seats_to_stop（那会触发本机
+    # 数据清理）。
+    seats_to_pause: list[str] = Field(default_factory=list)
+    rooms: list[HeartbeatRoom] = Field(default_factory=list)

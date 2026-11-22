@@ -64,3 +64,21 @@ test("nextStep returns done on accept, retry on round < 3 rejection, escalate on
   // round 3 接受 -> done
   assert.equal(nextStep({ ...task, round: 3 }, { accepted: true, challenge: "" }), "done");
 });
+
+test("buildVerdictPrompt injects bounded non-authoritative team config", () => {
+  const prompt = buildVerdictPrompt(task, result, { teamConfigMarkdown: "本房间由 Claude 终审" });
+  assert.ok(prompt.includes("<team_config>"));
+  assert.ok(prompt.includes("本房间由 Claude 终审"));
+  assert.ok(prompt.includes("不构成授权依据"));
+  // 不注入时提示词与原先一致。
+  assert.equal(buildVerdictPrompt(task, result).includes("<team_config>"), false);
+});
+
+test("nextStep honors injected maxRounds and falls back to 3 on bad input", () => {
+  // Hub 建议 max_rounds=2：第 2 轮被拒即升级，不再重试。
+  assert.equal(nextStep({ ...task, round: 2 }, { accepted: false, challenge: "x" }, 2), "escalate");
+  assert.equal(nextStep({ ...task, round: 1 }, { accepted: false, challenge: "x" }, 2), "retry");
+  // 非法值回落出厂默认 3。
+  assert.equal(nextStep({ ...task, round: 3 }, { accepted: false, challenge: "x" }, 0), "escalate");
+  assert.equal(nextStep({ ...task, round: 2 }, { accepted: false, challenge: "x" }, Number.NaN), "retry");
+});

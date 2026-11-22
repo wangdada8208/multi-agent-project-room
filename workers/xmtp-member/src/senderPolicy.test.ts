@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { GroupMemberCache, isAllowedSender, parseAllowedSenders } from "./senderPolicy.ts";
+import {
+  GroupMemberCache,
+  isAllowedSender,
+  isSenderAuthorized,
+  parseAllowedSenders,
+  type SenderAuthorizationDeps,
+} from "./senderPolicy.ts";
 
 const A = "0x1111111111111111111111111111111111111111";
 const B = "0x2222222222222222222222222222222222222222";
@@ -75,4 +81,164 @@ test("members fetch failure denies without poisoning the cache", async () => {
 test("non-group conversations are denied", async () => {
   const cache = new GroupMemberCache(60_000);
   assert.equal(await cache.allows(A, {}), false);
+});
+
+function fakeRevocations(initial: string[] = []) {
+  const keys = new Set(initial);
+  return {
+    keys,
+    has: (address: string, conversationId: string) => keys.has(`${conversationId}:${address}`),
+    remove: async (address: string, conversationId: string) => {
+      keys.delete(`${conversationId}:${address}`);
+    },
+  };
+}
+
+function authDeps(overrides: Partial<SenderAuthorizationDeps> = {}): SenderAuthorizationDeps {
+  return {
+    allowedSenders: [A],
+    allowGroupMembers: false,
+    groupMembers: new GroupMemberCache(),
+    revoked: fakeRevocations(),
+    ...overrides,
+  };
+}
+
+test("DM authorization never queries group members and ignores a group revocation", async () => {
+  const conversation = fakeGroup([A], { id: "dm-1" });
+  const revoked = fakeRevocations([`group-1:${A}`]);
+  assert.equal(await isSenderAuthorized(
+    { sender: A, isGroup: false, conversation },
+    authDeps({ revoked })
+  ), true);
+  assert.equal(conversation.calls.n, 0);
+});
+
+test("an explicitly allowed group sender must still be a current member", async () => {
+  const conversation = fakeGroup([B]);
+  assert.equal(await isSenderAuthorized(
+    { sender: A, isGroup: true, conversation },
+    authDeps()
+  ), false);
+  assert.equal(conversation.calls.n, 1);
+});
+
+test("group member lookup failure fails closed even for an explicit whitelist entry", async () => {
+  const conversation = fakeGroup([A], { fail: () => true });
+  assert.equal(await isSenderAuthorized(
+    { sender: A, isGroup: true, conversation },
+    authDeps()
+  ), false);
+});
+
+test("allowGroupMembers admits a current member without an explicit whitelist entry", async () => {
+  const conversation = fakeGroup([A]);
+  assert.equal(await isSenderAuthorized(
+    { sender: A, isGroup: true, conversation },
+    authDeps({ allowedSenders: [], allowGroupMembers: true })
+  ), true);
+});
+
+test("an unauthorized group sender is rejected without a member lookup", async () => {
+  const conversation = fakeGroup([A]);
+  assert.equal(await isSenderAuthorized(
+    { sender: B, isGroup: true, conversation },
+    authDeps()
+  ), false);
+  assert.equal(conversation.calls.n, 0);
+});
+
+test("rejoining a group force-refreshes membership and clears only that group's revocation", async () => {
+  const groupMembers = new GroupMemberCache();
+  const conversation = fakeGroup([A]);
+  await groupMembers.allows(A, conversation);
+  const revoked = fakeRevocations([`group-1:${A}`, `other-group:${A}`]);
+  assert.equal(await isSenderAuthorized(
+    { sender: A, isGroup: true, conversation },
+    authDeps({ groupMembers, revoked })
+  ), true);
+  assert.equal(conversation.calls.n, 2, "a revoked sender cannot be restored from a stale cache");
+  assert.deepEqual([...revoked.keys], [`other-group:${A}`]);
+});
+
+test("an absent sender stays revoked and a failed revocation update fails closed", async () => {
+  const revoked = fakeRevocations([`group-1:${A}`]);
+  assert.equal(await isSenderAuthorized(
+    { sender: A, isGroup: true, conversation: fakeGroup([B]) },
+    authDeps({ revoked })
+  ), false);
+  assert.deepEqual([...revoked.keys], [`group-1:${A}`]);
+
+  assert.equal(await isSenderAuthorized(
+    { sender: A, isGroup: true, conversation: fakeGroup([A]) },
+    authDeps({
+      revoked: {
+        has: () => true,
+        remove: async () => {
+          throw new Error("disk failed");
+        },
+      },
+    })
+  ), false);
+});
+
+test("malformed group member rows deny authorization instead of trusting a partial list", async () => {
+  const conversation = {
+    id: "group-1",
+    members: async () => [
+      { accountIdentifiers: [{ identifier: A }] },
+      { accountIdentifiers: [] },
+    ],
+  };
+  assert.equal(await isSenderAuthorized(
+    { sender: A, isGroup: true, conversation },
+    authDeps()
+  ), false);
+});
+
+test("in-flight cache invalidation denies stale authorization and preserves revocation", async () => {
+  const groupMembers = new GroupMemberCache(60_000);
+  const revoked = fakeRevocations([`group-1:${A}`]);
+  let releaseMembers!: () => void;
+  const membersReady = new Promise<void>((resolve) => {
+    releaseMembers = resolve;
+  });
+  let started!: () => void;
+  const lookupStarted = new Promise<void>((resolve) => {
+    started = resolve;
+  });
+  let callCount = 0;
+  const conversation = {
+    id: "group-1",
+    members: async () => {
+      callCount += 1;
+      if (callCount === 1) {
+        started();
+        await membersReady;
+        return [{ accountIdentifiers: [{ identifier: A }] }];
+      }
+      return [{ accountIdentifiers: [{ identifier: B }] }];
+    },
+  };
+
+  const pendingAuth = isSenderAuthorized(
+    { sender: A, isGroup: true, conversation },
+    authDeps({ groupMembers, revoked })
+  );
+  await lookupStarted;
+  groupMembers.invalidate("group-1");
+  releaseMembers();
+
+  assert.equal(await pendingAuth, false);
+  assert.equal(revoked.has(A, "group-1"), true);
+  assert.equal(await groupMembers.allows(A, conversation), false);
+});
+
+test("non-boolean isGroup values such as undefined fail closed even for allowed senders", async () => {
+  const conversation = fakeGroup([A]);
+  assert.equal(await isSenderAuthorized(
+    { sender: A, isGroup: undefined, conversation },
+    authDeps()
+  ), false);
+  assert.equal(conversation.calls.n, 0);
 });

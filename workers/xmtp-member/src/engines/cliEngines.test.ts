@@ -5,6 +5,7 @@ import path from "node:path";
 import test from "node:test";
 import {
   buildDarwinSeatbeltProfile,
+  cliAgentEngine,
   codexEngine,
   createCodexEngine,
   DARWIN_SANDBOX_EXEC,
@@ -288,4 +289,76 @@ test("geminiCliEngine creates non-empty sandboxDir with 0700 and falls back to o
     });
     assert.equal(fallbackCwd, os.tmpdir());
   });
+});
+
+// ── cliAgentEngine（通用一次性问答 CLI Agent） ──
+
+test("cliAgentArgv: argvPrefix + modelFlag + prompt 顺序正确", async () => {
+  const { cliAgentArgv } = await import("./cliEngines.ts");
+  const { cliAgentSpec } = await import("./cliAgentSpecs.ts");
+  const spec = cliAgentSpec("opencode")!;
+  assert.deepEqual(
+    cliAgentArgv(spec, "/usr/bin/opencode", "你好", "kimi/k2.5"),
+    ["/usr/bin/opencode", "run", "-m", "kimi/k2.5", "你好"]
+  );
+  const dsh = cliAgentSpec("dsh")!;
+  assert.deepEqual(cliAgentArgv(dsh, "/usr/bin/dsh", "task"), ["/usr/bin/dsh", "headless", "task"]);
+});
+
+test("cliAgentEngine 规格未注册直接报错", () => {
+  assert.throws(
+    () => cliAgentEngine({ kind: "cli-agent", agentKey: "nope", binaryPath: "/x", sandboxDir: "", timeoutMs: 1 }),
+    /unknown cli-agent spec/
+  );
+});
+
+test("cliAgentEngine 用规格 argv 跑通并回 stdout；非零退出带 stderr 尾巴", async () => {
+  const seen: string[][] = [];
+  const engine = cliAgentEngine(
+    { kind: "cli-agent", agentKey: "qwen-code", binaryPath: "/usr/bin/qwen", sandboxDir: "", timeoutMs: 5000 },
+    {
+      runCliImpl: async (run) => {
+        seen.push(run.argv);
+        assert.equal(run.stdin, "");
+        return { code: 0, stdout: "qwen 回复\n", stderr: "", truncated: false };
+      },
+      env: { HOME: "/tmp/h", PATH: "/usr/bin" },
+    }
+  );
+  assert.equal(await engine.reply({ prompt: "测试", signal: AbortSignal.timeout(1000) }), "qwen 回复");
+  assert.deepEqual(seen[0], ["/usr/bin/qwen", "-p", "测试"]);
+
+  const failing = cliAgentEngine(
+    { kind: "cli-agent", agentKey: "droid", binaryPath: "/usr/bin/droid", sandboxDir: "", timeoutMs: 5000 },
+    {
+      runCliImpl: async () => ({ code: 2, stdout: "", stderr: "auth missing", truncated: false }),
+      env: {},
+    }
+  );
+  await assert.rejects(() => failing.reply({ prompt: "x", signal: AbortSignal.timeout(1000) }), /code 2.*auth missing/);
+});
+
+test("cliAgentEngine 环境透传服务商密钥但不传其它敏感变量", async () => {
+  let gotEnv: NodeJS.ProcessEnv = {};
+  const engine = cliAgentEngine(
+    { kind: "cli-agent", agentKey: "opencode", binaryPath: "/usr/bin/opencode", sandboxDir: "", timeoutMs: 5000 },
+    {
+      runCliImpl: async (run) => {
+        gotEnv = run.env;
+        return { code: 0, stdout: "ok", stderr: "", truncated: false };
+      },
+      env: {
+        HOME: "/tmp/h",
+        PATH: "/usr/bin",
+        OPENAI_API_KEY: "sk-test",
+        XMTP_WALLET_KEY: "0xsecret",
+        OPENCODE_MODEL: "kimi/k2.5",
+      },
+    }
+  );
+  await engine.reply({ prompt: "x", signal: AbortSignal.timeout(1000) });
+  assert.equal(gotEnv.OPENAI_API_KEY, "sk-test");
+  assert.equal(gotEnv.OPENCODE_MODEL, "kimi/k2.5");
+  assert.equal(gotEnv.XMTP_WALLET_KEY, undefined);
+  assert.equal(gotEnv.HOME, "/tmp/h");
 });

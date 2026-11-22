@@ -27,6 +27,17 @@ describe("describeEnvelope", () => {
     expect(view).not.toContain("09:00");
   });
 
+  it("summarises member_revoked without leaking the full address", () => {
+    const text = "MAPR1 " + JSON.stringify({
+      kind: "member_revoked", request_id: "mr-1", to: "*",
+      address: TO, reason: "owner_removed",
+    });
+    const view = describeEnvelope(text)!;
+    expect(view).toContain("已被移出加密群");
+    expect(view).toContain("0x7099…79c8");
+    expect(view).not.toContain(TO);
+  });
+
   it("summarises email.receipt disclosure", () => {
     const text = "MAPR1 " + JSON.stringify({
       kind: "disclosure", request_id: "r", to: TO, grant: {}, signature: "0x",
@@ -56,6 +67,34 @@ describe("describeEnvelope", () => {
       kind: "verdict", request_id: "t", to: TO, round: 1, accepted: false, challenge: "数量不够",
     });
     expect(describeEnvelope(verdictFail)).toContain("【裁决】向 0x7099…79c8 裁决：质疑 - 数量不够");
+  });
+
+  it("summarises action_request without printing params", () => {
+    const text = "MAPR1 " + JSON.stringify({
+      kind: "action_request", request_id: "a", to: TO, action: "gmail.send",
+      params: { to: "x@y.com", body: "secret body" }, purpose: "代发确认邮件",
+    });
+    const view = describeEnvelope(text)!;
+    expect(view).toContain("【动作请示】");
+    expect(view).toContain("gmail.send");
+    expect(view).not.toContain("x@y.com");
+    expect(view).not.toContain("secret body");
+  });
+
+  it("summarises action_result statuses", () => {
+    for (const [status, label] of [["executed", "已执行"], ["failed", "执行失败"], ["uncertain", "结果不明"]] as const) {
+      const text = "MAPR1 " + JSON.stringify({
+        kind: "action_result", request_id: "a", to: TO, grant: {}, signature: "0x",
+        params_hash: "h", status, summary: "done",
+      });
+      const view = describeEnvelope(text)!;
+      expect(view).toContain(label);
+    }
+  });
+
+  it("labels cannot denial as 规则禁止", () => {
+    const text = "MAPR1 " + JSON.stringify({ kind: "denial", request_id: "r", to: TO, reason: "cannot" });
+    expect(describeEnvelope(text)).toBe("【拒绝】规则禁止");
   });
 
   it("labels denial reasons in Chinese and survives garbage", () => {

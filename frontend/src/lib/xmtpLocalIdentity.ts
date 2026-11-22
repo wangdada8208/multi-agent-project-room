@@ -195,3 +195,45 @@ export async function createLocalXmtpClient(privateKey: string): Promise<Client<
   const env = xmtpEnvFromVite(import.meta.env.VITE_XMTP_ENV as string | undefined);
   return Client.create(signer, { env } as any);
 }
+
+// ── 已解锁身份的会话内持有（仅内存，不落盘、不进 Hub） ──────────────
+
+let unlockedPrivateKey: string | null = null;
+
+/**
+ * 由解锁流程在内存中登记私钥，仅用于本地 EIP-191 签名。
+ * 密钥绝不写入 DOM / localStorage / Hub。
+ */
+export function setUnlockedXmtpKey(privateKey: string | null): void {
+  unlockedPrivateKey = privateKey;
+}
+
+export function clearUnlockedXmtpKey(): void {
+  unlockedPrivateKey = null;
+}
+
+export function hasUnlockedXmtpKey(): boolean {
+  return unlockedPrivateKey !== null;
+}
+
+/** 已解锁身份的以太坊地址；未解锁或密钥损坏时返回 null。 */
+export function unlockedXmtpAddress(): string | null {
+  if (!unlockedPrivateKey) return null;
+  try {
+    return inboxAddress(unlockedPrivateKey);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 使用已解锁的本机身份对消息做 EIP-191 personal_sign 签名。
+ * 仅当本机加密身份已解锁时可用；私钥不离开本模块。
+ */
+export async function signXmtpMessage(message: string): Promise<string> {
+  if (!unlockedPrivateKey) {
+    throw new Error("加密身份未解锁：请先在聊天区输入口令解锁本机加密身份");
+  }
+  const account = privateKeyToAccount(unlockedPrivateKey as `0x${string}`);
+  return account.signMessage({ message });
+}

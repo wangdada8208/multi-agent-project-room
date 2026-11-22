@@ -404,6 +404,58 @@ export async function fetchTasks(roomId: string): Promise<RoomTask[]> {
 }
 
 
+/** 与 backend/app/api/invites.py 的硬禁 scope 清单保持一致（前端预检，后端仍是权威）。 */
+export const FORBIDDEN_SCOPE_PREFIXES = [
+  "payment.",
+  "banking.",
+  "credentials.",
+  "password.",
+  "card.",
+  "wallet.",
+] as const;
+export const FORBIDDEN_SCOPES = ["data.export_all"] as const;
+export const SCOPE_PATTERN = /^[a-z][a-z0-9_.]{0,63}$/;
+
+export function scopeIsForbidden(scope: string): boolean {
+  const s = scope.trim().toLowerCase();
+  if (!s) return false;
+  if ((FORBIDDEN_SCOPES as readonly string[]).includes(s)) return true;
+  return FORBIDDEN_SCOPE_PREFIXES.some((prefix) => s.startsWith(prefix));
+}
+
+/** 过滤并校验建议 scope 列表：丢弃硬禁项，保留合法项。返回 {kept, dropped}。 */
+export function sanitizeScopes(scopes: string[]): { kept: string[]; dropped: string[] } {
+  const kept: string[] = [];
+  const dropped: string[] = [];
+  for (const raw of scopes) {
+    const s = raw.trim().toLowerCase();
+    if (!s) continue;
+    if (scopeIsForbidden(s) || !SCOPE_PATTERN.test(s)) {
+      dropped.push(raw.trim());
+    } else if (!kept.includes(s)) {
+      kept.push(s);
+    }
+  }
+  return { kept, dropped };
+}
+
+/** 规则建议：`ask` = 每次都要当场批准；`cannot` = 建议一律禁止。 */
+export type HouseRuleDecision = "ask" | "cannot";
+
+export interface HouseRules {
+  scopes: Record<string, HouseRuleDecision>;
+  notes: string[];
+}
+
+/** rooms.settings_json 的已知键；其余键透传。 */
+export interface RoomSettings {
+  template_key?: string;
+  house_rules?: HouseRules;
+  team_config_markdown?: string;
+  default_max_rounds?: number;
+  [key: string]: unknown;
+}
+
 export interface RoomTemplateInfo {
   id: string;
   key: string;
@@ -411,6 +463,8 @@ export interface RoomTemplateInfo {
   description: string | null;
   icon: string;
   team_config_markdown: string | null;
+  house_rules?: HouseRules | null;
+  default_max_rounds?: number | null;
 }
 
 export async function fetchTemplates(): Promise<RoomTemplateInfo[]> {
@@ -420,14 +474,50 @@ export async function fetchTemplates(): Promise<RoomTemplateInfo[]> {
   return payload.templates ?? [];
 }
 
-export async function createRoomFromTemplate(templateKey: string, name: string): Promise<Room> {
+export async function createRoomFromTemplate(
+  templateKey: string,
+  name: string,
+  overrides?: {
+    house_rules?: HouseRules;
+    team_config_markdown?: string;
+    default_max_rounds?: number;
+  },
+): Promise<Room> {
   const response = await apiFetch("/api/v1/templates/create-room", {
     method: "POST",
-    body: JSON.stringify({ template_key: templateKey, name }),
+    body: JSON.stringify({ template_key: templateKey, name, ...(overrides ?? {}) }),
   });
   if (!response.ok) throw new Error("Failed to create room from template");
   const payload = (await response.json()) as { room: Room };
   return payload.room;
+}
+
+export interface RoomSettingsUpdateResult {
+  room_id: string;
+  settings_version: number;
+  settings_json: Record<string, unknown>;
+}
+
+/** PATCH /api/v1/rooms/{room_id}/settings：仅房主；settings 为安全元数据（≤8 KiB，禁 scope 过滤由后端强制执行）。 */
+export async function updateRoomSettings(
+  roomId: string,
+  settings: Record<string, unknown>,
+): Promise<RoomSettingsUpdateResult> {
+  const response = await apiFetch(`/api/v1/rooms/${encodeURIComponent(roomId)}/settings`, {
+    method: "PATCH",
+    body: JSON.stringify({ settings }),
+  });
+  if (response.status === 403) throw new Error("只有房主可以修改房间设置");
+  if (response.status === 404) throw new Error("房间不存在");
+  if (!response.ok) {
+    let detail = "保存房间设置失败";
+    try {
+      const body = (await response.json()) as { detail?: unknown };
+      if (typeof body?.detail === "string") detail = body.detail.slice(0, 200);
+    } catch { /* 非 JSON 回包用兜底文案 */ }
+    throw new Error(detail);
+  }
+  return response.json() as Promise<RoomSettingsUpdateResult>;
 }
 
 export async function bindXmtpGroup(roomId: string, groupId: string): Promise<void> {

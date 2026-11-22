@@ -21,6 +21,7 @@ from app.core.security import get_current_user
 from app.helper import service
 from app.helper.models import HelperDevice
 from app.helper.schemas import (
+    AgentSeatStatus,
     CreateSeatRequest,
     HeartbeatRequest,
     HeartbeatResponse,
@@ -148,6 +149,46 @@ async def seat_group_added(room_id: str, seat_id: str, db: AsyncSession = Depend
 async def remove_room_seat(room_id: str, seat_id: str, db: AsyncSession = Depends(get_db),
                            user: User = Depends(get_current_human)):
     await service.remove_seat_by_human(db, user, room_id, seat_id)
+
+
+@router.post("/api/v1/rooms/{room_id}/seats/{seat_id}/pause", status_code=204)
+@_database_errors
+async def pause_room_seat(room_id: str, seat_id: str, db: AsyncSession = Depends(get_db),
+                          user: User = Depends(get_current_human)):
+    """暂停席位：只停本机进程，席位行与数据保留（绝不走 seats_to_stop 语义）。"""
+    await service.set_seat_paused(db, user, room_id, seat_id, True)
+
+
+@router.post("/api/v1/rooms/{room_id}/seats/{seat_id}/resume", status_code=204)
+@_database_errors
+async def resume_room_seat(room_id: str, seat_id: str, db: AsyncSession = Depends(get_db),
+                           user: User = Depends(get_current_human)):
+    """恢复被显式暂停的席位。"""
+    await service.set_seat_paused(db, user, room_id, seat_id, False)
+
+
+# ── cloud agent self-service (agent JWT; no helper token) ──
+
+@router.get("/api/v1/agent-seats/{seat_id}", response_model=AgentSeatStatus)
+@_database_errors
+async def agent_seat_status(seat_id: str, db: AsyncSession = Depends(get_db),
+                            user: User = Depends(get_current_user)):
+    """云端 Agent 查自己席位的生命周期；被撤后仍可读，供 fail-closed 自停。"""
+    if user.user_type != "agent":
+        raise HTTPException(403, "Agent account required")
+    return await service.get_agent_seat_status(db, user, seat_id)
+
+
+@router.post("/api/v1/agent-seats/{seat_id}/token")
+@_database_errors
+async def agent_seat_token(seat_id: str, response: Response, db: AsyncSession = Depends(get_db),
+                           user: User = Depends(get_current_user)):
+    """云端 Agent 续约 agent_token；已撤席位拒发（409），不会复活。"""
+    if user.user_type != "agent":
+        raise HTTPException(403, "Agent account required")
+    token = await service.refresh_agent_seat_token(db, user, seat_id)
+    _no_store(response)
+    return {"agent_token": token}
 
 
 # ── helper ──

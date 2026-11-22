@@ -27,6 +27,13 @@ async def _ensure_room(db: AsyncSession, room_id: str) -> None:
         raise HTTPException(status_code=404, detail="Room not found")
 
 
+async def _reject_encrypted_room(db: AsyncSession, room_id: str) -> None:
+    """Encrypted rooms keep document bodies off the Hub entirely."""
+    room = await db.get(Room, room_id)
+    if room is not None and room.transport == "xmtp":
+        raise HTTPException(status_code=409, detail="body_not_on_hub")
+
+
 @router.post("")
 async def create_doc(
     room_id: str,
@@ -36,6 +43,7 @@ async def create_doc(
 ) -> dict:
     await _ensure_room(db, room_id)
     await require_role(room_id, current_user, db, min_role="member")
+    await _reject_encrypted_room(db, room_id)
     if payload.author_id is not None and payload.author_id != current_user.id:
         raise HTTPException(status_code=403, detail="Cannot impersonate document author")
     doc = await knowledge_service.create_doc(
@@ -56,6 +64,7 @@ async def list_docs(
 ) -> dict:
     await _ensure_room(db, room_id)
     await require_role(room_id, current_user, db)
+    await _reject_encrypted_room(db, room_id)
     docs = await knowledge_service.list_docs(db, room_id)
     return {"docs": [doc.to_dict(include_content=False) for doc in docs]}
 
@@ -69,6 +78,7 @@ async def search_docs(
 ) -> dict:
     await _ensure_room(db, room_id)
     await require_role(room_id, current_user, db)
+    await _reject_encrypted_room(db, room_id)
     return {"results": await knowledge_service.search_docs(db, room_id, q)}
 
 
@@ -81,6 +91,7 @@ async def get_doc(
 ) -> dict:
     await _ensure_room(db, room_id)
     await require_role(room_id, current_user, db)
+    await _reject_encrypted_room(db, room_id)
     doc = await knowledge_service.get_doc(db, room_id, doc_id)
     if doc is None:
         raise HTTPException(status_code=404, detail="Document not found")

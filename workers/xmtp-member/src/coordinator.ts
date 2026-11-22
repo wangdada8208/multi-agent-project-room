@@ -1,18 +1,25 @@
 import type { ResultEnvelope, TaskEnvelope } from "./envelope.ts";
+import { teamConfigPromptBlock } from "./rulesEngine.ts";
 
 export interface VerdictOutcome {
   accepted: boolean;
   challenge: string;
 }
 
-export function buildVerdictPrompt(task: TaskEnvelope, result: ResultEnvelope): string {
+export function buildVerdictPrompt(
+  task: TaskEnvelope,
+  result: ResultEnvelope,
+  options?: { teamConfigMarkdown?: string }
+): string {
   const criteria = task.acceptance.map((c, i) => `${i + 1}. ${c}`).join("\n");
   const evidenceList = result.evidence.length > 0
     ? result.evidence.map((e, i) => `  - 证据${i + 1}: ${e}`).join("\n")
     : "  无直接论据";
+  const teamBlock = teamConfigPromptBlock(options?.teamConfigMarkdown);
 
   return [
     `你是一个协调者智能体验收官。请根据任务目标和验收标准，严格审核执行者提交的结果。`,
+    ...(teamBlock ? [teamBlock] : []),
     `任务目标：${task.goal}`,
     `当前轮次：第 ${task.round} 轮`,
     `验收标准：`,
@@ -59,14 +66,17 @@ export function parseVerdict(modelText: string): VerdictOutcome | null {
   }
 }
 
+/** maxRounds：Hub default_max_rounds 可经调用方注入；非法值回落出厂默认 3。 */
 export function nextStep(
   task: TaskEnvelope,
-  verdict: { accepted: boolean; challenge?: string }
+  verdict: { accepted: boolean; challenge?: string },
+  maxRounds: number = 3
 ): "done" | "retry" | "escalate" {
   if (verdict.accepted) {
     return "done";
   }
-  if (task.round < 3) {
+  const cap = Number.isInteger(maxRounds) && maxRounds >= 1 ? Math.floor(maxRounds) : 3;
+  if (task.round < cap) {
     return "retry";
   }
   return "escalate";

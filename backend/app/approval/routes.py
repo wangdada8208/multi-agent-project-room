@@ -49,6 +49,12 @@ async def create_approval(
         raise HTTPException(status_code=404, detail="Room not found")
 
     await require_role(room_id, current_user, db, min_role="member")
+
+    if room.transport == "xmtp":
+        # 加密房间的正文（title/description/metadata 等自由文本）不进 Hub；
+        # 审批走本机 worker 审批路径。hub 传输房保持原行为。
+        raise HTTPException(status_code=409, detail="body_not_on_hub")
+
     try:
         approval = await approval_service.create_approval(
             db=db,
@@ -102,6 +108,9 @@ async def approve_approval(
     if approval is None:
         raise HTTPException(status_code=404, detail="Approval not found")
     await require_role(approval.room_id, current_user, db, min_role="member")
+    room = await db.get(Room, approval.room_id)
+    if room is not None and room.transport == "xmtp":
+        raise HTTPException(status_code=409, detail="body_not_on_hub")
     try:
         result = await approval_service.decide_approval(
             db=db, approval_id=approval_id, decider_id=current_user.id,

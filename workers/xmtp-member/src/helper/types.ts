@@ -30,11 +30,15 @@ export interface LocalAgent {
   binaryPath?: string;
   version?: string;
   baseUrl?: string;
+  /** openai-compatible 探测项（如 Magpie 托管 Agent）的模型 id。 */
+  model?: string;
   loginState: LoginState;
 }
 
 export interface KnownCliAgent {
-  kind: Extract<AgentKind, "claude-code" | "codex" | "gemini-cli">;
+  /** LocalAgent.key 稳定键；cli-agent 类用规格键（"opencode" 等），旧三种与 kind 同名。 */
+  key?: string;
+  kind: Extract<AgentKind, "claude-code" | "codex" | "gemini-cli" | "cli-agent">;
   displayName: string;
   /** 在 PATH 里查找的命令名，按顺序尝试。 */
   binaries: string[];
@@ -79,6 +83,16 @@ export interface SeatRecord {
   agentToken: string;
   consolePort: number;
   createdAt: string;
+  /**
+   * WP5 暂停标记（ISO 时间戳）。非空时成员进程必须处于停止态，
+   * helper 重启恢复席位时跳过它；数据与私钥一律保留（绝不走 seats_to_stop 语义）。
+   */
+  pausedAt?: string | null;
+  /**
+   * 暂停来源："hub" = 由心跳 seats_to_pause 对账维护（Hub 端恢复时自动清除并重启）；
+   * "local" = 本机接口手动暂停（只有本机 resume 才解除）。
+   */
+  pausedSource?: "hub" | "local" | null;
 }
 
 /** 本机接口对外返回的席位视图：不含任何私钥或登录信息。 */
@@ -91,6 +105,7 @@ export interface SeatView {
   consolePort: number;
   status: SeatStatus;
   lastError: string | null;
+  pausedAt: string | null;
 }
 
 // ── 与 Hub 的接口（字段名与 backend/app/helper/schemas.py 一一对应） ──
@@ -120,9 +135,20 @@ export interface SeatGrant {
   allowed_senders: string[];
 }
 
+/** 心跳顺带下发的房间安全元数据；本机规则永远优先，这些只作建议。 */
+export interface HeartbeatRoom {
+  id: string;
+  settings_version: number;
+  settings_json: Record<string, unknown> | null;
+}
+
 export interface HeartbeatResponse {
   revoked: boolean;
   seats_to_stop: string[];
+  /** WP5：暂停列表与 seats_to_stop 严格分离——暂停只停进程不删数据。旧 Hub 可能不下发。 */
+  seats_to_pause?: string[];
+  /** WP9：主人可见房间的 settings_version/settings_json，版本前进时才重写本机副本。 */
+  rooms?: HeartbeatRoom[];
 }
 
 export type CreateSeatRequest =

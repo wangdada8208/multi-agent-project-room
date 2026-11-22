@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import path from "node:path";
+import { readFile } from "node:fs/promises";
 import type { ResultEnvelope, TaskEnvelope, VerdictEnvelope } from "./envelope.ts";
+import { writeJsonSecure } from "./secureFile.ts";
 
 export type TaskStatus = "pending" | "retrying" | "completed" | "escalated";
 
@@ -94,7 +94,6 @@ export class TaskStore {
   }
 
   private async save(): Promise<void> {
-    await mkdir(path.dirname(this.file), { recursive: true });
-    await writeFile(this.file, JSON.stringify(this.items, null, 2), "utf8");
+    await writeJsonSecure(this.file, this.items);
   }
 }
