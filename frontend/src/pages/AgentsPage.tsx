@@ -27,14 +27,15 @@ import {
   createJoinTicket,
   createPairingCode,
   helperHandoffUrl,
+  isMobileBrowser,
   joinViaTicket,
   listLocalAgents,
   listLocalSeats,
   listMyHelpers,
-  openHelperPage,
   powershellInstallCommand,
   probeHelper,
   removeRoomSeat,
+  resolvePresetOpenDecision,
   revokeHelper,
   TRUST_TIER_LABEL,
   trustTierOf,
@@ -101,21 +102,25 @@ function loginHint(agent: LocalAgentView): string | null {
 
 /** 区块 B：第 1 步英雄级配对命令面板 */
 function PairingGuidePanel({
+  isMobile,
   isUnpairedRunning,
   isSecondaryDevice,
   pairing,
   pairingError,
   hubOrigin,
   guideNotice,
+  presetUrl,
   highlighted,
   onGenerate,
 }: {
+  isMobile: boolean;
   isUnpairedRunning: boolean;
   isSecondaryDevice?: boolean;
   pairing: { code: string; install_command: string; expires_at: string } | null;
   pairingError: string;
   hubOrigin: string;
   guideNotice: string;
+  presetUrl?: string;
   highlighted?: boolean;
   onGenerate: () => void;
 }) {
@@ -125,6 +130,9 @@ function PairingGuidePanel({
       : "unix",
   );
   const [copiedHero, setCopiedHero] = useState(false);
+  const fallbackUrl = presetUrl ?? (pairing
+    ? helperHandoffUrl({ pair: pairing.code })
+    : `${HELPER_ORIGIN}/`);
 
   const commandText = useMemo(() => {
     if (!pairing) return "";
@@ -221,15 +229,16 @@ function PairingGuidePanel({
                 <span>{copiedHero ? "已复制命令，去终端粘贴回车" : "一键复制终端配对命令"}</span>
               </button>
 
-              {isUnpairedRunning && (
-                <button
-                  type="button"
+              {!isMobile && isUnpairedRunning && (
+                <a
                   className="btn btn-ghost btn-sm"
-                  onClick={() => openHelperPage({ pair: pairing.code })}
+                  href={helperHandoffUrl({ pair: pairing.code })}
+                  target="_blank"
+                  rel="noopener noreferrer"
                 >
                   <span>本机已在运行 · 一键跳转完成配对</span>
                   <ArrowUpRight size={14} strokeWidth={2} />
-                </button>
+                </a>
               )}
 
               <button type="button" className="btn btn-ghost btn-sm" onClick={onGenerate}>
@@ -240,7 +249,9 @@ function PairingGuidePanel({
 
             <span className="live-wait-status">
               <span className="pulse-dot" aria-hidden="true" />
-              <span>正在等待本机助手连接… 终端运行成功后此页面会自动刷新</span>
+              <span>{isMobile
+                ? "请将配对命令复制到电脑的「终端」执行，然后在电脑浏览器中继续配置。"
+                : "正在等待本机助手连接… 终端运行成功后此页面会自动刷新"}</span>
             </span>
           </div>
         </div>
@@ -260,16 +271,14 @@ function PairingGuidePanel({
       )}
 
       {/* Safari / 本地控制台单行轻量兜底入口 */}
-      <div style={{ fontSize: 12.5, color: "var(--text-secondary)" }}>
-        <span>已在终端运行过命令但页面没反应？</span>
-        <button
-          type="button"
-          className="agent-link"
-          onClick={() => openHelperPage(pairing?.code ? { pair: pairing.code } : undefined)}
-        >
-          点此直接打开本机控制台 (127.0.0.1:8790) →
-        </button>
-      </div>
+      {!isMobile && (
+        <div style={{ fontSize: 12.5, color: "var(--text-secondary)" }}>
+          <span>已在终端运行过命令但页面没反应？</span>
+          <a className="agent-link" href={fallbackUrl} target="_blank" rel="noopener noreferrer">
+            点此直接打开本机控制台 (127.0.0.1:8790) →
+          </a>
+        </div>
+      )}
 
       {/* 折叠式 20 秒终端配对动画演示 */}
       <details className="helper-demo-disclosure">
@@ -308,15 +317,18 @@ export function AgentJoinSection({
   onJoined,
 }: AgentJoinSectionProps) {
   const user = useAuthStore((s) => s.user);
+  const isMobile = isMobileBrowser();
 
   const [probe, setProbe] = useState<HelperProbe | null>(null);
   const [pairing, setPairing] = useState<{ code: string; install_command: string; expires_at: string } | null>(null);
   const [pairingError, setPairingError] = useState("");
   const [guideNotice, setGuideNotice] = useState("");
+  const [pendingPreset, setPendingPreset] = useState<{ presetId: string; label: string } | null>(null);
   const [highlightStepOne, setHighlightStepOne] = useState(false);
   const [expandAnotherComputer, setExpandAnotherComputer] = useState(false);
   const pairingFetched = useRef(false);
   const pairingSectionRef = useRef<HTMLDivElement>(null);
+  const presetContinueRef = useRef<HTMLDivElement>(null);
   const highlightTimerRef = useRef<number>(0);
 
   const [agents, setAgents] = useState<LocalAgentView[]>([]);
@@ -387,6 +399,7 @@ export function AgentJoinSection({
   }, []);
 
   useEffect(() => {
+    if (isMobile) return;
     let cancelled = false;
     let timer = 0;
     const tick = async () => {
@@ -414,9 +427,18 @@ export function AgentJoinSection({
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [refreshLocal]);
+  }, [isMobile, refreshLocal]);
 
-  const isHelperReadyAndPaired = probe?.state === "running" && probe.hello.paired;
+  const isHelperReadyAndPaired = !isMobile && probe?.state === "running" && probe.hello.paired;
+  const presetDecision = resolvePresetOpenDecision(probe, isMobile);
+  const PresetArrow = presetDecision === "open-helper" ? ArrowUpRight : ArrowRight;
+  const pendingPresetUrl = pendingPreset && !isMobile
+    ? helperHandoffUrl({
+        preset: pendingPreset.presetId,
+        roomId: effectiveRoomId || undefined,
+        pairCode: isHelperReadyAndPaired ? undefined : pairing?.code,
+      })
+    : undefined;
 
   useEffect(() => {
     if (isHelperReadyAndPaired) {
@@ -445,7 +467,7 @@ export function AgentJoinSection({
   }, [isHelperReadyAndPaired]);
 
   const needPairingCode =
-    (probe !== null && !isHelperReadyAndPaired) || expandAnotherComputer;
+    isMobile || (probe !== null && !isHelperReadyAndPaired) || expandAnotherComputer;
 
   const ensurePairing = useCallback((forceRefresh = false) => {
     if (!forceRefresh && pairingFetched.current) return;
@@ -523,18 +545,22 @@ export function AgentJoinSection({
         agent_key: agentKey,
         owner_xmtp_address: address,
       });
+      let seat: SeatViewLocal;
       try {
-        const seat = await joinViaTicket(ticket, agentKey);
-        setJoinedSeat(seat);
-        onJoined?.(seat);
-        await refreshLocal();
+        seat = await joinViaTicket(ticket, agentKey);
       } catch (err) {
         if (err instanceof TypeError) {
-          openHelperPage({ ticket, agentKey });
+          setJoinError("无法连接本机助手 (127.0.0.1:8790)。请确认电脑上的本机助手已启动，并在浏览器中允许本地网络访问。");
+          if (!isMobile) {
+            window.open(helperHandoffUrl({ ticket, agentKey }), "_blank", "noopener,noreferrer");
+          }
           return;
         }
         throw err;
       }
+      setJoinedSeat(seat);
+      onJoined?.(seat);
+      await refreshLocal();
     } catch (err) {
       setJoinError(err instanceof Error ? err.message : "加入失败，请重试");
     } finally {
@@ -568,31 +594,35 @@ export function AgentJoinSection({
 
   useEffect(() => () => window.clearTimeout(highlightTimerRef.current), []);
 
-  function openPresetConfig(presetId: string) {
-    if (isHelperReadyAndPaired) {
-      const action = { preset: presetId, roomId: effectiveRoomId || undefined };
-      const win = window.open(helperHandoffUrl(action), "_blank", "noopener,noreferrer");
-      if (!win) {
-        openHelperPage(action);
-      }
-      return;
-    }
-
-    if (probe?.state === "blocked" || (probe?.state === "running" && !probe.hello.paired)) {
-      const action = {
+  function openPresetConfig(presetId: string, label = presetId) {
+    if (presetDecision === "open-helper") {
+      const url = helperHandoffUrl({
         preset: presetId,
         roomId: effectiveRoomId || undefined,
-        pairCode: pairing?.code,
-      };
-      const win = window.open(helperHandoffUrl(action), "_blank", "noopener,noreferrer");
-      if (!win) {
-        openHelperPage(action);
+        pairCode: isHelperReadyAndPaired ? undefined : pairing?.code,
+      });
+      const win = window.open(url, "_blank", "noopener,noreferrer");
+      if (win) {
+        setPendingPreset(null);
+        setGuideNotice("");
+        return;
       }
-      return;
+      if (isHelperReadyAndPaired) {
+        setPendingPreset({ presetId, label });
+        window.requestAnimationFrame(() => {
+          presetContinueRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+        });
+        return;
+      }
     }
 
+    setPendingPreset({ presetId, label });
     ensurePairing(false);
-    setGuideNotice("请先完成第 1 步：复制下方命令到电脑「终端」粘贴并回车，启动本机助手后即可一键配置并接入。");
+    setGuideNotice(presetDecision === "guide-mobile"
+      ? `当前为手机或平板浏览器。要配置「${label}」，请在电脑浏览器打开本页，或复制下方命令到电脑「终端」执行后，再用电脑继续配置。`
+      : presetDecision === "guide-install"
+        ? `要配置「${label}」，请先完成第 1 步：复制下方命令到这台电脑的「终端」粘贴并回车。本机助手启动并配对后，此页会提示你继续配置。`
+        : `如需手动打开「${label}」的配置，请使用下方的本机控制台链接。`);
     setHighlightStepOne(true);
     window.clearTimeout(highlightTimerRef.current);
     highlightTimerRef.current = window.setTimeout(() => setHighlightStepOne(false), 2400);
@@ -667,7 +697,7 @@ export function AgentJoinSection({
       )}
 
       {/* ── 探测加载态 ── */}
-      {probe === null && (
+      {probe === null && !isMobile && !pendingPreset && (
         <div
           className="card"
           style={{
@@ -685,14 +715,16 @@ export function AgentJoinSection({
       )}
 
       {/* ── 区块 B（置顶模式）：本机助手未运行 / 被拦截 / 未配对时置顶展示 ── */}
-      {probe !== null && !isHelperReadyAndPaired && (
+      {!isHelperReadyAndPaired && (isMobile || probe !== null || pendingPreset) && (
         <div id="install-pair-section" ref={pairingSectionRef}>
           <PairingGuidePanel
-            isUnpairedRunning={probe.state === "running" && !probe.hello.paired}
+            isMobile={isMobile}
+            isUnpairedRunning={!isMobile && probe?.state === "running" && !probe.hello.paired}
             pairing={pairing}
             pairingError={pairingError}
             hubOrigin={hubOrigin}
             guideNotice={guideNotice}
+            presetUrl={pendingPresetUrl}
             highlighted={highlightStepOne}
             onGenerate={() => ensurePairing(true)}
           />
@@ -712,6 +744,18 @@ export function AgentJoinSection({
             border: "1px solid rgba(0, 0, 0, 0.08)",
           }}
         >
+          {pendingPreset && pendingPresetUrl && (
+            <div className="setup-info" role="status" ref={presetContinueRef}>
+              <p>本机助手已就绪，可以继续配置「{pendingPreset.label}」。</p>
+              <a className="btn btn-primary btn-sm" href={pendingPresetUrl} target="_blank" rel="noopener noreferrer">
+                继续一键配置 <ArrowUpRight size={14} strokeWidth={2} />
+              </a>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => setPendingPreset(null)}>
+                关闭提示
+              </button>
+            </div>
+          )}
+
           {probe.hello.hub_origin && probe.hello.hub_origin !== hubOrigin && (
             <div className="setup-note">
               本机助手当前配对的服务器为 {probe.hello.hub_origin}，与当前站点（{hubOrigin}）不一致。
@@ -780,7 +824,7 @@ export function AgentJoinSection({
                 className="btn btn-ghost btn-sm"
                 href={`${HELPER_ORIGIN}/`}
                 target="_blank"
-                rel="noreferrer"
+                rel="noopener noreferrer"
                 style={{ display: "inline-flex", alignItems: "center", gap: 5, textDecoration: "none" }}
               >
                 <span>打开本机控制台 (127.0.0.1:8790)</span>
@@ -1091,6 +1135,7 @@ export function AgentJoinSection({
 
         <div className="agents-preset-grid">
           {AGENT_PRESETS.map((item) => {
+            const { altHelperPreset, altLabel = "Webhook" } = item;
             const detectedLocal =
               item.mode === "local-cli" && item.cliKey
                 ? agents.find((a) => a.key === item.cliKey)
@@ -1196,21 +1241,21 @@ export function AgentJoinSection({
                     <button
                       type="button"
                       className="btn btn-primary btn-sm"
-                      onClick={() => item.helperPreset && openPresetConfig(item.helperPreset)}
+                      onClick={() => item.helperPreset && openPresetConfig(item.helperPreset, item.title)}
                       style={{ width: "100%", justifyContent: "center" }}
                     >
                       <span>一键配置并接入</span>
-                      <ArrowUpRight size={14} strokeWidth={2} />
+                      <PresetArrow size={14} strokeWidth={2} />
                     </button>
-                    {item.altHelperPreset && (
+                    {altHelperPreset && (
                       <button
                         type="button"
                         className="btn btn-ghost btn-sm"
-                        onClick={() => openPresetConfig(item.altHelperPreset!)}
+                        onClick={() => openPresetConfig(altHelperPreset, `${item.title}（${altLabel}）`)}
                         style={{ width: "100%", justifyContent: "center", fontSize: 12 }}
                       >
-                        <span>使用 {item.altLabel ?? "Webhook"} 桥接接入</span>
-                        <ArrowUpRight size={13} strokeWidth={1.9} />
+                        <span>使用 {altLabel} 桥接接入</span>
+                        <PresetArrow size={13} strokeWidth={1.9} />
                       </button>
                     )}
                   </div>
@@ -1261,6 +1306,7 @@ export function AgentJoinSection({
           {expandAnotherComputer && (
             <div style={{ marginTop: 16 }}>
               <PairingGuidePanel
+                isMobile={isMobile}
                 isUnpairedRunning={false}
                 isSecondaryDevice
                 pairing={pairing}
