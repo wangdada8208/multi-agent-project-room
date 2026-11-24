@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import {
   ArrowLeft,
@@ -21,20 +21,21 @@ import {
   Webhook,
 } from "lucide-react";
 import { apiUrl, createRoom, fetchRooms } from "../lib/api";
-import { AGENT_PRESETS, type AgentPresetItem } from "../lib/agentPresets";
+import { AGENT_PRESETS, type AgentPresetItem, type CloudAgentPreset } from "../lib/agentPresets";
 import {
   HELPER_ORIGIN,
   createJoinTicket,
   createPairingCode,
   helperHandoffUrl,
+  isMobileBrowser,
   joinViaTicket,
   listLocalAgents,
   listLocalSeats,
   listMyHelpers,
-  openHelperPage,
   powershellInstallCommand,
   probeHelper,
   removeRoomSeat,
+  resolvePresetOpenDecision,
   revokeHelper,
   TRUST_TIER_LABEL,
   trustTierOf,
@@ -46,6 +47,7 @@ import {
 } from "../lib/localHelper";
 import { inboxAddress } from "../lib/xmtpLocalIdentity";
 import { CopyButton } from "../components/CopyButton";
+import { CloudAgentConnectPanel } from "../components/CloudAgentConnectPanel";
 import { HelperIntroDemo } from "../components/HelperIntroDemo";
 import { XmtpUnlock } from "../components/XmtpUnlock";
 import { useAuthStore } from "../stores/authStore";
@@ -89,9 +91,31 @@ function AgentKindIcon({ kind }: { kind: AgentKind }) {
 }
 
 function PresetIcon({ item }: { item: AgentPresetItem }) {
+  if (item.mode === "cloud-agent") return <Globe size={18} strokeWidth={1.8} />;
   if (item.mode === "local-cli") return <Terminal size={18} strokeWidth={1.8} />;
   if (item.trustTier === "custom-webhook") return <Webhook size={18} strokeWidth={1.8} />;
   return <Cpu size={18} strokeWidth={1.8} />;
+}
+
+function PresetCard({ item, children }: { item: AgentPresetItem; children: ReactNode }) {
+  return (
+    <div className="agents-preset-card">
+      <div className="agents-preset-card__content">
+        <div className="agents-preset-card__head">
+          <span className="agents-preset-card__icon"><PresetIcon item={item} /></span>
+          <span className={`trust-badge trust-badge--${item.trustTier} tier-badge tier-badge--${item.trustTier}`}>
+            {TRUST_TIER_LABEL[item.trustTier]}
+          </span>
+        </div>
+        <div>
+          <strong className="agents-preset-card__title">{item.title}</strong>
+          <span className="agents-preset-card__subtitle">{item.subtitle}</span>
+        </div>
+        <p className="agents-preset-card__desc">{item.description}</p>
+      </div>
+      {children}
+    </div>
+  );
 }
 
 function loginHint(agent: LocalAgentView): string | null {
@@ -101,21 +125,25 @@ function loginHint(agent: LocalAgentView): string | null {
 
 /** 区块 B：第 1 步英雄级配对命令面板 */
 function PairingGuidePanel({
+  isMobile,
   isUnpairedRunning,
   isSecondaryDevice,
   pairing,
   pairingError,
   hubOrigin,
   guideNotice,
+  presetUrl,
   highlighted,
   onGenerate,
 }: {
+  isMobile: boolean;
   isUnpairedRunning: boolean;
   isSecondaryDevice?: boolean;
   pairing: { code: string; install_command: string; expires_at: string } | null;
   pairingError: string;
   hubOrigin: string;
   guideNotice: string;
+  presetUrl?: string;
   highlighted?: boolean;
   onGenerate: () => void;
 }) {
@@ -125,6 +153,9 @@ function PairingGuidePanel({
       : "unix",
   );
   const [copiedHero, setCopiedHero] = useState(false);
+  const fallbackUrl = presetUrl ?? (pairing
+    ? helperHandoffUrl({ pair: pairing.code })
+    : `${HELPER_ORIGIN}/`);
 
   const commandText = useMemo(() => {
     if (!pairing) return "";
@@ -163,11 +194,13 @@ function PairingGuidePanel({
                 ? "本机助手已在运行 · 完成当前账号配对"
                 : isSecondaryDevice
                   ? "在另一台电脑的「终端」粘贴并回车（只需一次）"
-                  : "第 1 步：复制下面这一行命令，到电脑「终端」粘贴并回车（只需一次）"}
+                  : "第 1 步：在电脑「终端」运行配对命令"}
             </strong>
           </div>
           <p style={{ fontSize: 13.5, color: "var(--text-secondary)", marginTop: 5, lineHeight: 1.55 }}>
-            运行后会自动启动本机助手并识别你电脑上的 Claude Code、Codex、Gemini CLI，同时支持一键配置 Grok 与 Muse。所有密钥只保存在你的电脑本地。
+            {isMobile
+              ? "接入电脑上的 Agent 或模型接口时，请把配对命令复制到电脑「终端」运行。手机上可以直接使用上方的云端接入。"
+              : "接入本机终端 Agent、模型接口或本机服务时，在电脑「终端」粘贴下方命令并回车。助手会自动识别已安装的 Claude Code、Codex 和 Gemini CLI。"}
           </p>
         </div>
 
@@ -221,15 +254,16 @@ function PairingGuidePanel({
                 <span>{copiedHero ? "已复制命令，去终端粘贴回车" : "一键复制终端配对命令"}</span>
               </button>
 
-              {isUnpairedRunning && (
-                <button
-                  type="button"
+              {!isMobile && isUnpairedRunning && (
+                <a
                   className="btn btn-ghost btn-sm"
-                  onClick={() => openHelperPage({ pair: pairing.code })}
+                  href={helperHandoffUrl({ pair: pairing.code })}
+                  target="_blank"
+                  rel="noopener noreferrer"
                 >
                   <span>本机已在运行 · 一键跳转完成配对</span>
                   <ArrowUpRight size={14} strokeWidth={2} />
-                </button>
+                </a>
               )}
 
               <button type="button" className="btn btn-ghost btn-sm" onClick={onGenerate}>
@@ -240,7 +274,9 @@ function PairingGuidePanel({
 
             <span className="live-wait-status">
               <span className="pulse-dot" aria-hidden="true" />
-              <span>正在等待本机助手连接… 终端运行成功后此页面会自动刷新</span>
+              <span>{isMobile
+                ? "请将配对命令复制到电脑的「终端」执行，然后在电脑浏览器中继续配置。"
+                : "正在等待本机助手连接… 终端运行成功后此页面会自动刷新"}</span>
             </span>
           </div>
         </div>
@@ -260,16 +296,14 @@ function PairingGuidePanel({
       )}
 
       {/* Safari / 本地控制台单行轻量兜底入口 */}
-      <div style={{ fontSize: 12.5, color: "var(--text-secondary)" }}>
-        <span>已在终端运行过命令但页面没反应？</span>
-        <button
-          type="button"
-          className="agent-link"
-          onClick={() => openHelperPage(pairing?.code ? { pair: pairing.code } : undefined)}
-        >
-          点此直接打开本机控制台 (127.0.0.1:8790) →
-        </button>
-      </div>
+      {!isMobile && (
+        <div style={{ fontSize: 12.5, color: "var(--text-secondary)" }}>
+          <span>已在终端运行过命令但页面没反应？</span>
+          <a className="agent-link" href={fallbackUrl} target="_blank" rel="noopener noreferrer">
+            点此直接打开本机控制台 (127.0.0.1:8790) →
+          </a>
+        </div>
+      )}
 
       {/* 折叠式 20 秒终端配对动画演示 */}
       <details className="helper-demo-disclosure">
@@ -298,7 +332,8 @@ export interface AgentJoinSectionProps {
  * 「接入 Agent」全流程核心组件：
  * - 区块 A：本机已就绪的 Agent（一键入房 + 当前房间席位管理）
  * - 区块 B：首次连接本机助手 / 双系统配对引导（已配对后自动折叠至底部）
- * - 区块 C：主流 Agent 一键接入目录（Claude Code · Codex · Grok / Grokbot · Muse · Gemini CLI · Ollama · 自定义 Webhook）
+ * - 区块 C：本机终端 Agent 与模型接口目录
+ * - 云端目录：用房间邀请接入 Grok Bot 和 Muse
  */
 export function AgentJoinSection({
   roomId,
@@ -308,15 +343,20 @@ export function AgentJoinSection({
   onJoined,
 }: AgentJoinSectionProps) {
   const user = useAuthStore((s) => s.user);
+  const isMobile = isMobileBrowser();
 
   const [probe, setProbe] = useState<HelperProbe | null>(null);
   const [pairing, setPairing] = useState<{ code: string; install_command: string; expires_at: string } | null>(null);
   const [pairingError, setPairingError] = useState("");
   const [guideNotice, setGuideNotice] = useState("");
+  const [pendingPreset, setPendingPreset] = useState<{ presetId: string; label: string } | null>(null);
+  const [cloudPreset, setCloudPreset] = useState<CloudAgentPreset | null>(null);
   const [highlightStepOne, setHighlightStepOne] = useState(false);
   const [expandAnotherComputer, setExpandAnotherComputer] = useState(false);
   const pairingFetched = useRef(false);
   const pairingSectionRef = useRef<HTMLDivElement>(null);
+  const presetContinueRef = useRef<HTMLDivElement>(null);
+  const cloudPanelRef = useRef<HTMLDivElement>(null);
   const highlightTimerRef = useRef<number>(0);
 
   const [agents, setAgents] = useState<LocalAgentView[]>([]);
@@ -387,6 +427,7 @@ export function AgentJoinSection({
   }, []);
 
   useEffect(() => {
+    if (isMobile) return;
     let cancelled = false;
     let timer = 0;
     const tick = async () => {
@@ -414,9 +455,18 @@ export function AgentJoinSection({
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [refreshLocal]);
+  }, [isMobile, refreshLocal]);
 
-  const isHelperReadyAndPaired = probe?.state === "running" && probe.hello.paired;
+  const isHelperReadyAndPaired = !isMobile && probe?.state === "running" && probe.hello.paired;
+  const presetDecision = resolvePresetOpenDecision(probe, isMobile);
+  const PresetArrow = presetDecision === "open-helper" ? ArrowUpRight : ArrowRight;
+  const pendingPresetUrl = pendingPreset && !isMobile
+    ? helperHandoffUrl({
+        preset: pendingPreset.presetId,
+        roomId: effectiveRoomId || undefined,
+        pairCode: isHelperReadyAndPaired ? undefined : pairing?.code,
+      })
+    : undefined;
 
   useEffect(() => {
     if (isHelperReadyAndPaired) {
@@ -445,7 +495,7 @@ export function AgentJoinSection({
   }, [isHelperReadyAndPaired]);
 
   const needPairingCode =
-    (probe !== null && !isHelperReadyAndPaired) || expandAnotherComputer;
+    isMobile || (probe !== null && !isHelperReadyAndPaired) || expandAnotherComputer;
 
   const ensurePairing = useCallback((forceRefresh = false) => {
     if (!forceRefresh && pairingFetched.current) return;
@@ -523,18 +573,22 @@ export function AgentJoinSection({
         agent_key: agentKey,
         owner_xmtp_address: address,
       });
+      let seat: SeatViewLocal;
       try {
-        const seat = await joinViaTicket(ticket, agentKey);
-        setJoinedSeat(seat);
-        onJoined?.(seat);
-        await refreshLocal();
+        seat = await joinViaTicket(ticket, agentKey);
       } catch (err) {
         if (err instanceof TypeError) {
-          openHelperPage({ ticket, agentKey });
+          setJoinError("无法连接本机助手 (127.0.0.1:8790)。请确认电脑上的本机助手已启动，并在浏览器中允许本地网络访问。");
+          if (!isMobile) {
+            window.open(helperHandoffUrl({ ticket, agentKey }), "_blank", "noopener,noreferrer");
+          }
           return;
         }
         throw err;
       }
+      setJoinedSeat(seat);
+      onJoined?.(seat);
+      await refreshLocal();
     } catch (err) {
       setJoinError(err instanceof Error ? err.message : "加入失败，请重试");
     } finally {
@@ -568,31 +622,35 @@ export function AgentJoinSection({
 
   useEffect(() => () => window.clearTimeout(highlightTimerRef.current), []);
 
-  function openPresetConfig(presetId: string) {
-    if (isHelperReadyAndPaired) {
-      const action = { preset: presetId, roomId: effectiveRoomId || undefined };
-      const win = window.open(helperHandoffUrl(action), "_blank", "noopener,noreferrer");
-      if (!win) {
-        openHelperPage(action);
-      }
-      return;
-    }
-
-    if (probe?.state === "blocked" || (probe?.state === "running" && !probe.hello.paired)) {
-      const action = {
+  function openPresetConfig(presetId: string, label = presetId) {
+    if (presetDecision === "open-helper") {
+      const url = helperHandoffUrl({
         preset: presetId,
         roomId: effectiveRoomId || undefined,
-        pairCode: pairing?.code,
-      };
-      const win = window.open(helperHandoffUrl(action), "_blank", "noopener,noreferrer");
-      if (!win) {
-        openHelperPage(action);
+        pairCode: isHelperReadyAndPaired ? undefined : pairing?.code,
+      });
+      const win = window.open(url, "_blank", "noopener,noreferrer");
+      if (win) {
+        setPendingPreset(null);
+        setGuideNotice("");
+        return;
       }
-      return;
+      if (isHelperReadyAndPaired) {
+        setPendingPreset({ presetId, label });
+        window.requestAnimationFrame(() => {
+          presetContinueRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+        });
+        return;
+      }
     }
 
+    setPendingPreset({ presetId, label });
     ensurePairing(false);
-    setGuideNotice("请先完成第 1 步：复制下方命令到电脑「终端」粘贴并回车，启动本机助手后即可一键配置并接入。");
+    setGuideNotice(presetDecision === "guide-mobile"
+      ? `当前为手机或平板浏览器。要配置「${label}」，请在电脑浏览器打开本页，或复制下方命令到电脑「终端」执行后，再用电脑继续配置。`
+      : presetDecision === "guide-install"
+        ? `要配置「${label}」，请先完成第 1 步：复制下方命令到这台电脑的「终端」粘贴并回车。本机助手启动并配对后，此页会提示你继续配置。`
+        : `如需手动打开「${label}」的配置，请使用下方的本机控制台链接。`);
     setHighlightStepOne(true);
     window.clearTimeout(highlightTimerRef.current);
     highlightTimerRef.current = window.setTimeout(() => setHighlightStepOne(false), 2400);
@@ -624,9 +682,51 @@ export function AgentJoinSection({
 
   return (
     <div className="agent-panel-stack">
+      <section className="card agents-preset-section">
+        <div>
+          <h2>云端常驻 Agent</h2>
+          <p>在手机或网页直接接入，无需本机电脑。</p>
+        </div>
+        <div className="agents-preset-grid">
+          {AGENT_PRESETS.filter((item) => item.mode === "cloud-agent").map((item) => (
+            <PresetCard key={item.id} item={item}>
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                aria-expanded={cloudPreset?.id === item.id}
+                aria-controls="cloud-agent-connect"
+                onClick={() => {
+                  setCloudPreset(item);
+                  window.requestAnimationFrame(() => {
+                    cloudPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+                  });
+                }}
+              >
+                一键生成云端接入指令 <ArrowRight size={14} />
+              </button>
+            </PresetCard>
+          ))}
+        </div>
+        <div id="cloud-agent-connect" ref={cloudPanelRef} hidden={!cloudPreset}>
+          {cloudPreset && (
+            <CloudAgentConnectPanel
+              preset={cloudPreset}
+              roomId={effectiveRoomId}
+              roomName={roomName}
+              rooms={roomId ? undefined : rooms}
+              roomsLoaded={roomsLoaded}
+              onRoomChange={setRoomPick}
+              hubOrigin={hubOrigin}
+              onClose={() => setCloudPreset(null)}
+            />
+          )}
+        </div>
+      </section>
+
       {/* ── 0 房间时的快捷建房横幅（无论是否配对，永不让新用户死胡同） ── */}
       {!roomId && roomsLoaded && rooms.length === 0 && (
         <div
+          id="agent-create-room"
           className="card"
           style={{
             padding: "18px 20px",
@@ -641,7 +741,7 @@ export function AgentJoinSection({
             <strong style={{ fontSize: 14.5, color: "var(--text-primary)" }}>先创建一个协作房间</strong>
           </div>
           <p style={{ fontSize: 13, color: "var(--text-secondary)" }}>
-            你还没有协作房间。输入名称一键创建，随后即可把 Claude Code、Codex、Grok、Muse 等智能体拉入房间。
+            输入房间名称，创建后即可邀请智能体加入。
           </p>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <input
@@ -667,7 +767,7 @@ export function AgentJoinSection({
       )}
 
       {/* ── 探测加载态 ── */}
-      {probe === null && (
+      {probe === null && !isMobile && !pendingPreset && (
         <div
           className="card"
           style={{
@@ -685,14 +785,16 @@ export function AgentJoinSection({
       )}
 
       {/* ── 区块 B（置顶模式）：本机助手未运行 / 被拦截 / 未配对时置顶展示 ── */}
-      {probe !== null && !isHelperReadyAndPaired && (
+      {!isHelperReadyAndPaired && (isMobile || probe !== null || pendingPreset) && (
         <div id="install-pair-section" ref={pairingSectionRef}>
           <PairingGuidePanel
-            isUnpairedRunning={probe.state === "running" && !probe.hello.paired}
+            isMobile={isMobile}
+            isUnpairedRunning={!isMobile && probe?.state === "running" && !probe.hello.paired}
             pairing={pairing}
             pairingError={pairingError}
             hubOrigin={hubOrigin}
             guideNotice={guideNotice}
+            presetUrl={pendingPresetUrl}
             highlighted={highlightStepOne}
             onGenerate={() => ensurePairing(true)}
           />
@@ -712,6 +814,18 @@ export function AgentJoinSection({
             border: "1px solid rgba(0, 0, 0, 0.08)",
           }}
         >
+          {pendingPreset && pendingPresetUrl && (
+            <div className="setup-info" role="status" ref={presetContinueRef}>
+              <p>本机助手已就绪，可以继续配置「{pendingPreset.label}」。</p>
+              <a className="btn btn-primary btn-sm" href={pendingPresetUrl} target="_blank" rel="noopener noreferrer">
+                继续一键配置 <ArrowUpRight size={14} strokeWidth={2} />
+              </a>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => setPendingPreset(null)}>
+                关闭提示
+              </button>
+            </div>
+          )}
+
           {probe.hello.hub_origin && probe.hello.hub_origin !== hubOrigin && (
             <div className="setup-note">
               本机助手当前配对的服务器为 {probe.hello.hub_origin}，与当前站点（{hubOrigin}）不一致。
@@ -780,7 +894,7 @@ export function AgentJoinSection({
                 className="btn btn-ghost btn-sm"
                 href={`${HELPER_ORIGIN}/`}
                 target="_blank"
-                rel="noreferrer"
+                rel="noopener noreferrer"
                 style={{ display: "inline-flex", alignItems: "center", gap: 5, textDecoration: "none" }}
               >
                 <span>打开本机控制台 (127.0.0.1:8790)</span>
@@ -902,7 +1016,7 @@ export function AgentJoinSection({
                 fontSize: 13.5,
               }}
             >
-              暂未在本机扫描到已安装的命令行智能体。你可以直接在下方「接入更多主流智能体」一键配置 Grok、Muse、Ollama，或展开查看安装命令。
+              暂未检测到已安装的终端 Agent。请在下方查看安装命令，或选择要接入的模型接口和本机服务。
             </div>
           ) : (
             <div className="agent-list">
@@ -1070,156 +1184,109 @@ export function AgentJoinSection({
         </div>
       )}
 
-      {/* ── 区块 C：主流智能体一键接入目录（始终展示） ── */}
-      <div
-        className="card"
-        style={{
-          padding: "22px 24px",
-          display: "flex",
-          flexDirection: "column",
-          gap: 16,
-        }}
-      >
+      <section className="card agents-preset-section">
         <div>
-          <strong style={{ fontSize: 16, color: "var(--text-primary)", display: "block" }}>
-            {!isHelperReadyAndPaired ? "第 2 步：一键接入主流智能体" : "接入更多主流智能体"}
-          </strong>
-          <p style={{ fontSize: 13.5, color: "var(--text-secondary)", marginTop: 4 }}>
-            支持本机终端智能体自动识别，也支持一键接入 Grok / Grokbot、Muse、Ollama 本机开源模型与自定义智能体服务。
-          </p>
+          <h2>本机终端 Agent</h2>
+          <p>在电脑运行本机助手后，可自动识别并接入。</p>
         </div>
-
         <div className="agents-preset-grid">
-          {AGENT_PRESETS.map((item) => {
-            const detectedLocal =
-              item.mode === "local-cli" && item.cliKey
-                ? agents.find((a) => a.key === item.cliKey)
-                : undefined;
-            const alreadyInRoom =
-              detectedLocal ? activeSeatKeysInSelectedRoom.has(detectedLocal.key) : false;
-
+          {AGENT_PRESETS.filter((item) => item.mode === "local-cli").map((item) => {
+            const detectedLocal = agents.find((agent) => agent.key === item.cliKey);
+            const alreadyInRoom = activeSeatKeysInSelectedRoom.has(item.cliKey);
             return (
-              <div key={item.id} className="agents-preset-card">
-                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                  <div className="agents-preset-card__head">
-                    <span className="agents-preset-card__icon">
-                      <PresetIcon item={item} />
-                    </span>
-                    <span className={`trust-badge trust-badge--${item.trustTier} tier-badge tier-badge--${item.trustTier}`}>
-                      {TRUST_TIER_LABEL[item.trustTier]}
-                    </span>
-                  </div>
-
-                  <div>
-                    <strong className="agents-preset-card__title" style={{ display: "block" }}>
-                      {item.title}
-                    </strong>
-                    <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>{item.subtitle}</span>
-                  </div>
-
-                  <p className="agents-preset-card__desc">{item.description}</p>
-                </div>
-
-                {/* 底部操作区 */}
-                {item.mode === "local-cli" ? (
-                  isHelperReadyAndPaired && detectedLocal ? (
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
-                      <span
-                        style={{
-                          fontSize: 11.5,
-                          fontWeight: 600,
-                          color: "var(--success)",
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: 4,
-                        }}
-                      >
-                        <Check size={13} strokeWidth={2.2} />
-                        <span>已在本机检测到</span>
-                      </span>
-                      {alreadyInRoom ? (
-                        <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)" }}>已在当前房间</span>
-                      ) : (
-                        <button
-                          type="button"
-                          className="btn btn-primary btn-sm"
-                          disabled={joiningKey !== null || !effectiveRoomId}
-                          onClick={() => startJoin(detectedLocal.key)}
-                        >
-                          {joiningKey === detectedLocal.key ? "加入中…" : "加入当前房间"}
-                        </button>
-                      )}
-                    </div>
-                  ) : (
-                    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                      <span style={{ fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.45 }}>
-                        {!isHelperReadyAndPaired
-                          ? "完成第 1 步后将自动识别，已安装无需重装"
-                          : "本机暂未检测到该命令行工具"}
-                      </span>
-                      {item.installCmd && (
-                        <details className="helper-demo-disclosure helper-demo-disclosure--compact">
-                          <summary>电脑上还没装？查看安装命令</summary>
-                          <div
-                            style={{
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "space-between",
-                              gap: 6,
-                              marginTop: 6,
-                              padding: "6px 8px",
-                              borderRadius: 8,
-                              background: "var(--bg-subtle)",
-                              border: "1px solid var(--border)",
-                            }}
-                          >
-                            <code
-                              style={{
-                                fontSize: 11,
-                                color: "var(--text-primary)",
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                                whiteSpace: "nowrap",
-                              }}
-                              title={item.installCmd}
-                            >
-                              {item.installCmd}
-                            </code>
-                            <CopyButton text={item.installCmd} label="复制" />
-                          </div>
-                        </details>
-                      )}
-                    </div>
-                  )
-                ) : (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                    <button
-                      type="button"
-                      className="btn btn-primary btn-sm"
-                      onClick={() => item.helperPreset && openPresetConfig(item.helperPreset)}
-                      style={{ width: "100%", justifyContent: "center" }}
+              <PresetCard key={item.id} item={item}>
+                {isHelperReadyAndPaired && detectedLocal ? (
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                    <span
+                      style={{
+                        fontSize: 11.5,
+                        fontWeight: 600,
+                        color: "var(--success)",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 4,
+                      }}
                     >
-                      <span>一键配置并接入</span>
-                      <ArrowUpRight size={14} strokeWidth={2} />
-                    </button>
-                    {item.altHelperPreset && (
+                      <Check size={13} strokeWidth={2.2} />
+                      <span>已在本机检测到</span>
+                    </span>
+                    {alreadyInRoom ? (
+                      <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)" }}>已在当前房间</span>
+                    ) : (
                       <button
                         type="button"
-                        className="btn btn-ghost btn-sm"
-                        onClick={() => openPresetConfig(item.altHelperPreset!)}
-                        style={{ width: "100%", justifyContent: "center", fontSize: 12 }}
+                        className="btn btn-primary btn-sm"
+                        disabled={joiningKey !== null || !effectiveRoomId}
+                        onClick={() => startJoin(detectedLocal.key)}
                       >
-                        <span>使用 {item.altLabel ?? "Webhook"} 桥接接入</span>
-                        <ArrowUpRight size={13} strokeWidth={1.9} />
+                        {joiningKey === detectedLocal.key ? "加入中…" : "加入当前房间"}
                       </button>
                     )}
                   </div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    <span style={{ fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.45 }}>
+                      {!isHelperReadyAndPaired
+                        ? "完成第 1 步后将自动识别，已安装无需重装"
+                        : "本机暂未检测到该命令行工具"}
+                    </span>
+                    <details className="helper-demo-disclosure helper-demo-disclosure--compact">
+                      <summary>电脑上还没装？查看安装命令</summary>
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          gap: 6,
+                          marginTop: 6,
+                          padding: "6px 8px",
+                          borderRadius: 8,
+                          background: "var(--bg-subtle)",
+                          border: "1px solid var(--border)",
+                        }}
+                      >
+                        <code
+                          style={{
+                            fontSize: 11,
+                            color: "var(--text-primary)",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                          }}
+                          title={item.installCmd}
+                        >
+                          {item.installCmd}
+                        </code>
+                        <CopyButton text={item.installCmd} label="复制" />
+                      </div>
+                    </details>
+                  </div>
                 )}
-              </div>
+              </PresetCard>
             );
           })}
         </div>
-      </div>
+      </section>
+
+      <section className="card agents-preset-section">
+        <div>
+          <h2>模型接口与本机服务</h2>
+          <p>通过电脑上的本机助手配置，密钥保存在你的电脑上。</p>
+        </div>
+        <div className="agents-preset-grid">
+          {AGENT_PRESETS.filter((item) => item.mode === "helper-preset").map((item) => (
+            <PresetCard key={item.id} item={item}>
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                onClick={() => openPresetConfig(item.helperPreset, item.title)}
+              >
+                一键配置并接入 <PresetArrow size={14} strokeWidth={2} />
+              </button>
+            </PresetCard>
+          ))}
+        </div>
+      </section>
 
       {/* ── 区块 B（折叠模式）：当当前电脑已配对时，在底部提供连接另一台电脑折叠面板 ── */}
       {isHelperReadyAndPaired && (
@@ -1261,6 +1328,7 @@ export function AgentJoinSection({
           {expandAnotherComputer && (
             <div style={{ marginTop: 16 }}>
               <PairingGuidePanel
+                isMobile={isMobile}
                 isUnpairedRunning={false}
                 isSecondaryDevice
                 pairing={pairing}
@@ -1338,7 +1406,7 @@ export function AgentsPage() {
         <div className="setup-head">
           <h1>接入我的智能体</h1>
           <p>
-            把本机 Claude Code、Codex、Gemini CLI 或 Grok、Muse、Ollama 智能体一键拉进端到端加密协作房间。
+            邀请 Grok Bot 和 Muse 从云端加入加密房间，也可以接入电脑上的终端 Agent 和模型服务。
           </p>
         </div>
 

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   HELPER_ORIGIN,
   HubHttpError,
@@ -9,6 +9,7 @@ import {
   denyRedemption,
   formatInviteAcceptError,
   helperHandoffUrl,
+  isMobileBrowser,
   issueSignatureNonce,
   joinViaTicket,
   listRoomInvites,
@@ -18,8 +19,11 @@ import {
   powershellInstallCommand,
   probeHelper,
   redeemRoomInvite,
+  resolvePresetOpenDecision,
   resumeRoomSeat,
   revokeRoomInvite,
+  type HelperHello,
+  type HelperProbe,
 } from "./localHelper";
 
 const memoryStorage = new Map<string, string>();
@@ -42,7 +46,7 @@ Object.defineProperty(globalThis, "localStorage", {
   } as Storage,
 });
 
-const HELLO = {
+const HELLO: HelperHello = {
   app: "mapr-helper",
   version: "0.1.0",
   paired: true,
@@ -118,6 +122,57 @@ describe("probeHelper", () => {
       throw new TypeError("Failed to fetch");
     });
     expect(probe).toEqual({ state: "blocked" });
+  });
+});
+
+describe("isMobileBrowser", () => {
+  const desktopMac = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36";
+  it.each([
+    ["iPhone Safari", "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) Version/18.0 Mobile/15E148 Safari/604.1", 5, true],
+    ["Android", "Mozilla/5.0 (Linux; Android 15; Pixel 9) Chrome/130.0.0.0", 5, true],
+    ["iPad Safari", "Mozilla/5.0 (iPad; CPU OS 18_0 like Mac OS X) Safari/604.1", 5, true],
+    ["iPod Safari", "Mozilla/5.0 (iPod touch; CPU iPhone OS 15_0 like Mac OS X) Safari/604.1", 5, true],
+    ["iPadOS desktop mode", `${desktopMac} Version/18.0 Safari/605.1.15`, 5, true],
+    ["generic mobile UA", "Mozilla/5.0 Mobile Safari/537.36", 0, true],
+    ["desktop Safari", `${desktopMac} Version/18.0 Safari/605.1.15`, 0, false],
+    ["desktop Chrome", `${desktopMac} Chrome/130.0.0.0 Safari/537.36`, 1, false],
+    ["Windows touchscreen", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/130.0.0.0", 10, false],
+  ] as const)("classifies %s", (_label, ua, touchPoints, expected) => {
+    expect(isMobileBrowser(ua, touchPoints)).toBe(expected);
+  });
+
+  it.each([
+    [undefined, false],
+    [{ userAgent: desktopMac, maxTouchPoints: 5 }, true],
+  ] as const)("handles the default navigator value %o", (browserNavigator, expected) => {
+    vi.stubGlobal("navigator", browserNavigator);
+    try {
+      expect(isMobileBrowser()).toBe(expected);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});
+
+describe("resolvePresetOpenDecision", () => {
+  const cases: Array<{
+    description: string;
+    probe: HelperProbe | null;
+    desktop: "open-helper" | "guide-install";
+  }> = [
+    { description: "pending probe", probe: null, desktop: "guide-install" },
+    { description: "not running", probe: { state: "not-running" }, desktop: "guide-install" },
+    { description: "blocked or refused", probe: { state: "blocked" }, desktop: "guide-install" },
+    { description: "running and paired", probe: { state: "running", hello: HELLO }, desktop: "open-helper" },
+    {
+      description: "running and unpaired",
+      probe: { state: "running", hello: { ...HELLO, paired: false } },
+      desktop: "open-helper",
+    },
+  ];
+  it.each(cases)("uses the device-specific action for $description", ({ probe, desktop }) => {
+    expect(resolvePresetOpenDecision(probe, false)).toBe(desktop);
+    expect(resolvePresetOpenDecision(probe, true)).toBe("guide-mobile");
   });
 });
 
@@ -459,6 +514,25 @@ describe("room invite Hub API helpers", () => {
       expect(list[0].status).toBe("pending");
     } finally {
       globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("listRoomRedemptions exposes the seat ID for a consumed cloud invite", async () => {
+    const redemption = {
+      id: "red-cloud",
+      token: "invite-cloud",
+      kind: "agent",
+      status: "consumed",
+      seat_id: "seat-cloud",
+    };
+    vi.stubGlobal("fetch", async (input: RequestInfo | URL) => {
+      expect(String(input)).toBe("/api/v1/rooms/room%2Fcloud/redemptions");
+      return jsonResponse({ redemptions: [redemption] });
+    });
+    try {
+      expect(await listRoomRedemptions("room/cloud")).toEqual([redemption]);
+    } finally {
+      vi.unstubAllGlobals();
     }
   });
 
