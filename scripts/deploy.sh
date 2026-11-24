@@ -135,10 +135,37 @@ temp.replace(p)
 PYCONFIG
 cp "${MAPR_RELEASE_DIR:-$GITHUB_WORKSPACE}/docker-compose.yml" "$target/docker-compose.yml"
 "${dc[@]}" config --quiet
-if docker image inspect "ghcr.io/wangdada8208/multi-agent-project-room-backend:$IMAGE_TAG" "ghcr.io/wangdada8208/multi-agent-project-room-frontend:$IMAGE_TAG" >/dev/null 2>&1; then
+release_images=(
+  "ghcr.io/wangdada8208/multi-agent-project-room-backend:$IMAGE_TAG"
+  "ghcr.io/wangdada8208/multi-agent-project-room-frontend:$IMAGE_TAG"
+)
+if docker image inspect "${release_images[@]}" >/dev/null 2>&1; then
   echo "Using already downloaded immutable images: $IMAGE_TAG"
 else
-  "${dc[@]}" pull backend frontend
+  if [[ -n "${MAPR_IMAGE_ARCHIVE:-}" && -f "$MAPR_IMAGE_ARCHIVE" ]]; then
+    docker load -i "$MAPR_IMAGE_ARCHIVE" || echo 'Release image archive load failed; checking local images.' >&2
+  fi
+  if docker image inspect "${release_images[@]}" >/dev/null 2>&1; then
+    echo "Using local immutable images: $IMAGE_TAG"
+  else
+    MAPR_PULL_RETRIES=${MAPR_PULL_RETRIES:-3}
+    MAPR_PULL_RETRY_DELAY=${MAPR_PULL_RETRY_DELAY:-5}
+    if [[ ! "$MAPR_PULL_RETRIES" =~ ^[1-9][0-9]*$ || ! "$MAPR_PULL_RETRY_DELAY" =~ ^(0|[1-9][0-9]*)$ ]]; then
+      echo 'Invalid image pull retry settings' >&2
+      false
+    fi
+    attempt=1
+    until "${dc[@]}" pull backend frontend; do
+      if (( attempt >= MAPR_PULL_RETRIES )); then
+        echo "Image pull failed after $attempt attempts" >&2
+        false
+      fi
+      delay=$((MAPR_PULL_RETRY_DELAY * attempt))
+      echo "Image pull attempt $attempt failed; retrying in ${delay}s" >&2
+      sleep "$delay"
+      attempt=$((attempt + 1))
+    done
+  fi
 fi
 # All writers sharing this database must be stopped during the maintenance
 # window. This command stops this Compose project's Hub; external Hubs require

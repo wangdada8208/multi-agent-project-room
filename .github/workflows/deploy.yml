@@ -223,6 +223,27 @@ jobs:
             ${{ env.FRONTEND_IMAGE }}:${{ steps.meta.outputs.tag }}
             ${{ env.FRONTEND_IMAGE }}:latest
 
+      - name: Package immutable release images
+        if: github.event_name == 'workflow_dispatch' && inputs.deploy
+        env:
+          IMAGE_TAG: ${{ steps.meta.outputs.deploy_tag }}
+        run: |
+          set -euo pipefail
+          backend="$BACKEND_IMAGE:$IMAGE_TAG"
+          frontend="$FRONTEND_IMAGE:$IMAGE_TAG"
+          docker pull "$backend"
+          docker pull "$frontend"
+          docker save "$backend" "$frontend" | gzip -1 > "${{ runner.temp }}/release-images.tar.gz"
+
+      - name: Upload immutable release images
+        if: github.event_name == 'workflow_dispatch' && inputs.deploy
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-images-${{ github.sha }}
+          path: ${{ runner.temp }}/release-images.tar.gz
+          retention-days: 1
+          if-no-files-found: error
+
       - name: Upload exact release configuration
         uses: actions/upload-artifact@v7
         with:
@@ -244,10 +265,16 @@ jobs:
           name: release-${{ github.sha }}
           path: ${{ github.workspace }}/release
 
+      - uses: actions/download-artifact@v8
+        with:
+          name: release-images-${{ github.sha }}
+          path: ${{ github.workspace }}/release-images
+
       - name: 部署到服务器
         working-directory: release
         env:
           MAPR_RELEASE_DIR: ${{ github.workspace }}/release
+          MAPR_IMAGE_ARCHIVE: ${{ github.workspace }}/release-images/release-images.tar.gz
           IMAGE_TAG: ${{ needs.build.outputs.tag }}
           VITE_XMTP_WORKER_ADDRESS: ${{ vars.VITE_XMTP_WORKER_ADDRESS }}
           VITE_XMTP_ENV: ${{ vars.VITE_XMTP_ENV }}
@@ -294,3 +321,7 @@ jobs:
             sudo -n usermod -aG docker "$(id -un)"
             sg docker -c 'bash scripts/deploy.sh'
           fi
+
+      - name: 清理发布镜像归档
+        if: always()
+        run: rm -rf -- "$GITHUB_WORKSPACE/release-images"

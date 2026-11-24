@@ -56,20 +56,19 @@ interface HubCallResult {
   body: Record<string, unknown> | null;
 }
 
-/** 不鉴权（签名本身就是授权）、不带秘密的 Hub JSON 调用；网络错误收敛为 status 0。 */
+/** Hub JSON 调用，网络错误收敛为 status 0。 */
 async function joinHubCall(
   fetchImpl: typeof fetch,
   base: string,
-  method: "GET" | "POST",
   apiPath: string,
-  body?: unknown
+  request: { method: "GET"; headers: HeadersInit } | { method: "POST"; body: unknown }
 ): Promise<HubCallResult> {
   let res: Response;
   try {
     res = await fetchImpl(`${base}${apiPath}`, {
-      method,
-      headers: body !== undefined ? { "Content-Type": "application/json" } : {},
-      body: body === undefined ? undefined : JSON.stringify(body),
+      method: request.method,
+      headers: request.method === "POST" ? { "Content-Type": "application/json" } : request.headers,
+      body: request.method === "POST" ? JSON.stringify(request.body) : undefined,
       signal: AbortSignal.timeout(JOIN_REQUEST_TIMEOUT_MS),
     });
   } catch {
@@ -152,10 +151,13 @@ async function signedProof(
   token: string,
   account: LocalAccount
 ): Promise<{ nonce: string; signature: string }> {
-  const res = await joinHubCall(fetchImpl, base, "POST", "/api/v1/invites/nonce", {
-    action: "invite-agent-register",
-    resource: token,
-    address: account.address.toLowerCase(),
+  const res = await joinHubCall(fetchImpl, base, "/api/v1/invites/nonce", {
+    method: "POST",
+    body: {
+      action: "invite-agent-register",
+      resource: token,
+      address: account.address.toLowerCase(),
+    },
   });
   if (res.status !== 200 && res.status !== 201) throw new Error(`nonce_failed:${res.status}`);
   const nonce = res.body?.nonce;
@@ -220,11 +222,14 @@ export async function joinWithInvite(
   const regPath = `/api/v1/invites/${encodeURIComponent(token)}/agent-register`;
   let res = await (async () => {
     const proof = await signedProof(fetchImpl, hubOrigin, token, account);
-    return joinHubCall(fetchImpl, hubOrigin, "POST", regPath, {
-      xmtp_address: address,
-      nonce: proof.nonce,
-      signature: proof.signature,
-      ...(displayName ? { display_name: displayName } : {}),
+    return joinHubCall(fetchImpl, hubOrigin, regPath, {
+      method: "POST",
+      body: {
+        xmtp_address: address,
+        nonce: proof.nonce,
+        signature: proof.signature,
+        ...(displayName ? { display_name: displayName } : {}),
+      },
     });
   })();
 
@@ -233,8 +238,14 @@ export async function joinWithInvite(
   while (res.status === 200 && res.body?.status === "pending" && Date.now() < deadline) {
     await sleep(pollMs);
     const proof = await signedProof(fetchImpl, hubOrigin, token, account);
-    const qs = new URLSearchParams({ address, nonce: proof.nonce, signature: proof.signature });
-    res = await joinHubCall(fetchImpl, hubOrigin, "GET", `${regPath}?${qs.toString()}`);
+    res = await joinHubCall(fetchImpl, hubOrigin, regPath, {
+      method: "GET",
+      headers: {
+        "X-MAPR-Address": address,
+        "X-MAPR-Nonce": proof.nonce,
+        "X-MAPR-Signature": proof.signature,
+      },
+    });
   }
 
   if (res.status !== 200) {

@@ -27,6 +27,7 @@ from _signing import (
     redeem_signed,
     signed_proof,
 )
+from app.core.eip191 import ACTION_AGENT_REGISTER, MAX_LIVE_NONCES_PER_ADDRESS
 from app.core.security import create_access_token, decode_access_token
 from app.helper.models import AgentSeat
 from app.models.room_invite import RoomInvite
@@ -660,6 +661,48 @@ async def test_m1_m2_atomic_redemption_decisions_and_expiry_and_l2_l4(
         },
     )
     assert poll_hdr.status_code == 200 and poll_hdr.json()["status"] == "pending"
+
+
+@pytest.mark.asyncio
+async def test_consumed_registration_nonces_allow_polling_beyond_open_limit(client, auth_headers):
+    room_id = await _create_room(client, auth_headers)
+    token = await _make_invite(client, auth_headers, room_id, requires_approval=True)
+    wallet = new_wallet()
+    poll_path = f"/api/v1/invites/{token}/agent-register"
+    first_headers = None
+
+    for _ in range(MAX_LIVE_NONCES_PER_ADDRESS + 1):
+        proof = await signed_proof(client, ACTION_AGENT_REGISTER, token, wallet)
+        poll_headers = {
+            "X-MAPR-Address": wallet.address,
+            "X-MAPR-Nonce": proof["nonce"],
+            "X-MAPR-Signature": proof["signature"],
+        }
+        if first_headers is None:
+            first_headers = poll_headers
+        response = await client.get(poll_path, headers=poll_headers)
+        assert response.status_code == 200, response.text
+        assert response.json()["status"] == "pending"
+
+    replay = await client.get(poll_path, headers=first_headers)
+    assert replay.status_code == 409
+    assert replay.json()["detail"] == "Signature challenge already used"
+
+
+@pytest.mark.asyncio
+async def test_thirty_third_open_registration_nonce_is_rejected(client):
+    payload = {
+        "action": ACTION_AGENT_REGISTER,
+        "resource": "invite-token",
+        "address": new_wallet().address,
+    }
+    for _ in range(MAX_LIVE_NONCES_PER_ADDRESS):
+        response = await client.post("/api/v1/invites/nonce", json=payload)
+        assert response.status_code == 201, response.text
+
+    rejected = await client.post("/api/v1/invites/nonce", json=payload)
+    assert rejected.status_code == 429
+    assert rejected.json()["detail"] == "Too many open signature challenges"
 
 
 @pytest.mark.asyncio
