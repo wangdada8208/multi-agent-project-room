@@ -1,10 +1,10 @@
+import { HelperLink } from "../HelperLink";
 import { useCallback, useEffect, useState } from "react";
 import { ExternalLink, ShieldCheck } from "lucide-react";
 import {
   decideOwnerConsent,
   fetchConsentDetail,
   fetchOwnerConsoleState,
-  ownerConsolePageUrl,
   type OwnerConsentDetail,
   type OwnerConsentSummary,
   type OwnerDecisionAction,
@@ -397,15 +397,14 @@ export function OwnerApprovalPanel({
               <span>{section.error}。</span>
               <span>
                 如需审批，请在运行该 Agent 的电脑上打开
-                <a
-                  href={ownerConsolePageUrl(section.seat.consolePort)}
-                  target="_blank"
+                <HelperLink
+                  action={{ approvalPort: section.seat.consolePort }}
                   rel="noreferrer"
                   style={{ color: "#0071e3", marginLeft: 4 }}
                 >
                   本机审批控制台
                   <ExternalLink size={11} style={{ verticalAlign: "-1px", marginLeft: 2 }} />
-                </a>
+                </HelperLink>
               </span>
             </div>
           )}

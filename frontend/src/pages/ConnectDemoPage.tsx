@@ -49,7 +49,7 @@ export function ConnectDemoPage() {
         >
           <div className="card" style={{ padding: 24 }}>
             <h3 style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 16 }}>
-              <Plane size={18} strokeWidth={1.85} color="var(--accent)" />
+              <Plane size={18} strokeWidth={1.85} color="var(--legacy-accent)" />
               <span>差旅航班时间匹配</span>
             </h3>
             <p className="hint" style={{ marginTop: 8 }}>
@@ -94,7 +94,7 @@ export function ConnectDemoPage() {
 
           <div className="card" style={{ padding: 24 }}>
             <h3 style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 16 }}>
-              <Receipt size={18} strokeWidth={1.85} color="var(--accent)" />
+              <Receipt size={18} strokeWidth={1.85} color="var(--legacy-accent)" />
               <span>电子客票自动报销</span>
             </h3>
             <p className="hint" style={{ marginTop: 8 }}>
@@ -140,7 +140,7 @@ export function ConnectDemoPage() {
 
         <div className="card" style={{ padding: 24, marginTop: 16 }}>
           <h3 style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 15 }}>
-            <ShieldCheck size={17} strokeWidth={1.85} color="var(--accent)" />
+            <ShieldCheck size={17} strokeWidth={1.85} color="var(--legacy-accent)" />
             <span>Connect with MAPR 安全设计规范</span>
           </h3>
           <ul

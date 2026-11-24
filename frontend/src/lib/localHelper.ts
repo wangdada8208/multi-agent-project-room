@@ -12,6 +12,8 @@
  */
 
 import { apiFetch } from "./api";
+import type { AgentKind, TrustTier } from "./seatIdentity";
+export { trustTierOf, TRUST_TIER_LABEL, type AgentKind, type TrustTier } from "./seatIdentity";
 
 export const HELPER_ORIGIN = "http://127.0.0.1:8790";
 
@@ -21,9 +23,6 @@ const PROBE_TIMEOUT_MS = 1500;
 const LOCAL_CALL_TIMEOUT_MS = 5000;
 /** POST /api/seats 要生成密钥、调 Hub、起进程，放宽到 30 秒。 */
 const JOIN_TIMEOUT_MS = 30000;
-
-/** 与 workers/xmtp-member/src/engines/types.ts 的 AgentKind 保持一致（cloud-agent = 邀请入房的云端 Agent）。 */
-export type AgentKind = "claude-code" | "codex" | "gemini-cli" | "cli-agent" | "openai-compatible" | "webhook" | "http-model" | "cloud-agent";
 
 export interface HelperHello {
   app: "mapr-helper";
@@ -92,30 +91,6 @@ export interface HubSeatView {
   /** 被显式暂停的时间；null/缺省 = 未暂停。 */
   paused_at?: string | null;
 }
-
-/** 信任分级：席位回话时明文流向的边界（借鉴 agentroom.chat 的诚实分级）。 */
-export type TrustTier = "local-cli" | "cloud-api" | "custom-webhook";
-
-const TIER_BY_KIND: Record<AgentKind, TrustTier> = {
-  "claude-code": "local-cli",
-  codex: "local-cli",
-  "gemini-cli": "local-cli",
-  "cli-agent": "local-cli",
-  "openai-compatible": "cloud-api",
-  "http-model": "cloud-api",
-  "cloud-agent": "cloud-api",
-  webhook: "custom-webhook",
-};
-
-export function trustTierOf(kind: AgentKind | string): TrustTier {
-  return TIER_BY_KIND[kind as AgentKind] ?? "custom-webhook";
-}
-
-export const TRUST_TIER_LABEL: Record<TrustTier, string> = {
-  "local-cli": "本机",
-  "cloud-api": "云端接口",
-  "custom-webhook": "自定义接口",
-};
 
 export interface HelperDevice {
   id: string;

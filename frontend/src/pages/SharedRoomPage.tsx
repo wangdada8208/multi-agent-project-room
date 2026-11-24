@@ -51,7 +51,7 @@ export function SharedRoomPage() {
 
       <div className="shared-page__body">
         <div className="shared-banner">
-          <Eye size={15} strokeWidth={1.9} color="var(--accent)" />
+          <Eye size={15} strokeWidth={1.9} color="var(--legacy-accent)" />
           <span>
             {roomName ? `「${roomName}」` : ""}只读分享视图 — 仅可浏览协作记录，无法发言
           </span>

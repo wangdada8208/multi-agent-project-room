@@ -3,6 +3,7 @@ import { Navigate, Route, Routes, useLocation, useParams } from "react-router-do
 import { LoginPage } from "./pages/LoginPage";
 import { LandingPage } from "./pages/LandingPage";
 import { HomePage } from "./pages/HomePage";
+import { useVisualViewport } from "./hooks/useVisualViewport";
 import { useAuthStore } from "./stores/authStore";
 
 const AgentsPage = lazy(() =>
@@ -38,6 +39,7 @@ function RoomRoute() {
 }
 
 export function App() {
+  useVisualViewport();
   return (
     <Suspense
       fallback={

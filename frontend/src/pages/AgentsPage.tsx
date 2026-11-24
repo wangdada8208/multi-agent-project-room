@@ -1,3 +1,7 @@
+import { HelperLink, openHelperLink } from "../components/HelperLink";
+import { ConfirmInline } from "../components/ui/ConfirmInline";
+import { useLocalHelper } from "../hooks/useLocalHelper";
+import { removeSeatFromRoom } from "../hooks/room/useSeatActions";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import {
@@ -23,25 +27,22 @@ import {
 import { apiUrl, createRoom, fetchRooms } from "../lib/api";
 import { AGENT_PRESETS, type AgentPresetItem, type CloudAgentPreset } from "../lib/agentPresets";
 import {
-  HELPER_ORIGIN,
   createJoinTicket,
   createPairingCode,
-  helperHandoffUrl,
   isMobileBrowser,
   joinViaTicket,
   listLocalAgents,
   listLocalSeats,
+  listRoomSeats,
+  type HelperHandoffAction,
   listMyHelpers,
   powershellInstallCommand,
-  probeHelper,
-  removeRoomSeat,
   resolvePresetOpenDecision,
   revokeHelper,
   TRUST_TIER_LABEL,
   trustTierOf,
   type AgentKind,
   type HelperDevice,
-  type HelperProbe,
   type LocalAgentView,
   type SeatViewLocal,
 } from "../lib/localHelper";
@@ -132,7 +133,7 @@ function PairingGuidePanel({
   pairingError,
   hubOrigin,
   guideNotice,
-  presetUrl,
+  presetAction,
   highlighted,
   onGenerate,
 }: {
@@ -143,7 +144,7 @@ function PairingGuidePanel({
   pairingError: string;
   hubOrigin: string;
   guideNotice: string;
-  presetUrl?: string;
+  presetAction?: HelperHandoffAction;
   highlighted?: boolean;
   onGenerate: () => void;
 }) {
@@ -153,9 +154,7 @@ function PairingGuidePanel({
       : "unix",
   );
   const [copiedHero, setCopiedHero] = useState(false);
-  const fallbackUrl = presetUrl ?? (pairing
-    ? helperHandoffUrl({ pair: pairing.code })
-    : `${HELPER_ORIGIN}/`);
+  const fallbackAction = presetAction ?? (pairing ? { pair: pairing.code } : "console");
 
   const commandText = useMemo(() => {
     if (!pairing) return "";
@@ -188,7 +187,7 @@ function PairingGuidePanel({
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 14, flexWrap: "wrap" }}>
         <div style={{ flex: 1, minWidth: 260 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <Terminal size={18} strokeWidth={1.9} style={{ color: "var(--accent)", flexShrink: 0 }} />
+            <Terminal size={18} strokeWidth={1.9} style={{ color: "var(--legacy-accent)", flexShrink: 0 }} />
             <strong style={{ fontSize: 16, color: "var(--text-primary)", letterSpacing: "-0.015em" }}>
               {isUnpairedRunning
                 ? "本机助手已在运行 · 完成当前账号配对"
@@ -255,15 +254,10 @@ function PairingGuidePanel({
               </button>
 
               {!isMobile && isUnpairedRunning && (
-                <a
-                  className="btn btn-ghost btn-sm"
-                  href={helperHandoffUrl({ pair: pairing.code })}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
+                <HelperLink className="btn btn-ghost btn-sm" action={{ pair: pairing.code }}>
                   <span>本机已在运行 · 一键跳转完成配对</span>
                   <ArrowUpRight size={14} strokeWidth={2} />
-                </a>
+                </HelperLink>
               )}
 
               <button type="button" className="btn btn-ghost btn-sm" onClick={onGenerate}>
@@ -299,9 +293,9 @@ function PairingGuidePanel({
       {!isMobile && (
         <div style={{ fontSize: 12.5, color: "var(--text-secondary)" }}>
           <span>已在终端运行过命令但页面没反应？</span>
-          <a className="agent-link" href={fallbackUrl} target="_blank" rel="noopener noreferrer">
+          <HelperLink className="agent-link" action={fallbackAction}>
             点此直接打开本机控制台 (127.0.0.1:8790) →
-          </a>
+          </HelperLink>
         </div>
       )}
 
@@ -345,7 +339,7 @@ export function AgentJoinSection({
   const user = useAuthStore((s) => s.user);
   const isMobile = isMobileBrowser();
 
-  const [probe, setProbe] = useState<HelperProbe | null>(null);
+  const { probe, refresh: refreshProbe, updatedAt } = useLocalHelper();
   const [pairing, setPairing] = useState<{ code: string; install_command: string; expires_at: string } | null>(null);
   const [pairingError, setPairingError] = useState("");
   const [guideNotice, setGuideNotice] = useState("");
@@ -426,46 +420,25 @@ export function AgentJoinSection({
     setListError("");
   }, []);
 
+  const helperRunning = probe?.state === "running";
   useEffect(() => {
-    if (isMobile) return;
-    let cancelled = false;
-    let timer = 0;
-    const tick = async () => {
-      const result = await probeHelper();
-      if (cancelled) return;
-      setProbe(result);
-      if (result.state === "running") {
-        try {
-          await refreshLocal();
-        } catch (err) {
-          if (cancelled) return;
-          if (err instanceof TypeError) {
-            setProbe({ state: "blocked" });
-          } else {
-            setListError(err instanceof Error ? err.message : "读取本机助手失败");
-          }
-        }
-      }
-      if (!cancelled) {
-        timer = window.setTimeout(tick, result.state === "running" ? 5000 : 3000);
-      }
-    };
-    void tick();
-    return () => {
-      cancelled = true;
-      window.clearTimeout(timer);
-    };
-  }, [isMobile, refreshLocal]);
+    if (!helperRunning) return;
+    let active = true;
+    void refreshLocal().catch((err) => {
+      if (active) setListError(err instanceof Error ? err.message : "读取本机助手失败");
+    });
+    return () => { active = false; };
+  }, [helperRunning, updatedAt, refreshLocal]);
 
   const isHelperReadyAndPaired = !isMobile && probe?.state === "running" && probe.hello.paired;
   const presetDecision = resolvePresetOpenDecision(probe, isMobile);
   const PresetArrow = presetDecision === "open-helper" ? ArrowUpRight : ArrowRight;
-  const pendingPresetUrl = pendingPreset && !isMobile
-    ? helperHandoffUrl({
+  const pendingPresetAction: HelperHandoffAction | undefined = pendingPreset && !isMobile
+    ? {
         preset: pendingPreset.presetId,
         roomId: effectiveRoomId || undefined,
         pairCode: isHelperReadyAndPaired ? undefined : pairing?.code,
-      })
+      }
     : undefined;
 
   useEffect(() => {
@@ -538,11 +511,7 @@ export function AgentJoinSection({
   async function handleManualRescan() {
     setRescanning(true);
     try {
-      const p = await probeHelper();
-      setProbe(p);
-      if (p.state === "running") {
-        await refreshLocal();
-      }
+      await refreshProbe?.({ throwOnError: true, cancelRefetch: false });
     } catch (err) {
       setListError(err instanceof Error ? err.message : "扫描失败");
     } finally {
@@ -579,9 +548,7 @@ export function AgentJoinSection({
       } catch (err) {
         if (err instanceof TypeError) {
           setJoinError("无法连接本机助手 (127.0.0.1:8790)。请确认电脑上的本机助手已启动，并在浏览器中允许本地网络访问。");
-          if (!isMobile) {
-            window.open(helperHandoffUrl({ ticket, agentKey }), "_blank", "noopener,noreferrer");
-          }
+          openHelperLink({ ticket, agentKey });
           return;
         }
         throw err;
@@ -613,7 +580,16 @@ export function AgentJoinSection({
 
   async function leaveSeat(seat: SeatViewLocal) {
     try {
-      await removeRoomSeat(seat.roomId, seat.seatId);
+      const current = (await listRoomSeats(seat.roomId)).find((row) => row.seat_id === seat.seatId);
+      if (!current || current.group_status === "removed") {
+        await refreshLocal();
+        return;
+      }
+      if (current.group_status !== "pending") {
+        setListError("请进入协作房间并解锁加密身份，在「成员」面板移出该席位。");
+        return;
+      }
+      await removeSeatFromRoom(current);
       await refreshLocal();
     } catch (err) {
       setListError(err instanceof Error ? err.message : "移出席位失败");
@@ -624,12 +600,11 @@ export function AgentJoinSection({
 
   function openPresetConfig(presetId: string, label = presetId) {
     if (presetDecision === "open-helper") {
-      const url = helperHandoffUrl({
+      const win = openHelperLink({
         preset: presetId,
         roomId: effectiveRoomId || undefined,
         pairCode: isHelperReadyAndPaired ? undefined : pairing?.code,
       });
-      const win = window.open(url, "_blank", "noopener,noreferrer");
       if (win) {
         setPendingPreset(null);
         setGuideNotice("");
@@ -730,14 +705,14 @@ export function AgentJoinSection({
           className="card"
           style={{
             padding: "18px 20px",
-            background: "var(--bg-subtle)",
+            background: "var(--legacy-bg-subtle)",
             display: "flex",
             flexDirection: "column",
             gap: 10,
           }}
         >
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <Layers size={16} strokeWidth={1.9} style={{ color: "var(--accent)" }} />
+            <Layers size={16} strokeWidth={1.9} style={{ color: "var(--legacy-accent)" }} />
             <strong style={{ fontSize: 14.5, color: "var(--text-primary)" }}>先创建一个协作房间</strong>
           </div>
           <p style={{ fontSize: 13, color: "var(--text-secondary)" }}>
@@ -794,7 +769,7 @@ export function AgentJoinSection({
             pairingError={pairingError}
             hubOrigin={hubOrigin}
             guideNotice={guideNotice}
-            presetUrl={pendingPresetUrl}
+            presetAction={pendingPresetAction}
             highlighted={highlightStepOne}
             onGenerate={() => ensurePairing(true)}
           />
@@ -814,12 +789,12 @@ export function AgentJoinSection({
             border: "1px solid rgba(0, 0, 0, 0.08)",
           }}
         >
-          {pendingPreset && pendingPresetUrl && (
+          {pendingPreset && pendingPresetAction && (
             <div className="setup-info" role="status" ref={presetContinueRef}>
               <p>本机助手已就绪，可以继续配置「{pendingPreset.label}」。</p>
-              <a className="btn btn-primary btn-sm" href={pendingPresetUrl} target="_blank" rel="noopener noreferrer">
+              <HelperLink className="btn btn-primary btn-sm" action={pendingPresetAction}>
                 继续一键配置 <ArrowUpRight size={14} strokeWidth={2} />
-              </a>
+              </HelperLink>
               <button type="button" className="btn btn-ghost btn-sm" onClick={() => setPendingPreset(null)}>
                 关闭提示
               </button>
@@ -890,16 +865,14 @@ export function AgentJoinSection({
                 <RefreshCw size={13} strokeWidth={2} />
                 <span>{rescanning ? "扫描中…" : "重新扫描"}</span>
               </button>
-              <a
+              <HelperLink
                 className="btn btn-ghost btn-sm"
-                href={`${HELPER_ORIGIN}/`}
-                target="_blank"
-                rel="noopener noreferrer"
+                action="console"
                 style={{ display: "inline-flex", alignItems: "center", gap: 5, textDecoration: "none" }}
               >
                 <span>打开本机控制台 (127.0.0.1:8790)</span>
                 <ExternalLink size={13} strokeWidth={2} />
-              </a>
+              </HelperLink>
             </div>
           </div>
 
@@ -981,7 +954,7 @@ export function AgentJoinSection({
                 style={{
                   padding: "10px 14px",
                   borderRadius: 10,
-                  background: "var(--bg-subtle)",
+                  background: "var(--legacy-bg-subtle)",
                   fontSize: 13,
                   color: "var(--text-primary)",
                 }}
@@ -1011,7 +984,7 @@ export function AgentJoinSection({
               style={{
                 padding: "16px",
                 borderRadius: 12,
-                background: "var(--bg-subtle)",
+                background: "var(--legacy-bg-subtle)",
                 color: "var(--text-secondary)",
                 fontSize: 13.5,
               }}
@@ -1117,7 +1090,7 @@ export function AgentJoinSection({
                     style={{
                       fontSize: 13,
                       fontWeight: 600,
-                      color: "var(--accent)",
+                      color: "var(--legacy-accent)",
                       display: "inline-flex",
                       alignItems: "center",
                       gap: 4,
@@ -1241,7 +1214,7 @@ export function AgentJoinSection({
                           marginTop: 6,
                           padding: "6px 8px",
                           borderRadius: 8,
-                          background: "var(--bg-subtle)",
+                          background: "var(--legacy-bg-subtle)",
                           border: "1px solid var(--border)",
                         }}
                       >
@@ -1354,6 +1327,8 @@ export function AgentsPage() {
 
   const [helpers, setHelpers] = useState<HelperDevice[] | null>(null);
   const [helperError, setHelperError] = useState("");
+  const [confirmHelperId, setConfirmHelperId] = useState<string | null>(null);
+  const [revoking, setRevoking] = useState(false);
 
   const loadHelpers = useCallback(() => {
     listMyHelpers()
@@ -1367,14 +1342,15 @@ export function AgentsPage() {
   useEffect(loadHelpers, [loadHelpers]);
 
   async function revoke(device: HelperDevice) {
-    if (!window.confirm(`吊销「${device.device_name}」？它在协作房间的席位会一并移出，本机助手下次心跳后停止。`)) {
-      return;
-    }
+    setRevoking(true);
     try {
       await revokeHelper(device.id);
+      setConfirmHelperId(null);
       loadHelpers();
     } catch (err) {
       setHelperError(err instanceof Error ? err.message : "吊销失败，请重试");
+    } finally {
+      setRevoking(false);
     }
   }
 
@@ -1437,8 +1413,13 @@ export function AgentsPage() {
                       {` · 配对于 ${new Date(h.created_at).toLocaleDateString("zh-CN")}`}
                     </small>
                   </div>
-                  {!h.revoked && (
-                    <button type="button" className="btn btn-danger btn-sm" onClick={() => void revoke(h)}>
+                  {!h.revoked && confirmHelperId === h.id && (
+                    <ConfirmInline confirmLabel="吊销" loading={revoking} onCancel={() => setConfirmHelperId(null)} onConfirm={() => void revoke(h)}>
+                      吊销「{h.device_name}」后，该设备上的席位会一并移出，本机助手会在下次心跳后停止。
+                    </ConfirmInline>
+                  )}
+                  {!h.revoked && confirmHelperId !== h.id && (
+                    <button type="button" className="btn btn-danger btn-sm" disabled={revoking} onClick={() => setConfirmHelperId(h.id)}>
                       吊销
                     </button>
                   )}

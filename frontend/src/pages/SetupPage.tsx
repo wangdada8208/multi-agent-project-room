@@ -74,7 +74,7 @@ function CheckRow({ label, state }: { label: string; state: SubState }) {
       {state === "done" && <CheckCircle2 size={16} strokeWidth={2} />}
       {state === "failed" && <XCircle size={16} strokeWidth={2} />}
       {state === "idle" && (
-        <span style={{ width: 16, textAlign: "center", color: "var(--text-3)" }}>·</span>
+        <span style={{ width: 16, textAlign: "center", color: "var(--legacy-text-3)" }}>·</span>
       )}
       <span>{label}</span>
     </div>
@@ -312,7 +312,7 @@ export function SetupPage() {
         {!routeRoomId && step === 0 && (
           <div className="card setup-card">
             <h2>
-              <Layers size={19} strokeWidth={1.9} style={{ color: "var(--accent)" }} />
+              <Layers size={19} strokeWidth={1.9} style={{ color: "var(--legacy-accent)" }} />
               <span>选择房间协作场景</span>
             </h2>
             <p className="setup-desc">选择一个预设分工模板立即建房，或直接创建空白房间。</p>
@@ -334,7 +334,7 @@ export function SetupPage() {
                         void pickTemplate(t.key, `${t.name} · ${new Date().toLocaleDateString("zh-CN")}`)
                       }
                     >
-                      <span className="tpl-icon" style={{ color: "var(--accent)" }}>
+                      <span className="tpl-icon" style={{ color: "var(--legacy-accent)" }}>
                         {renderSetupTemplateIcon(t.key, t.name)}
                       </span>
                       <strong>{creating === t.key ? "创建中…" : t.name}</strong>
@@ -385,7 +385,7 @@ export function SetupPage() {
         {step === 1 && room && (
           <div className="card setup-card">
             <h2>
-              <Lock size={19} strokeWidth={1.9} style={{ color: "var(--accent)" }} />
+              <Lock size={19} strokeWidth={1.9} style={{ color: "var(--legacy-accent)" }} />
               <span>{creatingVault ? "设置本机加密口令" : "解锁本机加密身份"}</span>
             </h2>
             <p className="setup-desc">
@@ -443,7 +443,7 @@ export function SetupPage() {
         {step === 2 && room && (
           <div className="card setup-card">
             <h2>
-              <Cpu size={19} strokeWidth={1.9} style={{ color: "var(--accent)" }} />
+              <Cpu size={19} strokeWidth={1.9} style={{ color: "var(--legacy-accent)" }} />
               <span>接入你的智能体</span>
             </h2>
             <p className="setup-desc">
@@ -460,7 +460,7 @@ export function SetupPage() {
                     flexWrap: "wrap",
                     padding: "8px 12px",
                     borderRadius: 10,
-                    background: "var(--bg-subtle)",
+                    background: "var(--legacy-bg-subtle)",
                   }}
                 >
                   <span style={{ fontSize: 12.5, color: "var(--text-secondary)" }}>
@@ -496,7 +496,7 @@ export function SetupPage() {
               {allMineIn ? (
                 <CheckCircle2 size={19} strokeWidth={2} style={{ color: "var(--success)" }} />
               ) : (
-                <Clock size={19} strokeWidth={1.9} style={{ color: "var(--accent)" }} />
+                <Clock size={19} strokeWidth={1.9} style={{ color: "var(--legacy-accent)" }} />
               )}
               <span>{allMineIn ? "配置完成 · 席位已全部入群" : "正在同步席位入群状态"}</span>
             </h2>

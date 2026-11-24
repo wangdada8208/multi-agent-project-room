@@ -1,3 +1,4 @@
+import { isMobileBrowser } from "../lib/localHelper";
 import React, { useEffect, useRef, useState } from "react";
 import { Plug } from "lucide-react";
 import {
@@ -63,7 +64,6 @@ export function ConnectButton({
   }, [connecting, onError]);
 
   function handleClick() {
-    setConnecting(true);
     const authUrl = buildConnectUrl(gatewayUrl, {
       appId,
       scope,
@@ -71,6 +71,11 @@ export function ConnectButton({
       redirectUri: redirectUri ?? window.location.href.split("#")[0],
       constraints,
     });
+    if (isMobileBrowser() && new URL(authUrl).hostname === "127.0.0.1") {
+      onError?.(new Error("请在运行本机网关的电脑浏览器中发起授权"));
+      return;
+    }
+    setConnecting(true);
     const width = 540;
     const height = 640;
     const left = window.screenX + (window.outerWidth - width) / 2;

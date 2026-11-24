@@ -1,3 +1,6 @@
+import type { usePendingRequests } from "../../hooks/room/usePendingRequests";
+import type { RoomPermissionMember as RoomMember, useRoomData } from "../../hooks/room/useRoomData";
+import { ApiError } from "../../lib/apiError";
 import { useState, useEffect, useCallback } from "react";
 import { KeyRound, Link2, Shield, UserPlus, X } from "lucide-react";
 import {
@@ -30,16 +33,6 @@ import { isEthAddress } from "../../lib/xmtpGroup";
 import type { Room } from "../../types/chat";
 import { CopyButton } from "../CopyButton";
 import { useAuthStore } from "../../stores/authStore";
-
-interface RoomMember {
-  user_id: string;
-  role: "owner" | "member" | "viewer";
-  username: string;
-  display_name: string;
-  avatar_url: string | null;
-  user_type: string;
-  xmtp_address?: string | null;
-}
 
 const ROLE_LABELS: Record<string, string> = {
   owner: "管理员",
@@ -107,6 +100,8 @@ export interface PermissionsPanelProps {
   /** 房间对象；settings_json 仅在模板建房回包或本次会话 PATCH 后可得。 */
   room?: Room | null;
   onPermissionsChanged?: () => void;
+  pendingRequests?: ReturnType<typeof usePendingRequests>;
+  permissionsQuery?: ReturnType<typeof useRoomData>["permissionsQuery"];
 }
 
 export function PermissionsPanel({
@@ -118,12 +113,14 @@ export function PermissionsPanel({
   myXmtpAddress,
   room,
   onPermissionsChanged,
+  pendingRequests,
+  permissionsQuery,
 }: PermissionsPanelProps) {
   const currentUser = useAuthStore((s) => s.user);
-  const [members, setMembers] = useState<RoomMember[]>([]);
+  const [standaloneMembers, setMembers] = useState<RoomMember[]>([]);
   const [inviteUsername, setInviteUsername] = useState("");
   const [inviteRole, setInviteRole] = useState<"member" | "viewer">("member");
-  const [loading, setLoading] = useState(true);
+  const [busy, setLoading] = useState(!permissionsQuery);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
 
@@ -148,7 +145,7 @@ export function PermissionsPanel({
   const [revokingToken, setRevokingToken] = useState<string | null>(null);
 
   // 房主待批准核销队列
-  const [redemptions, setRedemptions] = useState<RedemptionView[]>([]);
+  const [standaloneRedemptions, setRedemptions] = useState<RedemptionView[]>([]);
   const [redemptionBusyId, setRedemptionBusyId] = useState<string | null>(null);
   const [redemptionError, setRedemptionError] = useState("");
 
@@ -171,8 +168,18 @@ export function PermissionsPanel({
   const [savingRules, setSavingRules] = useState(false);
   const [rulesFeedback, setRulesFeedback] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
 
+  const parentRefetch = permissionsQuery?.refetch;
   const fetchPermissions = useCallback(async () => {
     try {
+      if (parentRefetch) {
+        const result = await parentRefetch();
+        if (result.isError) {
+          setError(result.error instanceof ApiError && result.error.status === 403 ? "无权限查看成员列表" : "加载失败");
+        } else {
+          setError("");
+        }
+        return;
+      }
       const res = await apiFetch(`/api/v1/rooms/${roomId}/permissions`);
       if (res.ok) {
         const data = await res.json();
@@ -186,11 +193,18 @@ export function PermissionsPanel({
     } finally {
       setLoading(false);
     }
-  }, [roomId]);
+  }, [roomId, parentRefetch]);
 
   useEffect(() => {
-    void fetchPermissions();
-  }, [fetchPermissions]);
+    if (!parentRefetch) void fetchPermissions();
+  }, [fetchPermissions, parentRefetch]);
+
+  const loading = Boolean(busy || permissionsQuery?.isPending);
+  const permissionsError = permissionsQuery?.error;
+  const loadError = error || (permissionsError ? permissionsError instanceof ApiError && permissionsError.status === 403
+    ? "无权限查看成员列表" : "加载失败" : "");
+  const members = permissionsQuery ? permissionsQuery.data?.members ?? [] : standaloneMembers;
+  const redemptions = pendingRequests ? pendingRequests.requests : standaloneRedemptions;
 
   const effectiveIsOwner =
     isOwner ?? members.some((m) => m.user_id === currentUser?.id && m.role === "owner");
@@ -204,19 +218,21 @@ export function PermissionsPanel({
     }
   }, [effectiveIsOwner, roomId]);
 
+  const refetchPending = pendingRequests?.query.refetch;
   const refreshRedemptions = useCallback(async () => {
     if (!effectiveIsOwner) return;
     try {
-      setRedemptions(await listRoomRedemptions(roomId, "pending"));
+      if (refetchPending) await refetchPending();
+      else setRedemptions(await listRoomRedemptions(roomId, "pending"));
     } catch {
       /* 同上 */
     }
-  }, [effectiveIsOwner, roomId]);
+  }, [effectiveIsOwner, roomId, refetchPending]);
 
   useEffect(() => {
     void refreshInvites();
-    void refreshRedemptions();
-  }, [refreshInvites, refreshRedemptions]);
+    if (!refetchPending) void refreshRedemptions();
+  }, [refreshInvites, refreshRedemptions, refetchPending]);
 
   async function handleInvite() {
     if (!inviteUsername.trim()) return;
@@ -400,12 +416,13 @@ export function PermissionsPanel({
     setRedemptionBusyId(redemption.id);
     setRedemptionError("");
     try {
-      if (action === "approve") {
-        await approveRedemption(roomId, redemption.id, {});
+      if (pendingRequests) {
+        await pendingRequests.decide.mutateAsync({ id: redemption.id, approved: action === "approve" });
       } else {
-        await denyRedemption(roomId, redemption.id);
+        if (action === "approve") await approveRedemption(roomId, redemption.id, {});
+        else await denyRedemption(roomId, redemption.id);
+        void refreshRedemptions();
       }
-      void refreshRedemptions();
       void refreshInvites();
       onPermissionsChanged?.();
     } catch (err) {
@@ -732,7 +749,8 @@ export function PermissionsPanel({
                 {red.kind === "agent" ? "云端 Agent" : "真人"}
               </span>
               <code style={{ fontFamily: "var(--mono)", fontSize: 11 }}>
-                {(red.redeemer_address ?? red.redeemer_user_id ?? "?").slice(0, 14)}…
+                {red.kind === "agent" && "displayName" in red && typeof red.displayName === "string"
+                  ? red.displayName : `${(red.redeemer_address ?? red.redeemer_user_id ?? "?").slice(0, 14)}…`}
               </code>
               <span style={{ color: "#6e6e73", fontSize: 11 }}>
                 {red.created_at ? new Date(red.created_at).toLocaleString() : ""}
@@ -796,12 +814,12 @@ export function PermissionsPanel({
         </div>
       </div>
 
-      {error && <p className="panel-error">{error}</p>}
+      {loadError && <p className="panel-error">{loadError}</p>}
       {message && <p className="ok-text">{message}</p>}
       {removeError && <p className="panel-error">{removeError}</p>}
 
       {loading && members.length === 0 && <p className="panel-empty">加载中…</p>}
-      {!loading && members.length === 0 && !error && <p className="panel-empty">暂无成员</p>}
+      {!loading && members.length === 0 && !loadError && <p className="panel-empty">暂无成员</p>}
 
       {/* ── 我的加密地址绑定 ── */}
       {isEncrypted && myMember && (

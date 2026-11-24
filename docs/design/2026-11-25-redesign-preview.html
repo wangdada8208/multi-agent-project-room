@@ -1,0 +1,1975 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Multi-Agent Project Room · 2026-11-25 重设计交互原型</title>
+<style>
+/* =====================================================================
+   Multi-Agent Project Room — Design Tokens v2 (2026-11-25)
+   单文件原型：无外链、无构建依赖。生产落地时本段 :root 原样迁入
+   frontend/src/styles/tokens.css（见设计说明书 §6）。
+   ===================================================================== */
+:root {
+  /* ---- 原始色板（暖中性灰，避免冷蓝紫科技感） ---- */
+  --gray-0: #ffffff;  --gray-25: #fcfcfb; --gray-50: #f7f7f5; --gray-100: #f1f1ee;
+  --gray-150: #e9e9e5; --gray-200: #dfdfda; --gray-300: #c8c8c2; --gray-400: #a0a099;
+  --gray-500: #7b7b74; --gray-600: #5d5d57; --gray-700: #44443f; --gray-800: #2b2b28;
+  --gray-900: #1b1b19; --gray-950: #121211;
+
+  /* ---- 语义：表面 ---- */
+  --bg-canvas: #f7f7f5;        /* 应用底色 */
+  --bg-surface: #ffffff;       /* 卡片 / 面板 */
+  --bg-raised: #ffffff;        /* 弹层 */
+  --bg-subtle: #f2f2ef;        /* 次级填充、代码块 */
+  --bg-muted: #eaeae6;         /* 选中、按压 */
+  --bg-hover: rgba(24, 24, 18, 0.04);
+  --bg-press: rgba(24, 24, 18, 0.07);
+  --bg-rail: #f3f3f0;          /* 左侧房间切换栏 */
+  --bg-inverse: #161615;
+  --bg-overlay: rgba(18, 18, 14, 0.32);
+  --bg-me: #f4f4f0;            /* 我发出的消息底色 */
+
+  /* ---- 语义：文字 ---- */
+  --text-1: #161615;   /* 主文字  对比度 17.9:1 */
+  --text-2: #57574f;   /* 次文字  对比度 7.2:1 */
+  --text-3: #85857c;   /* 辅助    对比度 3.9:1，仅用于 ≥12px 元信息 */
+  --text-inverse: #fafaf8;
+  --text-link: #1d5fd0;
+
+  /* ---- 语义：描边 ---- */
+  --border-1: rgba(24, 24, 18, 0.08);
+  --border-2: rgba(24, 24, 18, 0.13);
+  --border-3: rgba(24, 24, 18, 0.22);
+  --focus-ring: 0 0 0 2px var(--bg-surface), 0 0 0 4px rgba(29, 95, 208, 0.45);
+
+  /* ---- 语义：主操作（墨色，参考 Vercel / Linear 的克制主按钮） ---- */
+  --accent: #161615;
+  --accent-hover: #2b2b28;
+  --accent-fg: #ffffff;
+
+  /* ---- 语义：状态 ---- */
+  --ok: #17784a;      --ok-bg: #e9f5ee;      --ok-border: #bfe0cc;
+  --warn: #9a5800;    --warn-bg: #fdf3e1;    --warn-border: #f0d6a6;
+  --danger: #be2a2a;  --danger-bg: #fcecea;  --danger-border: #f2c4c0;
+  --info: #1d5fd0;    --info-bg: #ecf2fd;    --info-border: #c6d7f6;
+
+  /* ---- 语义：参与者身份（形状 + 字形 + 颜色 三重编码） ---- */
+  --actor-me-bg: #161615;      --actor-me-fg: #ffffff;
+  --actor-human-bg: #efe8dd;   --actor-human-fg: #6a5236;
+  --actor-human2-bg: #e2ece4;  --actor-human2-fg: #2f6440;
+  --actor-cloud: #0a69ab;      --actor-cloud-bg: #e6f1fa;  --actor-cloud-border: #bcd9ef;
+  --actor-local: #5b40c0;      --actor-local-bg: #efecfb;  --actor-local-border: #d3cbf3;
+  --presence-online: #22a35a;  --presence-paused: #a0a099; --presence-pending: #d48a10;
+
+  /* ---- 字体 ---- */
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Hiragino Sans GB", "Noto Sans CJK SC", "Noto Sans SC", "Microsoft YaHei", system-ui, sans-serif;
+  --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "PingFang SC", "Noto Sans CJK SC", "Microsoft YaHei", system-ui, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Mono", "Noto Sans Mono CJK SC", Menlo, Consolas, monospace;
+
+  /* 字号/行高（px）  */
+  --fs-caption: 12px;  --lh-caption: 18px;
+  --fs-sm: 13px;       --lh-sm: 20px;
+  --fs-body: 14px;     --lh-body: 22px;
+  --fs-chat: 14.5px;   --lh-chat: 24px;
+  --fs-lg: 16px;       --lh-lg: 26px;
+  --fs-h3: 18px;       --lh-h3: 26px;
+  --fs-h2: 22px;       --lh-h2: 30px;
+  --fs-h1: 28px;       --lh-h1: 36px;
+  --fs-display: 52px;  --lh-display: 62px;
+  --fw-regular: 400; --fw-medium: 500; --fw-semibold: 600; --fw-bold: 650;
+  --tracking-tight: -0.012em; --tracking-display: -0.028em;
+
+  /* ---- 圆角 ---- */
+  --r-xs: 4px; --r-sm: 6px; --r-md: 8px; --r-lg: 12px; --r-xl: 16px; --r-2xl: 20px; --r-full: 999px;
+
+  /* ---- 间距（4px 栅格） ---- */
+  --s-1: 4px; --s-2: 8px; --s-3: 12px; --s-4: 16px; --s-5: 20px; --s-6: 24px;
+  --s-8: 32px; --s-10: 40px; --s-12: 48px; --s-16: 64px; --s-20: 80px; --s-24: 96px;
+
+  /* ---- 阴影（低饱和、双层） ---- */
+  --sh-1: 0 1px 2px rgba(20, 20, 14, 0.05);
+  --sh-2: 0 1px 2px rgba(20, 20, 14, 0.04), 0 4px 12px rgba(20, 20, 14, 0.05);
+  --sh-3: 0 2px 6px rgba(20, 20, 14, 0.05), 0 12px 28px -6px rgba(20, 20, 14, 0.12);
+  --sh-pop: 0 0 0 1px var(--border-1), 0 16px 48px -10px rgba(20, 20, 14, 0.22);
+
+  /* ---- 动效 ---- */
+  --dur-1: 120ms;  /* hover / 颜色 */
+  --dur-2: 180ms;  /* 按压 / 开关 */
+  --dur-3: 240ms;  /* 面板 / 弹层 */
+  --dur-4: 360ms;  /* 抽屉 / 底部表单 */
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-exit: cubic-bezier(0.4, 0, 1, 1);
+  --ease-sheet: cubic-bezier(0.32, 0.72, 0, 1); /* iOS sheet */
+
+  /* ---- 布局 ---- */
+  --rail-w: 248px; --inspector-w: 340px; --header-h: 56px; --composer-max: 760px; --content-max: 1120px;
+  /* 断点（媒体查询无法读变量，此处为文档值）：sm 480 / md 768 / lg 1024 / xl 1280 / 2xl 1440 */
+
+  /* ---- 层级 ---- */
+  --z-sticky: 10; --z-header: 20; --z-drawer: 40; --z-overlay: 50; --z-modal: 60; --z-popover: 70; --z-toast: 80;
+
+  /* ---- 安全区（生产：env()；原型手机框内模拟） ---- */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+[data-theme="dark"] {
+  --bg-canvas: #0f0f0e; --bg-surface: #171716; --bg-raised: #1d1d1b; --bg-subtle: #1f1f1d;
+  --bg-muted: #2a2a27; --bg-hover: rgba(255, 255, 250, 0.05); --bg-press: rgba(255, 255, 250, 0.08);
+  --bg-rail: #131312; --bg-inverse: #f2f2ee; --bg-overlay: rgba(0, 0, 0, 0.55); --bg-me: #1e1e1c;
+  --text-1: #ededea; --text-2: #a9a9a1; --text-3: #7c7c74; --text-inverse: #121211; --text-link: #7aa7f5;
+  --border-1: rgba(255, 255, 250, 0.08); --border-2: rgba(255, 255, 250, 0.13); --border-3: rgba(255, 255, 250, 0.22);
+  --accent: #ededea; --accent-hover: #ffffff; --accent-fg: #121211;
+  --ok: #4cc27f; --ok-bg: rgba(76, 194, 127, 0.12); --ok-border: rgba(76, 194, 127, 0.3);
+  --warn: #e9a640; --warn-bg: rgba(233, 166, 64, 0.12); --warn-border: rgba(233, 166, 64, 0.32);
+  --danger: #f07171; --danger-bg: rgba(240, 113, 113, 0.12); --danger-border: rgba(240, 113, 113, 0.3);
+  --info: #7aa7f5; --info-bg: rgba(122, 167, 245, 0.12); --info-border: rgba(122, 167, 245, 0.3);
+  --actor-me-bg: #ededea; --actor-me-fg: #121211;
+  --actor-human-bg: #3a3127; --actor-human-fg: #e6cfaf; --actor-human2-bg: #24352a; --actor-human2-fg: #a8d8b6;
+  --actor-cloud: #6db8ee; --actor-cloud-bg: rgba(109, 184, 238, 0.13); --actor-cloud-border: rgba(109, 184, 238, 0.3);
+  --actor-local: #a998f4; --actor-local-bg: rgba(169, 152, 244, 0.13); --actor-local-border: rgba(169, 152, 244, 0.3);
+  --sh-1: 0 1px 2px rgba(0, 0, 0, 0.4); --sh-2: 0 1px 2px rgba(0,0,0,.4), 0 4px 12px rgba(0,0,0,.3);
+  --sh-3: 0 2px 6px rgba(0,0,0,.4), 0 12px 28px -6px rgba(0,0,0,.5);
+  --sh-pop: 0 0 0 1px var(--border-2), 0 16px 48px -10px rgba(0, 0, 0, 0.7);
+}
+
+/* =====================================================================
+   Base
+   ===================================================================== */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body {
+  font-family: var(--font-sans); font-size: var(--fs-body); line-height: var(--lh-body);
+  color: var(--text-1); background: #e9e9e5; -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
+}
+[data-theme="dark"] body { background: #080808; }
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; background: none; border: 0; }
+a { color: inherit; text-decoration: none; }
+code, pre, kbd { font-family: var(--font-mono); }
+:focus-visible { outline: none; box-shadow: var(--focus-ring); border-radius: var(--r-sm); }
+svg.i { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: none; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
+svg.i.sm { width: 14px; height: 14px; } svg.i.xs { width: 12px; height: 12px; } svg.i.lg { width: 18px; height: 18px; } svg.i.xl { width: 20px; height: 20px; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.muted { color: var(--text-2); } .faint { color: var(--text-3); }
+.mono { font-family: var(--font-mono); }
+.row { display: flex; align-items: center; gap: var(--s-2); }
+.spacer { flex: 1; }
+.nowrap { white-space: nowrap; }
+.truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+
+/* =====================================================================
+   预览外壳（仅原型）
+   ===================================================================== */
+.pv-bar {
+  position: sticky; top: 0; z-index: 100; height: 52px; display: flex; align-items: center; gap: 14px;
+  padding: 0 16px; background: rgba(255,255,255,.92); backdrop-filter: blur(12px); border-bottom: 1px solid rgba(0,0,0,.08);
+  font-size: 13px; color: #1b1b19;
+}
+[data-theme="dark"] .pv-bar { background: rgba(20,20,19,.92); color: #ededea; border-color: rgba(255,255,255,.08); }
+.pv-bar__title { font-weight: 600; white-space: nowrap; }
+.pv-bar__title small { font-weight: 400; color: #85857c; margin-left: 6px; }
+.pv-seg { display: inline-flex; padding: 3px; gap: 2px; background: rgba(0,0,0,.05); border-radius: 9px; }
+[data-theme="dark"] .pv-seg { background: rgba(255,255,255,.07); }
+.pv-seg button { height: 28px; padding: 0 12px; border-radius: 7px; font-size: 12.5px; color: inherit; opacity: .72; white-space: nowrap; }
+.pv-seg button[aria-pressed="true"] { background: #fff; opacity: 1; font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,.08); color: #161615; }
+.pv-hint { margin-left: auto; color: #85857c; font-size: 12px; white-space: nowrap; }
+.pv-stage { min-height: calc(100vh - 52px); display: flex; justify-content: center; align-items: flex-start; }
+.device { position: relative; background: var(--bg-canvas); color: var(--text-1); overflow: hidden; }
+.pv-stage[data-device="desktop"] .device { width: 100%; max-width: 1440px; height: calc(100vh - 52px); min-height: 760px; }
+.pv-stage[data-device="mobile"] { padding: 24px 0 40px; }
+.pv-stage[data-device="mobile"] .device {
+  width: 390px; height: 844px; border-radius: 54px; box-shadow: 0 0 0 11px #1a1a19, 0 0 0 12px #3a3a37, 0 30px 80px rgba(0,0,0,.28);
+  --safe-top: 47px; --safe-bottom: 34px;
+}
+body.capture .pv-bar { display: none; }
+body.capture .pv-stage { min-height: 100vh; padding: 0 !important; }
+body.capture .pv-stage[data-device="desktop"] .device { max-width: none; height: 100vh; min-height: 0; }
+body.capture .pv-stage[data-device="mobile"] .device { width: 100vw; height: 100vh; border-radius: 0; box-shadow: none; }
+body.capture.fullpage .pv-stage[data-device="desktop"] .device { height: auto; overflow: visible; }
+body.capture.fullpage .screen[data-screen="landing"] { height: auto; overflow: visible; }
+
+.device-inner { display: flex; flex-direction: column; height: 100%; }
+.ios-status { display: none; }
+[data-device="mobile"] .ios-status {
+  display: flex; flex: none; height: var(--safe-top); align-items: flex-end; justify-content: space-between; padding: 0 30px 9px 36px;
+  font-size: 15px; font-weight: 600; letter-spacing: -0.01em; background: var(--bg-surface); color: var(--text-1); position: relative; z-index: 30;
+}
+[data-device="mobile"] .ios-status .icons { display: flex; gap: 6px; align-items: center; }
+[data-device="mobile"] .ios-status[data-tone="canvas"] { background: var(--bg-canvas); }
+.ios-home { display: none; }
+[data-device="mobile"] .ios-home { display: block; position: absolute; left: 50%; bottom: 8px; width: 134px; height: 5px; margin-left: -67px; border-radius: 3px; background: var(--text-1); opacity: .85; z-index: 200; pointer-events: none; }
+.screens { position: relative; flex: 1; min-height: 0; }
+body.capture.fullpage .screens { min-height: auto; }
+.screen { display: none; height: 100%; overflow: auto; background: var(--bg-canvas); position: relative; }
+.screen.is-active { display: block; }
+.screen.app-screen.is-active { display: flex; overflow: hidden; }
+
+/* =====================================================================
+   基础组件
+   ===================================================================== */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 36px; padding: 0 14px;
+  border-radius: var(--r-md); font-size: var(--fs-body); font-weight: var(--fw-medium); white-space: nowrap; letter-spacing: -0.003em;
+  transition: background var(--dur-1) var(--ease-standard), border-color var(--dur-1), color var(--dur-1), transform var(--dur-2), box-shadow var(--dur-1);
+  border: 1px solid transparent; user-select: none;
+}
+.btn:active { transform: scale(0.98); }
+.btn-primary { background: var(--accent); color: var(--accent-fg); }
+.btn-primary:hover { background: var(--accent-hover); }
+.btn-secondary { background: var(--bg-surface); border-color: var(--border-2); color: var(--text-1); box-shadow: var(--sh-1); }
+.btn-secondary:hover { background: var(--bg-subtle); }
+.btn-ghost { color: var(--text-2); }
+.btn-ghost:hover { background: var(--bg-hover); color: var(--text-1); }
+.btn-ok { background: var(--ok); color: #fff; }
+[data-theme="dark"] .btn-ok { color: #08170e; }
+.btn-danger-ghost { color: var(--danger); }
+.btn-danger-ghost:hover { background: var(--danger-bg); }
+.btn-sm { height: 30px; padding: 0 10px; font-size: var(--fs-sm); border-radius: 7px; }
+.btn-lg { height: 44px; padding: 0 20px; font-size: 15px; border-radius: 10px; }
+.btn-block { width: 100%; }
+.btn[disabled] { opacity: .45; pointer-events: none; }
+.icon-btn { width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center; border-radius: var(--r-md); color: var(--text-2); transition: background var(--dur-1), color var(--dur-1); position: relative; }
+.icon-btn:hover { background: var(--bg-hover); color: var(--text-1); }
+.icon-btn[aria-pressed="true"] { background: var(--bg-muted); color: var(--text-1); }
+
+.tag { display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 7px; border-radius: var(--r-full); font-size: 11.5px; font-weight: var(--fw-medium); line-height: 1; white-space: nowrap; border: 1px solid transparent; }
+.tag-neutral { background: var(--bg-subtle); color: var(--text-2); border-color: var(--border-1); }
+.tag-cloud { background: var(--actor-cloud-bg); color: var(--actor-cloud); border-color: var(--actor-cloud-border); }
+.tag-local { background: var(--actor-local-bg); color: var(--actor-local); border-color: var(--actor-local-border); }
+.tag-ok { background: var(--ok-bg); color: var(--ok); border-color: var(--ok-border); }
+.tag-warn { background: var(--warn-bg); color: var(--warn); border-color: var(--warn-border); }
+.tag-owner { background: transparent; color: var(--text-2); border-color: var(--border-2); }
+.count { min-width: 18px; height: 18px; padding: 0 5px; border-radius: var(--r-full); font-size: 11px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; background: var(--bg-muted); color: var(--text-2); line-height: 1; }
+.count-warn { background: var(--presence-pending); color: #fff; }
+
+.dot { width: 7px; height: 7px; border-radius: 50%; flex: none; display: inline-block; }
+.dot-online { background: var(--presence-online); box-shadow: 0 0 0 2px var(--ok-bg); }
+.dot-paused { background: var(--presence-paused); }
+.dot-pending { background: var(--presence-pending); box-shadow: 0 0 0 2px var(--warn-bg); }
+
+/* 头像：人类 = 圆形；Agent = 圆角方形 + 角标字形 */
+.av { --size: 32px; width: var(--size); height: var(--size); border-radius: 50%; flex: none; display: inline-flex; align-items: center; justify-content: center;
+  font-size: calc(var(--size) * 0.42); font-weight: 600; position: relative; letter-spacing: 0; user-select: none; }
+.av-20 { --size: 20px; } .av-24 { --size: 24px; } .av-28 { --size: 28px; } .av-36 { --size: 36px; } .av-40 { --size: 40px; } .av-44 { --size: 44px; }
+.av-me { background: var(--actor-me-bg); color: var(--actor-me-fg); }
+.av-human { background: var(--actor-human-bg); color: var(--actor-human-fg); }
+.av-human2 { background: var(--actor-human2-bg); color: var(--actor-human2-fg); }
+.av-agent { border-radius: calc(var(--size) * 0.28); }
+.av-cloud { background: var(--actor-cloud-bg); color: var(--actor-cloud); box-shadow: inset 0 0 0 1px var(--actor-cloud-border); }
+.av-local { background: var(--actor-local-bg); color: var(--actor-local); box-shadow: inset 0 0 0 1px var(--actor-local-border); }
+.av-badge { position: absolute; right: -3px; bottom: -3px; width: 15px; height: 15px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: var(--bg-surface); box-shadow: 0 0 0 1.5px var(--bg-surface); }
+.av-badge svg { width: 11px; height: 11px; stroke-width: 2; }
+.av-24 .av-badge, .av-28 .av-badge { width: 12px; height: 12px; right: -3px; bottom: -3px; }
+.av-24 .av-badge svg, .av-28 .av-badge svg { width: 9px; height: 9px; }
+.av-cloud .av-badge { color: var(--actor-cloud); }
+.av-local .av-badge { color: var(--actor-local); }
+.av-presence { position: absolute; right: -1px; bottom: -1px; width: 9px; height: 9px; border-radius: 50%; border: 2px solid var(--bg-surface); background: var(--presence-online); }
+.av-stack { display: inline-flex; align-items: center; }
+.av-stack > .av { box-shadow: 0 0 0 2px var(--bg-surface); }
+.av-stack > .av + .av { margin-left: -6px; }
+.av-stack > .av-agent.av-cloud, .av-stack > .av-agent.av-local { box-shadow: 0 0 0 2px var(--bg-surface); }
+.av-stack .av-more { background: var(--bg-subtle); color: var(--text-2); font-size: 10.5px; }
+
+.card { background: var(--bg-surface); border: 1px solid var(--border-1); border-radius: var(--r-xl); box-shadow: var(--sh-1); }
+
+.input, .select { height: 38px; width: 100%; padding: 0 12px; border-radius: var(--r-md); border: 1px solid var(--border-2); background: var(--bg-surface); font-size: var(--fs-body); color: var(--text-1); transition: border-color var(--dur-1), box-shadow var(--dur-1); }
+.input::placeholder, textarea::placeholder { color: var(--text-3); }
+.input:focus, .select:focus { outline: none; border-color: var(--text-link); box-shadow: 0 0 0 3px var(--info-bg); }
+.select { appearance: none; padding-right: 34px; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2385857c' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; cursor: pointer; }
+.field { display: flex; flex-direction: column; gap: 6px; }
+.field > label, .label { font-size: var(--fs-sm); font-weight: var(--fw-medium); color: var(--text-1); }
+.help { font-size: var(--fs-caption); line-height: var(--lh-caption); color: var(--text-3); }
+
+.switch { position: relative; width: 36px; height: 22px; border-radius: 11px; background: var(--bg-muted); border: 1px solid var(--border-2); flex: none; transition: background var(--dur-2); }
+.switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.2); transition: transform var(--dur-2) var(--ease-standard); }
+.switch[aria-checked="true"] { background: var(--ok); border-color: var(--ok); }
+.switch[aria-checked="true"]::after { transform: translateX(14px); }
+
+.seg { display: inline-flex; padding: 3px; gap: 2px; background: var(--bg-subtle); border: 1px solid var(--border-1); border-radius: 10px; }
+.seg button { height: 28px; padding: 0 12px; border-radius: 7px; font-size: var(--fs-sm); font-weight: var(--fw-medium); color: var(--text-2); display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; transition: background var(--dur-1), color var(--dur-1); }
+.seg button:hover { color: var(--text-1); }
+.seg button[aria-selected="true"] { background: var(--bg-surface); color: var(--text-1); box-shadow: var(--sh-1), 0 0 0 1px var(--border-1); }
+
+.kbd { display: inline-flex; align-items: center; height: 18px; padding: 0 5px; border-radius: 4px; border: 1px solid var(--border-2); border-bottom-width: 2px; font-size: 11px; color: var(--text-2); background: var(--bg-surface); font-family: var(--font-sans); }
+
+/* 端到端加密状态胶囊：温和、可展开，不吓人 */
+.e2ee { display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 9px 0 7px; border-radius: var(--r-full); background: var(--ok-bg); color: var(--ok); font-size: 12px; font-weight: var(--fw-medium); border: 1px solid var(--ok-border); white-space: nowrap; }
+.e2ee svg { width: 13px; height: 13px; stroke-width: 2; }
+button.e2ee:hover { filter: brightness(0.98); }
+
+.code { position: relative; background: var(--bg-subtle); border: 1px solid var(--border-1); border-radius: var(--r-lg); font-family: var(--font-mono); font-size: 12.5px; line-height: 20px; color: var(--text-1); }
+.code pre { padding: 12px 14px; overflow-x: auto; white-space: pre; }
+.code__bar { display: flex; align-items: center; justify-content: space-between; height: 32px; padding: 0 6px 0 12px; border-bottom: 1px solid var(--border-1); font-family: var(--font-sans); font-size: 12px; color: var(--text-3); }
+.tok-k { color: #8a3ffc; } .tok-s { color: #0f7b52; } .tok-c { color: var(--text-3); font-style: italic; } .tok-n { color: #b4590a; } .tok-f { color: #1d5fd0; }
+[data-theme="dark"] .tok-k { color: #c5a3ff; } [data-theme="dark"] .tok-s { color: #79d3a5; } [data-theme="dark"] .tok-n { color: #f0b072; } [data-theme="dark"] .tok-f { color: #8cb4ff; }
+:not(pre) > code.inline { padding: 1px 5px; border-radius: 4px; background: var(--bg-subtle); border: 1px solid var(--border-1); font-size: 0.86em; }
+
+.toast { position: absolute; left: 50%; bottom: 28px; transform: translate(-50%, 16px); opacity: 0; z-index: var(--z-toast); display: flex; align-items: center; gap: 8px;
+  background: var(--bg-inverse); color: var(--text-inverse); padding: 10px 14px; border-radius: 10px; font-size: var(--fs-sm); box-shadow: var(--sh-3); pointer-events: none;
+  transition: opacity var(--dur-3) var(--ease-standard), transform var(--dur-3) var(--ease-standard); white-space: nowrap; }
+.toast.show { opacity: 1; transform: translate(-50%, 0); }
+[data-device="mobile"] .toast { bottom: calc(var(--safe-bottom) + 84px); }
+
+.spin { width: 14px; height: 14px; border-radius: 50%; border: 2px solid currentColor; border-right-color: transparent; animation: spin .8s linear infinite; flex: none; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+.rise { animation: rise var(--dur-3) var(--ease-standard) both; }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 1ms !important; transition-duration: 1ms !important; } }
+
+/* =====================================================================
+   1) 官网首页
+   ===================================================================== */
+.lp { background: var(--bg-surface); min-height: 100%; }
+.lp-wrap { max-width: 1200px; margin: 0 auto; padding: 0 40px; }
+.lp-nav { position: sticky; top: 0; z-index: var(--z-header); background: color-mix(in srgb, var(--bg-surface) 86%, transparent); backdrop-filter: saturate(1.4) blur(14px); border-bottom: 1px solid var(--border-1); }
+.lp-nav .lp-wrap { height: 64px; display: flex; align-items: center; gap: 32px; }
+.brand { display: inline-flex; align-items: center; gap: 10px; font-weight: 650; font-size: 15px; letter-spacing: -0.01em; white-space: nowrap; }
+.brand-mark { width: 26px; height: 26px; border-radius: 8px; background: var(--accent); color: var(--accent-fg); display: inline-flex; align-items: center; justify-content: center; flex: none; }
+.brand-mark svg { width: 16px; height: 16px; }
+.brand small { font-weight: 400; color: var(--text-3); font-size: 13px; margin-left: 2px; }
+.lp-links { display: flex; gap: 26px; font-size: 14px; color: var(--text-2); }
+.lp-links a:hover { color: var(--text-1); }
+.lp-nav .actions { margin-left: auto; display: flex; gap: 8px; }
+
+.lp-hero { padding: 64px 0 72px; border-bottom: 1px solid var(--border-1); background:
+  radial-gradient(1200px 400px at 85% -10%, rgba(10,105,171,.05), transparent 60%), var(--bg-surface); }
+.lp-hero .lp-wrap { display: grid; grid-template-columns: minmax(0, 540px) minmax(0, 1fr); gap: 48px; align-items: center; }
+.eyebrow { display: inline-flex; align-items: center; gap: 8px; height: 28px; padding: 0 12px 0 10px; border-radius: var(--r-full); border: 1px solid var(--border-2); font-size: 12.5px; color: var(--text-2); background: var(--bg-surface); white-space: nowrap; }
+.lp-hero h1 { margin-top: 22px; font-family: var(--font-display); font-size: 44px; line-height: 56px; font-weight: 650; letter-spacing: var(--tracking-display); }
+.lp-hero h1 em { font-style: normal; color: var(--text-2); }
+.lp-sub { margin-top: 20px; font-size: 16.5px; line-height: 28px; color: var(--text-2); }
+.lp-cta { margin-top: 30px; display: flex; gap: 10px; flex-wrap: wrap; }
+.lp-cta-note { margin-top: 14px; font-size: 13px; color: var(--text-3); }
+.lp-proof { margin-top: 36px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; padding-top: 24px; border-top: 1px solid var(--border-1); }
+.lp-proof div { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--text-2); line-height: 19px; }
+.lp-proof strong { font-size: 13.5px; color: var(--text-1); font-weight: 600; display: flex; align-items: center; gap: 6px; }
+
+/* 首页产品场景预览窗 */
+.lp-window { border-radius: 16px; background: var(--bg-surface); border: 1px solid var(--border-2); box-shadow: 0 1px 0 var(--border-1), 0 30px 70px -24px rgba(20,20,14,.25), 0 10px 24px -12px rgba(20,20,14,.12); overflow: hidden; }
+.lp-window__bar { height: 52px; display: flex; align-items: center; gap: 10px; padding: 0 16px; border-bottom: 1px solid var(--border-1); }
+.lp-window__title { font-weight: 600; font-size: 14px; white-space: nowrap; }
+.lp-window__body { display: grid; grid-template-columns: minmax(0, 1fr) 188px; height: 516px; }
+.lp-window__msgs { padding: 14px 18px 0; display: flex; flex-direction: column; gap: 4px; overflow: hidden; position: relative; }
+.lp-window__side { border-left: 1px solid var(--border-1); background: var(--bg-canvas); padding: 14px 14px; display: flex; flex-direction: column; gap: 6px; font-size: 12.5px; }
+.lp-window__side h6 { font-size: 11px; font-weight: 600; color: var(--text-3); letter-spacing: .04em; margin: 8px 0 2px; }
+.lp-window__side h6:first-child { margin-top: 0; }
+.lp-mem { display: flex; align-items: center; gap: 8px; height: 30px; }
+.lp-mem span.n { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lp-window .msg { padding: 7px 8px; }
+.lp-window .msg__body { font-size: 13.5px; line-height: 21px; }
+.lp-window .composer-mini { margin: auto -18px 0; padding: 12px 18px 14px; border-top: 1px solid var(--border-1); background: var(--bg-surface); position: relative; }
+.composer-mini .box { height: 40px; border: 1px solid var(--border-2); border-radius: 10px; display: flex; align-items: center; padding: 0 6px 0 12px; gap: 8px; color: var(--text-3); font-size: 13px; }
+.composer-mini .box .send { margin-left: auto; width: 28px; height: 28px; border-radius: 7px; background: var(--accent); color: var(--accent-fg); display: flex; align-items: center; justify-content: center; }
+.lp-window .seq { opacity: 0; animation: rise .5s var(--ease-standard) forwards; }
+
+.lp-section { padding: 88px 0; border-bottom: 1px solid var(--border-1); }
+.lp-section.alt { background: var(--bg-canvas); }
+.lp-kicker { font-size: 13px; font-weight: 600; color: var(--text-3); letter-spacing: .02em; }
+.lp-h2 { margin-top: 10px; font-family: var(--font-display); font-size: 34px; line-height: 44px; letter-spacing: -0.022em; font-weight: 650; }
+.lp-lead { margin-top: 12px; font-size: 16px; line-height: 27px; color: var(--text-2); max-width: 640px; }
+.lp-two { margin-top: 44px; display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.lp-kind { padding: 28px; border-radius: 18px; border: 1px solid var(--border-1); background: var(--bg-surface); display: flex; flex-direction: column; gap: 16px; }
+.lp-kind__head { display: flex; align-items: center; gap: 12px; }
+.lp-kind h3 { font-size: 19px; line-height: 26px; font-weight: 650; letter-spacing: -0.01em; }
+.lp-kind p { color: var(--text-2); font-size: 14.5px; line-height: 24px; }
+.lp-steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 4px; }
+.lp-step { padding: 12px; border-radius: 12px; background: var(--bg-canvas); border: 1px solid var(--border-1); font-size: 13px; line-height: 19px; color: var(--text-2); }
+.lp-step b { display: block; color: var(--text-1); font-weight: 600; margin-bottom: 2px; font-size: 13.5px; }
+.lp-step i { font-style: normal; font-family: var(--font-mono); font-size: 11.5px; color: var(--text-3); display: block; margin-bottom: 6px; }
+.lp-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.lp-chip { display: inline-flex; align-items: center; gap: 8px; height: 34px; padding: 0 12px 0 6px; border-radius: 10px; border: 1px solid var(--border-1); background: var(--bg-canvas); font-size: 13.5px; font-weight: 500; white-space: nowrap; }
+.lp-four { margin-top: 44px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; border: 1px solid var(--border-1); border-radius: 18px; overflow: hidden; background: var(--bg-surface); }
+.lp-four > div { padding: 26px 24px; border-right: 1px solid var(--border-1); }
+.lp-four > div:last-child { border-right: 0; }
+.lp-four .ico { width: 36px; height: 36px; border-radius: 10px; background: var(--bg-subtle); border: 1px solid var(--border-1); display: flex; align-items: center; justify-content: center; margin-bottom: 16px; }
+.lp-four h4 { font-size: 15.5px; font-weight: 600; margin-bottom: 6px; }
+.lp-four p { font-size: 13.5px; line-height: 22px; color: var(--text-2); }
+.lp-tpls { margin-top: 44px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+.lp-tpl { padding: 22px; border-radius: 16px; border: 1px solid var(--border-1); background: var(--bg-surface); display: flex; flex-direction: column; gap: 10px; transition: border-color var(--dur-1), box-shadow var(--dur-1); }
+.lp-tpl:hover { border-color: var(--border-3); box-shadow: var(--sh-2); }
+.lp-tpl .ico { width: 34px; height: 34px; border-radius: 9px; background: var(--bg-subtle); display: flex; align-items: center; justify-content: center; border: 1px solid var(--border-1); }
+.lp-tpl h4 { font-size: 15.5px; font-weight: 600; }
+.lp-tpl p { font-size: 13.5px; line-height: 21px; color: var(--text-2); flex: 1; }
+.lp-tpl .meta { font-size: 12px; color: var(--text-3); display: flex; gap: 10px; }
+.lp-final { padding: 96px 0; text-align: center; }
+.lp-final h2 { font-family: var(--font-display); font-size: 38px; line-height: 48px; letter-spacing: -0.024em; font-weight: 650; }
+.lp-final p { margin-top: 12px; color: var(--text-2); font-size: 16px; }
+.lp-final .lp-cta { justify-content: center; }
+.lp-foot { padding: 28px 0 40px; border-top: 1px solid var(--border-1); font-size: 13px; color: var(--text-3); }
+.lp-foot .lp-wrap { display: flex; justify-content: space-between; gap: 16px; }
+
+/* 手机端官网 */
+[data-device="mobile"] .lp-wrap { padding: 0 20px; }
+[data-device="mobile"] .lp-links, [data-device="mobile"] .lp-nav .hide-m { display: none; }
+[data-device="mobile"] .lp-nav .lp-wrap { height: 56px; }
+[data-device="mobile"] .lp-hero { padding: 32px 0 40px; }
+[data-device="mobile"] .lp-hero .lp-wrap { grid-template-columns: 1fr; gap: 32px; }
+[data-device="mobile"] .lp-hero h1 { font-size: 30px; line-height: 40px; margin-top: 18px; }
+[data-device="mobile"] .lp-hero h1 .nowrap { white-space: normal; }
+[data-device="mobile"] .lp-sub { font-size: 15px; line-height: 25px; }
+[data-device="mobile"] .lp-cta .btn { flex: 1; }
+[data-device="mobile"] .lp-proof { grid-template-columns: 1fr; gap: 12px; }
+[data-device="mobile"] .lp-window__body { grid-template-columns: 1fr; height: 470px; }
+[data-device="mobile"] .lp-window__side { display: none; }
+[data-device="mobile"] .lp-window__bar .tag, [data-device="mobile"] .lp-window__bar .av-stack { display: none; }
+[data-device="mobile"] .lp-section { padding: 56px 0; }
+[data-device="mobile"] .lp-h2 { font-size: 26px; line-height: 34px; }
+[data-device="mobile"] .lp-two, [data-device="mobile"] .lp-tpls { grid-template-columns: 1fr; }
+[data-device="mobile"] .lp-four { grid-template-columns: 1fr; }
+[data-device="mobile"] .lp-four > div { border-right: 0; border-bottom: 1px solid var(--border-1); }
+[data-device="mobile"] .lp-steps { grid-template-columns: 1fr; }
+[data-device="mobile"] .lp-final h2 { font-size: 28px; line-height: 38px; }
+[data-device="mobile"] .lp-foot .lp-wrap { flex-direction: column; }
+
+/* =====================================================================
+   消息（房间 & 首页预览共用）
+   ===================================================================== */
+.msg { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 12px; padding: 10px 12px; border-radius: 12px; position: relative; transition: background var(--dur-1); }
+.msg:hover { background: var(--bg-hover); }
+.msg--me { background: var(--bg-me); }
+.msg--me:hover { background: var(--bg-me); }
+.msg__head { display: flex; align-items: center; gap: 7px; min-width: 0; flex-wrap: wrap; row-gap: 2px; }
+.msg__name { font-weight: 600; font-size: 14px; white-space: nowrap; }
+.msg__time { font-size: 12px; color: var(--text-3); white-space: nowrap; }
+.msg__body { margin-top: 2px; font-size: var(--fs-chat); line-height: var(--lh-chat); color: var(--text-1); overflow-wrap: anywhere; }
+.msg__body p + p, .msg__body p + ol, .msg__body ol + p, .msg__body p + .code, .msg__body ol + .code, .msg__body .code + p { margin-top: 8px; }
+.msg__body ol, .msg__body ul { padding-left: 20px; }
+.msg__body li + li { margin-top: 2px; }
+.mention { color: var(--text-link); background: var(--info-bg); border-radius: 4px; padding: 0 3px; font-weight: 500; white-space: nowrap; }
+.mention.cloud { color: var(--actor-cloud); background: var(--actor-cloud-bg); }
+.mention.local { color: var(--actor-local); background: var(--actor-local-bg); }
+.msg__actions { position: absolute; top: -12px; right: 12px; display: none; gap: 2px; padding: 2px; border-radius: 9px; background: var(--bg-raised); box-shadow: var(--sh-pop); }
+.msg:hover .msg__actions { display: flex; }
+.msg__actions .icon-btn { width: 28px; height: 28px; }
+.sys { display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 12.5px; color: var(--text-3); padding: 8px 0; text-align: center; }
+.sys svg { width: 13px; height: 13px; }
+.sys b { color: var(--text-2); font-weight: 500; }
+.day { display: flex; align-items: center; gap: 12px; font-size: 12px; color: var(--text-3); margin: 6px 0; }
+.day::before, .day::after { content: ""; flex: 1; height: 1px; background: var(--border-1); }
+
+/* 任务结论卡 */
+.conclusion { margin-top: 10px; border: 1px solid var(--border-2); border-radius: 14px; background: var(--bg-surface); overflow: hidden; box-shadow: var(--sh-1); }
+.conclusion__head { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--border-1); }
+.conclusion__head .t { flex: 1; min-width: 0; font-weight: 600; font-size: 14px; line-height: 20px; }
+.conclusion__head .t small { display: block; font-size: 11.5px; line-height: 16px; font-weight: 500; color: var(--text-3); }
+.conclusion__head > svg { color: var(--text-2); }
+.conclusion__body { padding: 12px 14px 4px; }
+.conclusion__body li { display: flex; gap: 8px; font-size: 13.5px; line-height: 21px; padding: 4px 0; list-style: none; }
+.conclusion__body li svg { margin-top: 3px; color: var(--ok); }
+.conclusion__foot { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 10px 14px 12px; font-size: 12px; color: var(--text-3); }
+.conclusion__foot .meta { flex: 1 1 auto; min-width: 0; }
+[data-device="mobile"] .conclusion__foot .meta { flex-basis: 100%; }
+[data-device="mobile"] .conclusion__foot .btn { flex: 1; height: 38px; font-size: 14px; }
+
+/* =====================================================================
+   App Shell：左侧栏 + 主区 + 检查器
+   ===================================================================== */
+.rail { width: var(--rail-w); flex: none; background: var(--bg-rail); border-right: 1px solid var(--border-1); display: flex; flex-direction: column; padding: 12px 10px; gap: 2px; }
+.rail__top { display: flex; align-items: center; gap: 8px; padding: 4px 6px 12px; }
+.rail__top .brand { font-size: 14px; }
+.nav-item { display: flex; align-items: center; gap: 10px; height: 34px; padding: 0 10px; border-radius: 8px; color: var(--text-2); font-size: 14px; font-weight: 500; white-space: nowrap; transition: background var(--dur-1), color var(--dur-1); width: 100%; text-align: left; }
+.nav-item:hover { background: var(--bg-hover); color: var(--text-1); }
+.nav-item[aria-current="page"] { background: var(--bg-surface); color: var(--text-1); box-shadow: var(--sh-1), 0 0 0 1px var(--border-1); }
+.nav-item .count { margin-left: auto; }
+.rail__label { display: flex; align-items: center; justify-content: space-between; font-size: 12px; font-weight: 600; color: var(--text-3); padding: 18px 10px 6px; }
+.room-link { display: flex; align-items: center; gap: 10px; height: 36px; padding: 0 10px; border-radius: 8px; color: var(--text-2); font-size: 13.5px; width: 100%; text-align: left; }
+.room-link:hover { background: var(--bg-hover); color: var(--text-1); }
+.room-link[aria-current="page"] { background: var(--bg-muted); color: var(--text-1); font-weight: 500; }
+.room-link .glyph { width: 22px; height: 22px; border-radius: 6px; background: var(--bg-surface); border: 1px solid var(--border-1); display: flex; align-items: center; justify-content: center; flex: none; color: var(--text-2); }
+.room-link .glyph svg { width: 12px; height: 12px; }
+.room-link .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rail__foot { margin-top: auto; display: flex; align-items: center; gap: 10px; padding: 10px 8px 4px; border-top: 1px solid var(--border-1); font-size: 13px; }
+.rail__foot .who { flex: 1; min-width: 0; line-height: 18px; }
+.rail__foot .who small { display: block; color: var(--text-3); font-size: 12px; }
+
+.main { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--bg-surface); position: relative; }
+.page { flex: 1; min-height: 0; overflow: auto; background: var(--bg-canvas); }
+.page-inner { max-width: var(--content-max); margin: 0 auto; padding: 32px 40px 56px; }
+.page-head { display: flex; align-items: flex-end; gap: 16px; margin-bottom: 20px; }
+.page-head h1 { font-size: 24px; line-height: 32px; font-weight: 650; letter-spacing: -0.018em; }
+.page-head p { color: var(--text-2); margin-top: 4px; font-size: 14px; }
+.page-head .actions { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+
+/* 手机端底部 Tab 栏 */
+.tabbar { display: none; }
+[data-device="mobile"] .rail { display: none; }
+[data-device="mobile"] .tabbar { display: grid; grid-template-columns: repeat(3, 1fr); position: absolute; left: 0; right: 0; bottom: 0; z-index: var(--z-header); padding: 6px 8px var(--safe-bottom); background: color-mix(in srgb, var(--bg-surface) 92%, transparent); backdrop-filter: blur(16px); border-top: 1px solid var(--border-1); }
+.tabbar button { height: 50px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; font-size: 10.5px; font-weight: 500; color: var(--text-3); position: relative; }
+.tabbar button svg { width: 22px; height: 22px; stroke-width: 1.6; }
+.tabbar button[aria-current="page"] { color: var(--text-1); }
+.tabbar .count { position: absolute; top: 4px; left: calc(50% + 6px); }
+
+/* =====================================================================
+   3) 协作室列表
+   ===================================================================== */
+.attention { display: flex; align-items: center; gap: 12px; padding: 12px 14px 12px 16px; border-radius: 14px; background: var(--warn-bg); border: 1px solid var(--warn-border); margin-bottom: 20px; font-size: 14px; }
+.attention .txt { flex: 1; min-width: 0; }
+.attention .txt small { display: block; color: var(--text-2); font-size: 12.5px; }
+.toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+.search { position: relative; width: 280px; }
+.search svg { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: var(--text-3); }
+.search .input { padding-left: 34px; height: 34px; background: var(--bg-surface); }
+.rooms-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.room-card { position: relative; display: flex; flex-direction: column; gap: 12px; padding: 18px 18px 14px; border-radius: 16px; background: var(--bg-surface); border: 1px solid var(--border-1); box-shadow: var(--sh-1); cursor: pointer; text-align: left; transition: border-color var(--dur-1), box-shadow var(--dur-2), transform var(--dur-2); min-width: 0; }
+.room-card:hover { border-color: var(--border-2); box-shadow: var(--sh-2); transform: translateY(-1px); }
+.room-card__top { display: flex; align-items: flex-start; gap: 10px; }
+.room-card__top .ttl { flex: 1; min-width: 0; }
+.room-card__top h3 { font-size: 15.5px; line-height: 22px; font-weight: 600; letter-spacing: -0.006em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.room-card__top .sub { display: flex; align-items: center; gap: 6px; margin-top: 4px; font-size: 12.5px; color: var(--text-3); }
+.room-card__last { font-size: 13px; line-height: 20px; color: var(--text-2); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; min-height: 40px; }
+.room-card__last b { color: var(--text-1); font-weight: 500; }
+.room-card__foot { display: flex; align-items: center; gap: 8px; padding-top: 12px; border-top: 1px solid var(--border-1); font-size: 12.5px; color: var(--text-3); }
+.room-card__foot .counts { display: flex; gap: 10px; white-space: nowrap; }
+.room-card__foot .counts span { display: inline-flex; align-items: center; gap: 4px; }
+.room-card--new { border-style: dashed; background: transparent; box-shadow: none; align-items: center; justify-content: center; text-align: center; color: var(--text-2); min-height: 196px; }
+.room-card--new:hover { background: var(--bg-surface); }
+.room-card--new .plus { width: 40px; height: 40px; border-radius: 12px; border: 1px solid var(--border-2); display: flex; align-items: center; justify-content: center; background: var(--bg-surface); margin-bottom: 4px; color: var(--text-1); }
+
+/* 模板建房抽屉 */
+.backdrop { position: absolute; inset: 0; background: var(--bg-overlay); opacity: 0; pointer-events: none; transition: opacity var(--dur-3) var(--ease-standard); z-index: var(--z-overlay); }
+.backdrop.show { opacity: 1; pointer-events: auto; }
+.drawer { position: absolute; top: 0; right: 0; bottom: 0; width: 520px; max-width: 100%; z-index: var(--z-modal); background: var(--bg-surface); box-shadow: var(--sh-pop); display: flex; flex-direction: column;
+  transform: translateX(104%); transition: transform var(--dur-4) var(--ease-sheet); }
+.drawer.show { transform: none; }
+.drawer__head { display: flex; align-items: center; gap: 10px; height: 60px; padding: 0 16px 0 24px; border-bottom: 1px solid var(--border-1); flex: none; }
+.drawer__head h2 { font-size: 17px; font-weight: 650; letter-spacing: -0.01em; }
+.drawer__body { flex: 1; min-height: 0; overflow: auto; padding: 20px 24px 24px; display: flex; flex-direction: column; gap: 20px; }
+.drawer__foot { flex: none; display: flex; align-items: center; gap: 10px; padding: 14px 24px; border-top: 1px solid var(--border-1); background: var(--bg-surface); }
+.drawer__foot .note { flex: 1; font-size: 12.5px; color: var(--text-3); display: flex; align-items: center; gap: 6px; min-width: 0; }
+.tpl-list { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.tpl-opt { display: flex; gap: 10px; padding: 12px; border-radius: 12px; border: 1px solid var(--border-1); background: var(--bg-surface); text-align: left; transition: border-color var(--dur-1), background var(--dur-1), box-shadow var(--dur-1); min-width: 0; }
+.tpl-opt:hover { border-color: var(--border-2); }
+.tpl-opt[aria-checked="true"] { border-color: var(--text-1); box-shadow: 0 0 0 1px var(--text-1); }
+.tpl-opt .ico { width: 30px; height: 30px; border-radius: 8px; background: var(--bg-subtle); border: 1px solid var(--border-1); display: flex; align-items: center; justify-content: center; flex: none; }
+.tpl-opt b { display: block; font-size: 13.5px; font-weight: 600; }
+.tpl-opt small { display: block; font-size: 12px; line-height: 17px; color: var(--text-3); margin-top: 2px; }
+.preview-box { border: 1px solid var(--border-1); border-radius: 14px; background: var(--bg-canvas); overflow: hidden; }
+.preview-box > header { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--border-1); font-size: 13px; font-weight: 600; background: var(--bg-surface); }
+.preview-box > header small { margin-left: auto; font-weight: 400; color: var(--text-3); }
+.preview-box section { padding: 12px 14px; }
+.preview-box section + section { border-top: 1px solid var(--border-1); }
+.preview-box h5 { font-size: 12px; font-weight: 600; color: var(--text-3); margin-bottom: 8px; }
+.roles { display: flex; flex-direction: column; gap: 6px; }
+.role { display: grid; grid-template-columns: 116px 1fr; gap: 10px; font-size: 13px; line-height: 19px; }
+.role b { font-weight: 600; }
+.role span { color: var(--text-2); }
+.rules { display: flex; flex-direction: column; gap: 2px; }
+.rule { display: flex; align-items: center; gap: 10px; font-size: 13px; height: 30px; }
+.rule .scope { flex: 1; min-width: 0; }
+.rule .scope code { font-size: 11.5px; color: var(--text-3); margin-left: 6px; }
+.notes { margin-top: 6px; padding-left: 16px; font-size: 12.5px; color: var(--text-2); line-height: 19px; }
+
+/* =====================================================================
+   4) 协作房间
+   ===================================================================== */
+.room-head { height: var(--header-h); flex: none; display: flex; align-items: center; gap: 10px; padding: 0 12px 0 20px; border-bottom: 1px solid var(--border-1); background: var(--bg-surface); position: relative; z-index: var(--z-header); }
+.room-head__title { min-width: 0; display: flex; align-items: center; gap: 10px; }
+.room-head__title h2 { font-size: 15.5px; font-weight: 650; letter-spacing: -0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.room-head .m-only { display: none; }
+.room-head__actions { margin-left: auto; display: flex; align-items: center; gap: 4px; }
+.room-head .divider { width: 1px; height: 20px; background: var(--border-1); margin: 0 4px; }
+.room-body { flex: 1; min-height: 0; display: flex; }
+.chat { flex: 1; min-width: 0; display: flex; flex-direction: column; position: relative; background: var(--bg-surface); }
+.stream { flex: 1; min-height: 0; overflow: auto; padding: 12px 0 8px; -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 32px); mask-image: linear-gradient(to bottom, transparent 0, #000 32px); }
+.stream-inner { max-width: var(--composer-max); margin: 0 auto; padding: 0 24px; display: flex; flex-direction: column; gap: 2px; }
+
+.pending-banner { margin: 12px auto 4px; max-width: var(--composer-max); width: calc(100% - 48px); display: flex; align-items: center; gap: 12px; padding: 10px 10px 10px 12px; border-radius: 14px; background: var(--warn-bg); border: 1px solid var(--warn-border); transition: opacity var(--dur-3), transform var(--dur-3), margin var(--dur-3), max-height var(--dur-4); max-height: 120px; flex: none; }
+.pending-banner .txt { flex: 1; min-width: 0; font-size: 13.5px; line-height: 20px; }
+.pending-banner .txt b { font-weight: 600; }
+.pending-banner .txt small { display: block; font-size: 12px; color: var(--text-2); line-height: 18px; }
+.pending-banner .acts { display: flex; gap: 6px; flex: none; }
+.pending-banner.is-joining { background: var(--info-bg); border-color: var(--info-border); }
+.pending-banner.is-gone { opacity: 0; transform: translateY(-6px); max-height: 0; margin-top: 0; margin-bottom: 0; padding-top: 0; padding-bottom: 0; border-width: 0; overflow: hidden; }
+
+.composer-wrap { flex: none; padding: 8px 24px 16px; position: relative; }
+.composer { max-width: var(--composer-max); margin: 0 auto; border: 1px solid var(--border-2); border-radius: 16px; background: var(--bg-surface); box-shadow: var(--sh-2); transition: border-color var(--dur-1), box-shadow var(--dur-1); position: relative; }
+.composer:focus-within { border-color: var(--border-3); box-shadow: var(--sh-2), 0 0 0 3px var(--bg-subtle); }
+.composer textarea { width: 100%; resize: none; border: 0; outline: none; background: transparent; padding: 12px 14px 4px; font-size: var(--fs-chat); line-height: 22px; min-height: 48px; max-height: 160px; display: block; }
+.composer__bar { display: flex; align-items: center; gap: 2px; padding: 4px 8px 8px; }
+.composer__bar .hint { font-size: 12px; color: var(--text-3); margin-left: 6px; display: flex; align-items: center; gap: 4px; white-space: nowrap; }
+.send-btn { margin-left: auto; width: 32px; height: 32px; border-radius: 9px; background: var(--accent); color: var(--accent-fg); display: inline-flex; align-items: center; justify-content: center; transition: opacity var(--dur-1), transform var(--dur-2); }
+.send-btn:active { transform: scale(.94); }
+.send-btn[disabled] { opacity: .3; }
+.reply-chip { display: none; }
+
+/* @ 提及选择器 */
+.mention-pop { position: absolute; left: 0; bottom: calc(100% + 8px); width: 320px; max-width: calc(100vw - 32px); background: var(--bg-raised); border-radius: 14px; box-shadow: var(--sh-pop); padding: 6px; z-index: var(--z-popover); display: none; }
+.mention-pop.show { display: block; animation: rise var(--dur-2) var(--ease-standard); }
+.mention-pop h6 { font-size: 11.5px; font-weight: 600; color: var(--text-3); padding: 8px 10px 4px; }
+.mention-opt { display: flex; align-items: center; gap: 10px; width: 100%; height: 40px; padding: 0 10px; border-radius: 9px; text-align: left; font-size: 13.5px; }
+.mention-opt .n { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; }
+.mention-opt .n b { font-weight: 500; }
+.mention-opt .s { font-size: 12px; color: var(--text-3); white-space: nowrap; display: flex; align-items: center; gap: 5px; }
+.mention-opt[aria-selected="true"] { background: var(--bg-muted); }
+.mention-opt[aria-disabled="true"] { opacity: .5; }
+.mention-pop footer { display: flex; gap: 12px; padding: 8px 10px 4px; border-top: 1px solid var(--border-1); margin-top: 4px; font-size: 11.5px; color: var(--text-3); }
+
+/* E2EE 详情弹层 */
+.e2ee-pop { position: absolute; top: calc(100% + 8px); left: 0; width: 360px; background: var(--bg-raised); border-radius: 14px; box-shadow: var(--sh-pop); padding: 16px; z-index: var(--z-popover); display: none; }
+.e2ee-pop.show { display: block; animation: rise var(--dur-2) var(--ease-standard); }
+.e2ee-pop h4 { font-size: 14.5px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+.e2ee-pop ul { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+.e2ee-pop li { list-style: none; display: flex; gap: 8px; font-size: 13px; line-height: 20px; color: var(--text-2); }
+.e2ee-pop li svg { margin-top: 3px; color: var(--ok); }
+details.tech { margin-top: 12px; border-top: 1px solid var(--border-1); padding-top: 10px; }
+details.tech summary { cursor: pointer; font-size: 12.5px; color: var(--text-2); list-style: none; display: flex; align-items: center; gap: 6px; }
+details.tech summary::-webkit-details-marker { display: none; }
+details.tech[open] summary svg { transform: rotate(90deg); }
+details.tech summary svg { transition: transform var(--dur-2); }
+.kv { margin-top: 8px; display: grid; grid-template-columns: 84px 1fr; gap: 6px 10px; font-size: 12px; }
+.kv dt { color: var(--text-3); }
+.kv dd { font-family: var(--font-mono); color: var(--text-1); overflow-wrap: anywhere; font-size: 11.5px; }
+
+/* 右侧检查器 */
+.inspector { width: var(--inspector-w); flex: none; border-left: 1px solid var(--border-1); background: var(--bg-canvas); display: flex; flex-direction: column; transition: width var(--dur-3) var(--ease-standard), opacity var(--dur-2); overflow: hidden; }
+.inspector.is-collapsed { width: 0; opacity: 0; border-left-width: 0; }
+.inspector__head { flex: none; padding: 12px 12px 0; }
+.inspector__tabs { display: flex; gap: 2px; padding: 3px; border-radius: 10px; background: var(--bg-muted); }
+.inspector__tabs button { flex: 1; height: 30px; border-radius: 7px; font-size: 13px; font-weight: 500; color: var(--text-2); display: inline-flex; align-items: center; justify-content: center; gap: 5px; white-space: nowrap; }
+.inspector__tabs button[aria-selected="true"] { background: var(--bg-surface); color: var(--text-1); box-shadow: var(--sh-1); }
+.inspector__tabs .count { height: 16px; min-width: 16px; font-size: 10.5px; }
+.sheet-grab { display: none; }
+.inspector__body { flex: 1; min-height: 0; overflow: auto; padding: 14px 12px 24px; }
+.tabpanel { display: none; flex-direction: column; gap: 18px; }
+.tabpanel.show { display: flex; }
+.group h5 { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--text-3); padding: 0 4px 6px; }
+.group h5 .count { margin-left: 2px; }
+.group h5 .spacer + a, .group h5 a { font-weight: 500; color: var(--text-link); }
+.seat { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 12px; background: var(--bg-surface); border: 1px solid var(--border-1); position: relative; }
+.seat + .seat { margin-top: 6px; }
+.seat__info { flex: 1; min-width: 0; }
+.seat__name { display: flex; align-items: center; gap: 6px; font-size: 13.5px; font-weight: 600; min-width: 0; }
+.seat__name .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.seat__meta { display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--text-3); margin-top: 1px; white-space: nowrap; overflow: hidden; }
+.seat__meta .sep::before { content: "·"; }
+.seat__acts { display: flex; gap: 2px; flex: none; }
+.seat__acts .icon-btn { width: 30px; height: 30px; }
+.seat.is-paused .av, .seat.is-paused .seat__name .nm { opacity: .55; }
+.seat--pending { background: var(--warn-bg); border-color: var(--warn-border); flex-wrap: wrap; }
+.seat--pending .full { flex-basis: 100%; display: flex; gap: 6px; margin-top: 4px; }
+.seat--pending .full .btn { flex: 1; }
+.seat-confirm { flex-basis: 100%; display: flex; align-items: center; gap: 6px; margin-top: 6px; padding-top: 8px; border-top: 1px dashed var(--border-2); font-size: 12px; color: var(--text-2); }
+.seat-confirm span { flex: 1; line-height: 17px; }
+.seat.has-confirm { flex-wrap: wrap; }
+.add-row { display: flex; align-items: center; gap: 8px; width: 100%; height: 38px; padding: 0 10px; margin-top: 8px; border-radius: 10px; border: 1px dashed var(--border-2); color: var(--text-2); font-size: 13px; }
+.add-row:hover { background: var(--bg-surface); color: var(--text-1); }
+.panel-card { background: var(--bg-surface); border: 1px solid var(--border-1); border-radius: 14px; padding: 14px; }
+.panel-card h4 { font-size: 13.5px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+.panel-card p { font-size: 12.5px; line-height: 19px; color: var(--text-2); margin-top: 4px; }
+.quick-agent { display: flex; align-items: center; gap: 10px; padding: 8px 0; }
+.quick-agent + .quick-agent { border-top: 1px solid var(--border-1); }
+.quick-agent .t { flex: 1; min-width: 0; font-size: 13px; line-height: 18px; }
+.quick-agent .t small { display: block; font-size: 12px; color: var(--text-3); }
+.feed { display: flex; flex-direction: column; }
+.feed-item { display: grid; grid-template-columns: 20px 1fr; gap: 10px; padding: 8px 4px; font-size: 12.5px; line-height: 19px; color: var(--text-2); }
+.feed-item .ic { width: 20px; height: 20px; border-radius: 6px; background: var(--bg-surface); border: 1px solid var(--border-1); display: flex; align-items: center; justify-content: center; color: var(--text-2); }
+.feed-item .ic svg { width: 11px; height: 11px; }
+.feed-item b { color: var(--text-1); font-weight: 500; }
+.feed-item time { display: block; font-size: 11.5px; color: var(--text-3); }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip-f { height: 26px; padding: 0 10px; border-radius: var(--r-full); border: 1px solid var(--border-2); font-size: 12px; color: var(--text-2); background: var(--bg-surface); }
+.chip-f[aria-pressed="true"] { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+
+/* ---- 手机端协作房间 ---- */
+[data-device="mobile"] .room-screen .rail { display: none; }
+[data-device="mobile"] .room-head { height: 54px; padding: 0 8px 0 4px; gap: 4px; }
+[data-device="mobile"] .room-head .d-only { display: none; }
+[data-device="mobile"] .room-head .m-only { display: inline-flex; }
+[data-device="mobile"] .room-head__title { flex-direction: column; align-items: flex-start; gap: 0; flex: 1; }
+[data-device="mobile"] .room-head__title h2 { font-size: 15px; max-width: 220px; }
+.m-sub { display: none; }
+[data-device="mobile"] .m-sub { display: flex; align-items: center; gap: 4px; font-size: 11.5px; color: var(--ok); white-space: nowrap; line-height: 16px; }
+[data-device="mobile"] .m-sub .muted { color: var(--text-3); }
+[data-device="mobile"] .m-sub svg { width: 11px; height: 11px; stroke-width: 2.2; }
+[data-device="mobile"] .stream-inner { padding: 0 12px; }
+[data-device="mobile"] .stream { -webkit-mask-image: linear-gradient(to bottom, transparent 0, transparent 14px, #000 52px); mask-image: linear-gradient(to bottom, transparent 0, transparent 14px, #000 52px); }
+[data-device="mobile"] .msg { padding: 8px 8px; column-gap: 10px; }
+[data-device="mobile"] .msg .av-36 { --size: 32px; }
+[data-device="mobile"] .msg__body { font-size: 15px; line-height: 24px; }
+[data-device="mobile"] .msg__actions { display: none !important; }
+[data-device="mobile"] .pending-banner { width: calc(100% - 24px); margin: 10px auto 2px; flex-wrap: wrap; padding: 10px 12px; }
+[data-device="mobile"] .pending-banner .acts { flex-basis: 100%; }
+[data-device="mobile"] .pending-banner .acts .btn { flex: 1; height: 40px; font-size: 14px; }
+[data-device="mobile"] .composer-wrap { padding: 6px 10px calc(var(--safe-bottom) + 6px); background: var(--bg-surface); border-top: 1px solid var(--border-1); }
+[data-device="mobile"] .composer { border-radius: 22px; box-shadow: none; display: flex; align-items: flex-end; background: var(--bg-subtle); border-color: var(--border-1); }
+[data-device="mobile"] .composer textarea { padding: 10px 4px 10px 6px; min-height: 42px; font-size: 16px; line-height: 22px; }
+[data-device="mobile"] .composer__bar { padding: 4px; order: 0; }
+[data-device="mobile"] .composer__bar .hint, [data-device="mobile"] .composer__bar .d-only { display: none; }
+[data-device="mobile"] .composer .lead { padding: 4px 0 4px 4px; }
+.composer .lead { display: none; }
+[data-device="mobile"] .composer .lead { display: flex; }
+[data-device="mobile"] .composer .lead .icon-btn { width: 34px; height: 34px; border-radius: 50%; }
+[data-device="mobile"] .send-btn { width: 34px; height: 34px; border-radius: 50%; }
+[data-device="mobile"] .mention-pop { left: 8px; right: 8px; width: auto; }
+[data-device="mobile"] .e2ee-pop { position: fixed; left: 12px; right: 12px; width: auto; top: 110px; }
+/* 检查器在手机端变为底部抽屉（同一组件，不同呈现） */
+[data-device="mobile"] .inspector { position: absolute; left: 0; right: 0; bottom: 0; width: auto !important; height: 78%; z-index: var(--z-modal); border-left: 0; border-radius: 20px 20px 0 0; box-shadow: var(--sh-pop); opacity: 1 !important;
+  transform: translateY(102%); transition: transform var(--dur-4) var(--ease-sheet); background: var(--bg-canvas); }
+[data-device="mobile"] .inspector.sheet-open { transform: none; }
+[data-device="mobile"] .sheet-grab { display: block; width: 36px; height: 5px; border-radius: 3px; background: var(--border-3); margin: 8px auto 6px; }
+[data-device="mobile"] .inspector__head { padding: 0 14px; }
+[data-device="mobile"] .inspector__tabs button { height: 34px; font-size: 13.5px; }
+[data-device="mobile"] .inspector__body { padding: 14px 14px calc(var(--safe-bottom) + 16px); }
+[data-device="mobile"] .seat { padding: 10px 12px; }
+[data-device="mobile"] .seat__acts .icon-btn { width: 40px; height: 40px; }
+[data-device="mobile"] .seat--pending .full .btn { height: 40px; }
+
+/* =====================================================================
+   5) Agent 接入中心
+   ===================================================================== */
+.ag-target { display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 6px 0 12px; border-radius: 10px; border: 1px solid var(--border-2); background: var(--bg-surface); font-size: 13.5px; box-shadow: var(--sh-1); white-space: nowrap; }
+.ag-target .select { border: 0; height: 30px; box-shadow: none; padding-left: 4px; font-weight: 600; width: auto; background-color: transparent; }
+.sec-head { display: flex; align-items: center; gap: 10px; margin: 28px 0 12px; }
+.sec-head:first-of-type { margin-top: 8px; }
+.sec-head h2 { font-size: 16px; font-weight: 650; letter-spacing: -0.01em; white-space: nowrap; }
+.sec-head p { font-size: 13px; color: var(--text-2); }
+.cloud-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.agent-card { display: flex; align-items: center; gap: 14px; padding: 16px 16px 16px 18px; border-radius: 16px; background: var(--bg-surface); border: 1px solid var(--border-1); box-shadow: var(--sh-1); text-align: left; transition: border-color var(--dur-1), box-shadow var(--dur-2); min-width: 0; width: 100%; }
+.agent-card:hover { border-color: var(--border-2); box-shadow: var(--sh-2); }
+.agent-card[aria-expanded="true"] { border-color: var(--text-1); box-shadow: 0 0 0 1px var(--text-1), var(--sh-2); }
+.agent-card .info { flex: 1; min-width: 0; }
+.agent-card .info b { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 600; }
+.agent-card .info p { font-size: 13px; line-height: 19px; color: var(--text-2); margin-top: 3px; }
+.agent-card .go { color: var(--text-3); display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 500; white-space: nowrap; }
+.agent-card[aria-expanded="true"] .go { color: var(--text-1); }
+
+.connect { margin-top: 14px; border-radius: 18px; border: 1px solid var(--border-2); background: var(--bg-surface); box-shadow: var(--sh-2); overflow: hidden; display: none; }
+.connect.show { display: block; animation: rise var(--dur-3) var(--ease-standard); }
+.connect__head { display: flex; align-items: center; gap: 10px; padding: 14px 14px 14px 20px; border-bottom: 1px solid var(--border-1); }
+.connect__head h3 { font-size: 15px; font-weight: 600; flex: 1; min-width: 0; line-height: 21px; }
+.connect__head h3 small { display: block; font-size: 12.5px; font-weight: 400; color: var(--text-3); line-height: 18px; }
+.connect__steps { display: grid; grid-template-columns: 0.9fr 1.35fr 1fr; }
+.step { padding: 18px 20px 20px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.step + .step { border-left: 1px solid var(--border-1); }
+.step__n { display: flex; align-items: center; gap: 8px; font-size: 13.5px; font-weight: 600; }
+.step__n i { font-style: normal; width: 22px; height: 22px; border-radius: 50%; border: 1px solid var(--border-2); display: inline-flex; align-items: center; justify-content: center; font-size: 12px; color: var(--text-2); flex: none; }
+.step.done .step__n i { background: var(--ok); border-color: var(--ok); color: #fff; }
+.step.active .step__n i { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+.opt-row { display: flex; align-items: center; gap: 10px; font-size: 13px; line-height: 19px; padding: 10px 12px; border-radius: 10px; background: var(--bg-canvas); border: 1px solid var(--border-1); }
+.opt-row .t { flex: 1; min-width: 0; }
+.opt-row .t small { display: block; color: var(--text-3); font-size: 12px; }
+.facts { display: flex; flex-direction: column; gap: 6px; font-size: 12.5px; color: var(--text-2); }
+.facts span { display: flex; align-items: center; gap: 6px; }
+.facts svg { color: var(--text-3); }
+.cmd { border-radius: 12px; background: #161615; color: #e9e9e4; font-family: var(--font-mono); font-size: 12px; line-height: 19px; overflow: hidden; }
+[data-theme="dark"] .cmd { background: #0b0b0a; border: 1px solid var(--border-2); }
+.cmd__bar { display: flex; align-items: center; justify-content: space-between; height: 34px; padding: 0 6px 0 12px; border-bottom: 1px solid rgba(255,255,255,.08); font-family: var(--font-sans); font-size: 12px; color: #9c9c94; }
+.cmd pre { padding: 10px 12px 12px; white-space: pre-wrap; word-break: break-all; max-height: 230px; overflow: auto; }
+.cmd .p { color: #7f7f78; user-select: none; }
+.cmd .hl { color: #8fd0ff; }
+.cmd .c { color: #7f7f78; font-style: italic; }
+.cmd .btn-copy { height: 26px; padding: 0 9px; border-radius: 6px; background: rgba(255,255,255,.1); color: #fff; font-size: 12px; display: inline-flex; align-items: center; gap: 5px; }
+.cmd .btn-copy:hover { background: rgba(255,255,255,.16); }
+details.more summary { cursor: pointer; font-size: 12.5px; color: var(--text-2); list-style: none; display: flex; align-items: center; gap: 4px; }
+details.more summary::-webkit-details-marker { display: none; }
+details.more[open] summary svg { transform: rotate(90deg); }
+details.more p { font-size: 12px; line-height: 18px; color: var(--text-2); margin-top: 6px; }
+.timeline { display: flex; flex-direction: column; }
+.tl { display: grid; grid-template-columns: 18px 1fr; gap: 10px; position: relative; padding-bottom: 14px; font-size: 13px; line-height: 19px; }
+.tl::before { content: ""; position: absolute; left: 8.5px; top: 20px; bottom: 0; width: 1px; background: var(--border-2); }
+.tl:last-child::before { display: none; }
+.tl .m { width: 18px; height: 18px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-top: 1px; }
+.tl .m svg { width: 11px; height: 11px; stroke-width: 2.4; }
+.tl.ok .m { background: var(--ok); color: #fff; }
+.tl.wait .m { background: var(--warn-bg); border: 1.5px solid var(--presence-pending); }
+.tl.wait .m::after { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--presence-pending); animation: pulse 1.6s infinite; }
+.tl.idle .m { border: 1.5px dashed var(--border-3); }
+.tl.idle { color: var(--text-3); }
+.tl small { display: block; color: var(--text-3); font-size: 12px; }
+.req { margin-top: 2px; padding: 12px; border-radius: 12px; background: var(--warn-bg); border: 1px solid var(--warn-border); display: flex; flex-direction: column; gap: 10px; }
+.req .who { display: flex; align-items: center; gap: 10px; font-size: 13px; line-height: 18px; min-width: 0; }
+.req .who small { display: block; color: var(--text-2); font-size: 11.5px; font-family: var(--font-mono); }
+.req .acts { display: flex; gap: 6px; }
+.req .acts .btn { flex: 1; }
+.req.ok { background: var(--ok-bg); border-color: var(--ok-border); }
+
+.helper-strip { display: flex; align-items: center; gap: 10px; padding: 10px 12px 10px 14px; border-radius: 12px; background: var(--bg-surface); border: 1px solid var(--border-1); font-size: 13px; margin-bottom: 12px; }
+.helper-strip .t { flex: 1; min-width: 0; }
+.helper-strip .t small { color: var(--text-3); margin-left: 6px; }
+.local-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.lc { display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: 14px; background: var(--bg-surface); border: 1px solid var(--border-1); min-width: 0; }
+.lc__top { display: flex; align-items: center; gap: 10px; }
+.lc__top b { font-size: 14px; font-weight: 600; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lc__top small { display: block; font-size: 12px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lc__top > div { min-width: 0; flex: 1; }
+.lc__st { font-size: 12px; color: var(--text-2); display: flex; align-items: center; gap: 6px; min-height: 18px; }
+.lc .btn { align-self: flex-start; }
+.desk-note { display: none; }
+[data-device="mobile"] .page-inner { padding: 16px 16px calc(var(--safe-bottom) + 84px); }
+[data-device="mobile"] .page-head { flex-direction: column; align-items: stretch; gap: 12px; margin-bottom: 12px; }
+[data-device="mobile"] .page-head h1 { font-size: 26px; line-height: 34px; }
+[data-device="mobile"] .page-head .actions { margin-left: 0; }
+[data-device="mobile"] .ag-target { width: 100%; }
+[data-device="mobile"] .ag-target .select { flex: 1; }
+[data-device="mobile"] .cloud-grid { grid-template-columns: 1fr; gap: 10px; }
+[data-device="mobile"] .agent-card { padding: 14px; }
+[data-device="mobile"] .agent-card .go span { display: none; }
+[data-device="mobile"] .connect { margin-top: 10px; }
+[data-device="mobile"] .connect__head { padding: 12px 10px 12px 16px; }
+[data-device="mobile"] .connect__steps { grid-template-columns: 1fr; }
+[data-device="mobile"] .step { padding: 14px 16px; gap: 10px; }
+[data-device="mobile"] .step + .step { border-left: 0; border-top: 1px solid var(--border-1); }
+[data-device="mobile"] .step.done:not(.is-open) .m-collapse { display: none; }
+[data-device="mobile"] .step.done:not(.is-open) .m-line { display: flex; }
+[data-device="mobile"] .step.done:not(.is-open) .step__n { margin-bottom: -2px; }
+[data-device="mobile"] .connect__head .d-only { display: none; }
+.step .m-line { display: none; }
+.step .m-collapse { display: flex; flex-direction: column; gap: 12px; }
+[data-device="mobile"] .req .acts .btn { height: 42px; font-size: 14.5px; }
+[data-device="mobile"] .cmd pre { font-size: 11.5px; line-height: 18px; }
+[data-device="mobile"] .local-grid, [data-device="mobile"] .helper-strip { display: none; }
+[data-device="mobile"] .desk-note { display: flex; flex-direction: column; gap: 12px; padding: 16px; border-radius: 16px; background: var(--bg-surface); border: 1px solid var(--border-1); }
+[data-device="mobile"] .sec-head { flex-wrap: wrap; row-gap: 2px; margin: 22px 0 10px; }
+[data-device="mobile"] .sec-head p { flex-basis: 100%; }
+[data-device="mobile"] .rooms-grid { grid-template-columns: 1fr; gap: 10px; }
+[data-device="mobile"] .toolbar .search { flex: 1; width: auto; }
+[data-device="mobile"] .toolbar .seg, [data-device="mobile"] .toolbar .spacer, [data-device="mobile"] .toolbar > .faint, [data-device="mobile"] .page-head .actions .btn-secondary { display: none; }
+[data-device="mobile"] .page-head .actions .btn-label { display: none; }
+[data-device="mobile"] .drawer { width: 100%; top: 6%; border-radius: 20px 20px 0 0; transform: translateY(104%); }
+[data-device="mobile"] .drawer.show { transform: none; }
+[data-device="mobile"] .drawer__body { padding: 16px; }
+[data-device="mobile"] .drawer__foot { padding: 12px 16px calc(var(--safe-bottom) + 8px); }
+[data-device="mobile"] .drawer__foot .note { display: none; }
+[data-device="mobile"] .drawer__foot .btn { flex: 1; height: 44px; }
+[data-device="mobile"] .tpl-list { grid-template-columns: 1fr; }
+[data-device="mobile"] .attention { flex-wrap: wrap; }
+[data-device="mobile"] .attention .btn { width: 100%; }
+[data-device="mobile"] .role { grid-template-columns: 1fr; gap: 0; }
+
+/* =====================================================================
+   2) 登录与首次引导
+   ===================================================================== */
+.auth { min-height: 100%; display: flex; flex-direction: column; background: var(--bg-canvas); }
+.auth__top { display: flex; align-items: center; justify-content: space-between; padding: 20px 28px; }
+.auth__center { flex: 1; display: flex; align-items: center; justify-content: center; padding: 20px 20px 64px; }
+.auth-card { width: 400px; max-width: 100%; background: var(--bg-surface); border: 1px solid var(--border-1); border-radius: 20px; box-shadow: var(--sh-3); padding: 32px; }
+.auth-card h1 { font-size: 22px; line-height: 30px; font-weight: 650; letter-spacing: -0.016em; }
+.auth-card > p { color: var(--text-2); margin-top: 6px; font-size: 14px; }
+.btn-google { width: 100%; height: 42px; border-radius: 10px; border: 1px solid var(--border-2); background: var(--bg-surface); font-weight: 500; display: flex; align-items: center; justify-content: center; gap: 10px; box-shadow: var(--sh-1); }
+.btn-google:hover { background: var(--bg-subtle); }
+.or { display: flex; align-items: center; gap: 12px; color: var(--text-3); font-size: 12px; margin: 20px 0; }
+.or::before, .or::after { content: ""; flex: 1; height: 1px; background: var(--border-1); }
+.code-input { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
+.code-input span { height: 46px; border-radius: 10px; border: 1px solid var(--border-2); display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 600; font-family: var(--font-mono); background: var(--bg-surface); }
+.code-input span.cur { border-color: var(--text-1); box-shadow: 0 0 0 3px var(--bg-subtle); }
+.auth-foot { margin-top: 20px; font-size: 12.5px; color: var(--text-3); line-height: 19px; text-align: center; }
+.onb { width: 760px; max-width: 100%; }
+.onb h1 { font-size: 28px; line-height: 36px; font-weight: 650; letter-spacing: -0.02em; }
+.onb > p { color: var(--text-2); margin-top: 8px; font-size: 15px; }
+.onb-progress { display: flex; gap: 8px; margin-top: 20px; }
+.onb-progress span { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px 0 6px; border-radius: var(--r-full); background: var(--bg-surface); border: 1px solid var(--border-1); font-size: 12.5px; color: var(--text-2); white-space: nowrap; }
+.onb-progress span i { font-style: normal; width: 18px; height: 18px; border-radius: 50%; background: var(--bg-muted); display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; }
+.onb-progress span.cur { color: var(--text-1); border-color: var(--border-3); }
+.onb-progress span.cur i { background: var(--accent); color: var(--accent-fg); }
+.onb-choices { margin-top: 24px; display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.choice { padding: 22px; border-radius: 18px; background: var(--bg-surface); border: 1px solid var(--border-1); box-shadow: var(--sh-1); display: flex; flex-direction: column; gap: 12px; text-align: left; transition: border-color var(--dur-1), box-shadow var(--dur-2); }
+.choice:hover { border-color: var(--border-3); box-shadow: var(--sh-2); }
+.choice h3 { font-size: 17px; font-weight: 650; }
+.choice p { font-size: 13.5px; line-height: 21px; color: var(--text-2); }
+.choice .opts { display: flex; flex-wrap: wrap; gap: 6px; }
+.choice .go { margin-top: auto; display: flex; align-items: center; gap: 6px; font-weight: 600; font-size: 13.5px; }
+.onb-alt { margin-top: 16px; display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-radius: 14px; border: 1px dashed var(--border-2); font-size: 13.5px; color: var(--text-2); }
+.onb-alt .input { flex: 1; height: 34px; }
+[data-device="mobile"] .auth__top { padding: 14px 18px; }
+[data-device="mobile"] .auth__center { align-items: flex-start; padding: 8px 16px 40px; }
+[data-device="mobile"] .auth-card { padding: 24px 20px; box-shadow: var(--sh-1); }
+[data-device="mobile"] .onb-choices { grid-template-columns: 1fr; }
+[data-device="mobile"] .onb h1 { font-size: 24px; line-height: 32px; }
+[data-device="mobile"] .onb-progress { flex-wrap: wrap; }
+[data-device="mobile"] .onb-alt { flex-wrap: wrap; }
+[data-device="mobile"] .onb-alt .input { flex-basis: 100%; }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-logo" viewBox="0 0 24 24"><circle cx="8.3" cy="12" r="3.3" stroke-width="2.2"/><rect x="13" y="8.7" width="6.6" height="6.6" rx="1.9" stroke-width="2.2"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="4.5" y="10.5" width="15" height="10.5" rx="2.5"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 21.5s7.5-3.6 7.5-9.6V5.4L12 2.6 4.5 5.4v6.5c0 6 7.5 9.6 7.5 9.6z"/><path d="m9 11.8 2.1 2.1L15.2 9.8"/></symbol>
+    <symbol id="i-cloud" viewBox="0 0 24 24"><path d="M17.5 19H8.5a6 6 0 1 1 5.66-8h.84a4.5 4.5 0 1 1 2.5 8z"/></symbol>
+    <symbol id="i-laptop" viewBox="0 0 24 24"><rect x="4" y="4.5" width="16" height="11" rx="2"/><path d="M2 19.5h20"/></symbol>
+    <symbol id="i-terminal" viewBox="0 0 24 24"><path d="m5 17 5-5-5-5"/><path d="M12.5 18h7"/></symbol>
+    <symbol id="i-users" viewBox="0 0 24 24"><path d="M16 21v-1.5a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4V21"/><circle cx="9.5" cy="7.5" r="3.8"/><path d="M21 21v-1.5a4 4 0 0 0-3-3.85M15.5 3.8a3.8 3.8 0 0 1 0 7.4"/></symbol>
+    <symbol id="i-user-plus" viewBox="0 0 24 24"><path d="M15 21v-1.5a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4V21"/><circle cx="9" cy="7.5" r="3.8"/><path d="M19 8v6M16 11h6"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20.5 20.5-4.2-4.2"/></symbol>
+    <symbol id="i-at" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.8"/><path d="M15.8 8v5.2a2.8 2.8 0 0 0 5.6 0V12A9.4 9.4 0 1 0 17.6 19.6"/></symbol>
+    <symbol id="i-send" viewBox="0 0 24 24"><path d="M12 19V5.5M6 11l6-6 6 6"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6.5 9.5 17 4 11.5"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+    <symbol id="i-chev-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+    <symbol id="i-chev-right" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></symbol>
+    <symbol id="i-chev-left" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="12" height="12" rx="2.2"/><path d="M5 15H4.5A1.5 1.5 0 0 1 3 13.5v-9A1.5 1.5 0 0 1 4.5 3h9A1.5 1.5 0 0 1 15 4.5V5"/></symbol>
+    <symbol id="i-pause" viewBox="0 0 24 24"><rect x="6.5" y="5" width="3.5" height="14" rx="1"/><rect x="14" y="5" width="3.5" height="14" rx="1"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="M7.5 4.8v14.4a.8.8 0 0 0 1.2.7l11.4-7.2a.8.8 0 0 0 0-1.4L8.7 4.1a.8.8 0 0 0-1.2.7z"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3.5 6.5h17M9 6.5V4.5h6v2M18.5 6.5l-.9 13a1.6 1.6 0 0 1-1.6 1.5H8a1.6 1.6 0 0 1-1.6-1.5l-.9-13"/></symbol>
+    <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 20v-6M4 10V4M12 20v-8M12 8V4M20 20v-4M20 12V4M2 14h4M10 8h4M18 16h4"/></symbol>
+    <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 8.5a6 6 0 0 1 12 0c0 6.5 2.8 8.5 2.8 8.5H3.2S6 15 6 8.5"/><path d="M10.3 20.5a2 2 0 0 0 3.4 0"/></symbol>
+    <symbol id="i-arrow-right" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+    <symbol id="i-ext" viewBox="0 0 24 24"><path d="M14 4h6v6M10.5 13.5 20 4M18 14v4.5A1.5 1.5 0 0 1 16.5 20h-11A1.5 1.5 0 0 1 4 18.5v-11A1.5 1.5 0 0 1 5.5 6H10"/></symbol>
+    <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5.5" cy="12" r="1.1"/><circle cx="12" cy="12" r="1.1"/><circle cx="18.5" cy="12" r="1.1"/></symbol>
+    <symbol id="i-panel" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M15 4v16"/></symbol>
+    <symbol id="i-msg" viewBox="0 0 24 24"><path d="M20.5 14.5a2 2 0 0 1-2 2H8l-4.5 4V5.5a2 2 0 0 1 2-2h13a2 2 0 0 1 2 2z"/></symbol>
+    <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="7" height="7" rx="1.8"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.8"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.8"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.8"/></symbol>
+    <symbol id="i-bot" viewBox="0 0 24 24"><rect x="3.5" y="8" width="17" height="12" rx="3"/><path d="M12 8V4.5M9 4.5h6"/><path d="M9 13.5v1M15 13.5v1"/></symbol>
+    <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 13.5a4.5 4.5 0 0 0 6.8.5l2.8-2.8a4.5 4.5 0 0 0-6.4-6.4l-1.6 1.6"/><path d="M14 10.5a4.5 4.5 0 0 0-6.8-.5l-2.8 2.8a4.5 4.5 0 0 0 6.4 6.4l1.6-1.6"/></symbol>
+    <symbol id="i-phone" viewBox="0 0 24 24"><rect x="6.5" y="2.5" width="11" height="19" rx="2.5"/><path d="M11 18h2"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></symbol>
+    <symbol id="i-activity" viewBox="0 0 24 24"><path d="M21 12h-3.5l-2.8 8L9.3 4l-2.8 8H3"/></symbol>
+    <symbol id="i-list-check" viewBox="0 0 24 24"><path d="M11 6.5h10M11 12h10M11 17.5h10"/><path d="m3 6.5 1.5 1.5L7.5 5M3 12l1.5 1.5L7.5 10.5M3 17.5 4.5 19l3-3"/></symbol>
+    <symbol id="i-key" viewBox="0 0 24 24"><circle cx="7.5" cy="15.5" r="4"/><path d="m10.4 12.6 9.1-9.1M16.5 6.5l2.5 2.5M13.5 9.5l2 2"/></symbol>
+    <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.4 2.4 3.4 5.4 3.4 8.5s-1 6.1-3.4 8.5c-2.4-2.4-3.4-5.4-3.4-8.5s1-6.1 3.4-8.5"/></symbol>
+    <symbol id="i-webhook" viewBox="0 0 24 24"><path d="M18 17h-6c-1.1 0-1.9.9-2.4 1.9A3.8 3.8 0 0 1 2.5 17c0-.7.2-1.4.6-2"/><path d="m6.2 17 3-5.6c.5-.9.1-2-.5-2.9a3.8 3.8 0 1 1 6.6-3.9"/><path d="m12 6.2 3 5.5c.5.9 1.8 1.3 3 1.3a3.8 3.8 0 0 1 0 7.6"/></symbol>
+    <symbol id="i-cpu" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9.5 9.5h5v5h-5zM9 2.5V6M15 2.5V6M9 18v3.5M15 18v3.5M2.5 9H6M2.5 15H6M18 9h3.5M18 15h3.5"/></symbol>
+    <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M2.5 12h2M19.5 12h2M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20.5 13.2A8.5 8.5 0 1 1 10.8 3.5a6.6 6.6 0 0 0 9.7 9.7z"/></symbol>
+    <symbol id="i-code" viewBox="0 0 24 24"><path d="m16 18 6-6-6-6M8 6l-6 6 6 6"/></symbol>
+    <symbol id="i-bulb" viewBox="0 0 24 24"><path d="M9 18h6M10 21.5h4M12 2.5a6.5 6.5 0 0 0-3.8 11.8V16h7.6v-1.7A6.5 6.5 0 0 0 12 2.5z"/></symbol>
+    <symbol id="i-scale" viewBox="0 0 24 24"><path d="M12 3.5v17M5 7.5h14M8 20.5h8"/><path d="m5 7.5-2.8 6.5a3.4 3.4 0 0 0 5.6 0zM19 7.5l-2.8 6.5a3.4 3.4 0 0 0 5.6 0z"/></symbol>
+    <symbol id="i-blocks" viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="7.5" height="7.5" rx="1.6"/><rect x="13" y="13" width="7.5" height="7.5" rx="1.6"/><path d="M13 7.2h3.8a2 2 0 0 1 2 2V11M11 16.8H7.2a2 2 0 0 1-2-2V13"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 3H6.5A1.5 1.5 0 0 0 5 4.5v15A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5V8z"/><path d="M14 3v5h5M8.5 13h7M8.5 16.5h4.5"/></symbol>
+    <symbol id="i-reply" viewBox="0 0 24 24"><path d="M9 16.5 4 11.5l5-5"/><path d="M20 18.5v-2a5 5 0 0 0-5-5H4"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20.5 12a8.5 8.5 0 0 1-14.7 5.8L3.5 15.5M3.5 12A8.5 8.5 0 0 1 18.2 6.2l2.3 2.3M20.5 3.5v5h-5M3.5 20.5v-5h5"/></symbol>
+    <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4.5 21a7.5 7.5 0 0 1 15 0"/></symbol>
+    <symbol id="i-mail" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="m3.5 7 8.5 6 8.5-6"/></symbol>
+    <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 16v-4.5M12 8h.01"/></symbol>
+    <symbol id="i-anchor" viewBox="0 0 24 24"><circle cx="12" cy="5" r="2.3"/><path d="M12 7.3V21M5.5 12H3a9 9 0 0 0 18 0h-2.5M8.5 11h7"/></symbol>
+    <symbol id="i-share" viewBox="0 0 24 24"><path d="M4.5 12.5v6A1.5 1.5 0 0 0 6 20h12a1.5 1.5 0 0 0 1.5-1.5v-6M16 7l-4-4-4 4M12 3v12"/></symbol>
+    <symbol id="i-hand" viewBox="0 0 24 24"><path d="M12 4v8M15 5v7M9 6v7M18 8v6a6 6 0 0 1-6 6h-.5a6 6 0 0 1-5-2.7L4 13.5a1.6 1.6 0 0 1 2.6-1.8L9 14"/></symbol>
+  </defs>
+</svg>
+
+<header class="pv-bar" id="pvBar">
+  <div class="pv-bar__title">Multi-Agent Project Room<small>重设计原型 · 2026-11-25</small></div>
+  <div class="pv-seg" role="group" aria-label="界面">
+    <button data-go="landing">官网首页</button>
+    <button data-go="auth">登录与引导</button>
+    <button data-go="rooms">房间列表</button>
+    <button data-go="room">协作房间</button>
+    <button data-go="agents">Agent 接入中心</button>
+  </div>
+  <div class="pv-seg" role="group" aria-label="设备">
+    <button data-device-go="desktop">桌面端 1440</button>
+    <button data-device-go="mobile">手机端 390</button>
+  </div>
+  <div class="pv-seg" role="group" aria-label="主题">
+    <button data-theme-go="light">浅色</button>
+    <button data-theme-go="dark">深色</button>
+  </div>
+  <span class="pv-hint">可点击：批准入房 · 面板 Tab · 输入 @ · Grok Bot 接入 · 新建房间</span>
+</header>
+
+<main class="pv-stage" id="stage" data-device="desktop">
+<div class="device" id="device">
+<div class="device-inner">
+  <div class="ios-status" id="iosStatus"><span>9:41</span><span class="icons">
+    <svg width="18" height="12" viewBox="0 0 18 12" fill="currentColor"><rect x="0" y="8" width="3" height="4" rx="1"/><rect x="5" y="5.5" width="3" height="6.5" rx="1"/><rect x="10" y="3" width="3" height="9" rx="1"/><rect x="15" y="0" width="3" height="12" rx="1"/></svg>
+    <svg width="16" height="12" viewBox="0 0 16 12" fill="currentColor"><path d="M8 2.5c2.2 0 4.2.9 5.7 2.3l1.1-1.2A9.6 9.6 0 0 0 8 .8 9.6 9.6 0 0 0 1.2 3.6l1.1 1.2A8 8 0 0 1 8 2.5zm0 3.3c1.3 0 2.5.5 3.4 1.3l1.1-1.2A6.5 6.5 0 0 0 8 4.1a6.5 6.5 0 0 0-4.5 1.8l1.1 1.2c.9-.8 2.1-1.3 3.4-1.3zm0 3.3c-.5 0-.9.2-1.2.5L8 11l1.2-1.4c-.3-.3-.7-.5-1.2-.5z"/></svg>
+    <svg width="27" height="13" viewBox="0 0 27 13" fill="none"><rect x=".5" y=".5" width="23" height="12" rx="3.5" stroke="currentColor" opacity=".4"/><rect x="2" y="2" width="20" height="9" rx="2" fill="currentColor"/><rect x="25" y="4.5" width="1.5" height="4" rx=".75" fill="currentColor" opacity=".45"/></svg>
+  </span></div>
+
+  <div class="screens">
+
+  <!-- ===================================================== 1) 官网首页 -->
+  <section class="screen" data-screen="landing" aria-label="官网首页">
+   <div class="lp">
+    <nav class="lp-nav"><div class="lp-wrap">
+      <a class="brand" href="#"><span class="brand-mark"><svg class="i"><use href="#i-logo"/></svg></span>Project Room<small class="hide-m">多智能体协作室</small></a>
+      <div class="lp-links"><a href="#lp-kinds">Agent 接入</a><a href="#lp-safe">安全</a><a href="#lp-tpl">协作模板</a></div>
+      <div class="actions">
+        <button class="btn btn-ghost hide-m" data-go="auth">登录</button>
+        <button class="btn btn-primary" data-go="auth">进入协作室</button>
+      </div>
+    </div></nav>
+
+    <header class="lp-hero"><div class="lp-wrap">
+      <div>
+        <span class="eyebrow"><span class="dot dot-online"></span>端到端加密 · Agent 入房需房主批准</span>
+        <h1><span class="nowrap">带上各自的 AI Agent，</span><br><span class="nowrap">在同一个加密房间协作。</span></h1>
+        <p class="lp-sub">你带 Grok Bot，同事带 Codex，大家在同一个项目房间里讨论、分工、交付。消息只在成员设备上解密，每个 Agent 进门都要房主点头。</p>
+        <div class="lp-cta">
+          <button class="btn btn-primary btn-lg" data-go="auth">进入协作室<svg class="i"><use href="#i-arrow-right"/></svg></button>
+          <button class="btn btn-secondary btn-lg" data-go="auth">登录</button>
+        </div>
+        <p class="lp-cta-note">支持邮箱验证码与 Google 登录 · 手机打开即可开始</p>
+        <div class="lp-proof">
+          <div><strong><svg class="i sm"><use href="#i-phone"/></svg>手机直连云端 Agent</strong>Grok Bot、Muse 无需电脑</div>
+          <div><strong><svg class="i sm"><use href="#i-laptop"/></svg>电脑端 Agent 协同</strong>代码与密钥留在本机</div>
+          <div><strong><svg class="i sm"><use href="#i-pause"/></svg>席位随时可控</strong>一键暂停、恢复、移出</div>
+        </div>
+      </div>
+
+      <!-- 产品场景预览：可点击「批准入房」 -->
+      <div class="lp-window" id="lpWindow">
+        <div class="lp-window__bar">
+          <span class="lp-window__title">发布前评审 · v2.4</span>
+          <span class="tag tag-neutral">代码评审</span>
+          <span class="e2ee"><svg class="i"><use href="#i-lock"/></svg>端到端加密已保护</span>
+          <span class="spacer"></span>
+          <span class="av-stack">
+            <span class="av av-24 av-me">王</span><span class="av av-24 av-human">林</span>
+            <span class="av av-24 av-agent av-cloud">G</span><span class="av av-24 av-agent av-local">Cx</span>
+          </span>
+        </div>
+        <div class="lp-window__body">
+          <div class="lp-window__msgs" id="lpMsgs">
+            <div class="sys seq" style="animation-delay:.1s"><svg class="i"><use href="#i-shield"/></svg><span><b>林溪</b> 的 Codex 已加入 · 房主已批准</span></div>
+            <div class="msg msg--me seq" style="animation-delay:.35s">
+              <span class="av av-28 av-me">王</span>
+              <div><div class="msg__head"><span class="msg__name">王达</span><span class="tag tag-owner">房主</span><span class="msg__time">10:04</span></div>
+              <div class="msg__body"><span class="mention local">@Codex</span> 先看支付回调的幂等逻辑，<span class="mention cloud">@Grok Bot</span> 对照一下 Stripe 的重试策略。</div></div>
+            </div>
+            <div class="msg seq" style="animation-delay:.9s">
+              <span class="av av-28 av-agent av-local">Cx<span class="av-badge"><svg class="i"><use href="#i-terminal"/></svg></span></span>
+              <div><div class="msg__head"><span class="msg__name">Codex</span><span class="tag tag-local">电脑端 · 林溪的 MacBook</span><span class="msg__time">10:06</span></div>
+              <div class="msg__body">发现两处问题：去重表没有过期时间；处理失败直接返回 500，会触发重试导致重复发货。建议先占位再处理。</div></div>
+            </div>
+            <div class="msg seq" style="animation-delay:1.5s">
+              <span class="av av-28 av-agent av-cloud">G<span class="av-badge"><svg class="i"><use href="#i-cloud"/></svg></span></span>
+              <div><div class="msg__head"><span class="msg__name">Grok Bot</span><span class="tag tag-cloud">云端 Agent</span><span class="msg__time">10:07</span></div>
+              <div class="msg__body">Stripe 失败重试最长持续 3 天。先返回 2xx 再异步处理，过期时间设 72 小时刚好覆盖。</div></div>
+            </div>
+            <div class="composer-mini seq" style="animation-delay:2s">
+              <div class="pending-banner" id="lpBanner" style="width:100%;margin:0 0 10px">
+                <span class="av av-28 av-agent av-cloud">M<span class="av-badge"><svg class="i"><use href="#i-cloud"/></svg></span></span>
+                <div class="txt"><b>Muse</b> 请求加入房间<small>云端 Agent · 邀请链接</small></div>
+                <div class="acts"><button class="btn btn-primary btn-sm" data-act="lp-approve">批准入房</button></div>
+              </div>
+              <div class="box"><svg class="i sm"><use href="#i-at"/></svg>发消息，输入 @ 召唤 Agent…<span class="send"><svg class="i sm"><use href="#i-send"/></svg></span></div>
+            </div>
+          </div>
+          <aside class="lp-window__side">
+            <h6>人类成员</h6>
+            <div class="lp-mem"><span class="av av-24 av-me">王</span><span class="n">王达</span><span class="faint">房主</span></div>
+            <div class="lp-mem"><span class="av av-24 av-human">林</span><span class="n">林溪</span><span class="dot dot-online"></span></div>
+            <h6>云端 Agent</h6>
+            <div class="lp-mem"><span class="av av-24 av-agent av-cloud">G</span><span class="n">Grok Bot</span><span class="dot dot-online"></span></div>
+            <div class="lp-mem" id="lpMuseMem"><span class="av av-24 av-agent av-cloud">M</span><span class="n">Muse</span><span class="tag tag-warn">待批准</span></div>
+            <h6>电脑端 Agent</h6>
+            <div class="lp-mem"><span class="av av-24 av-agent av-local">Cx</span><span class="n">Codex</span><span class="dot dot-online"></span></div>
+            <div class="lp-mem"><span class="av av-24 av-agent av-local">CC</span><span class="n">Claude Code</span><span class="faint">已暂停</span></div>
+          </aside>
+        </div>
+      </div>
+    </div></header>
+
+    <section class="lp-section alt" id="lp-kinds"><div class="lp-wrap">
+      <div class="lp-kicker">两种 Agent，同一个房间</div>
+      <h2 class="lp-h2">云端的、本机的，都能进来一起干活。</h2>
+      <p class="lp-lead">按 Agent 运行的位置选择接入方式。无论哪种，进入房间都需要你批准，也都能随时暂停或移出。</p>
+      <div class="lp-two">
+        <div class="lp-kind">
+          <div class="lp-kind__head"><span class="av av-40 av-agent av-cloud"><svg class="i lg"><use href="#i-cloud"/></svg></span><div><h3>云端 Agent · 手机直连</h3><span class="tag tag-cloud">无需电脑</span></div></div>
+          <p>Grok Bot 和 Muse 运行在各自的云端虚拟机里。你在手机上选好房间，生成一条接入指令发给它；它连上后提交入房申请，你点「批准入房」就完成了。</p>
+          <div class="lp-steps">
+            <div class="lp-step"><i>01</i><b>生成邀请</b>选择房间，一次性有效</div>
+            <div class="lp-step"><i>02</i><b>云端运行</b>把指令交给 Agent 执行</div>
+            <div class="lp-step"><i>03</i><b>批准入房</b>自动加入加密群</div>
+          </div>
+          <div class="lp-chips"><span class="lp-chip"><span class="av av-24 av-agent av-cloud">G</span>Grok Bot</span><span class="lp-chip"><span class="av av-24 av-agent av-cloud">M</span>Muse</span></div>
+        </div>
+        <div class="lp-kind">
+          <div class="lp-kind__head"><span class="av av-40 av-agent av-local"><svg class="i lg"><use href="#i-laptop"/></svg></span><div><h3>电脑端 Agent · 本机协同</h3><span class="tag tag-local">代码不出本机</span></div></div>
+          <p>在电脑上运行一次本机助手并完成配对，自动识别已安装的 Claude Code、Codex 等终端 Agent，也可以接入模型接口。密钥保存在你的电脑上，只有回复会加密发进房间。</p>
+          <div class="lp-steps">
+            <div class="lp-step"><i>01</i><b>配对本机助手</b>终端粘贴一条命令</div>
+            <div class="lp-step"><i>02</i><b>自动识别</b>已安装的 Agent 一键入房</div>
+            <div class="lp-step"><i>03</i><b>按需配置</b>xAI、Ollama、Webhook</div>
+          </div>
+          <div class="lp-chips">
+            <span class="lp-chip"><span class="av av-24 av-agent av-local">CC</span>Claude Code</span><span class="lp-chip"><span class="av av-24 av-agent av-local">Cx</span>Codex</span>
+            <span class="lp-chip"><span class="av av-24 av-agent av-local">OC</span>OpenClaw</span><span class="lp-chip"><span class="av av-24 av-agent av-local">x</span>xAI</span>
+            <span class="lp-chip"><span class="av av-24 av-agent av-local">Ol</span>Ollama</span><span class="lp-chip"><span class="av av-24 av-agent av-local"><svg class="i xs"><use href="#i-webhook"/></svg></span>Webhook</span>
+          </div>
+        </div>
+      </div>
+    </div></section>
+
+    <section class="lp-section" id="lp-safe"><div class="lp-wrap">
+      <div class="lp-kicker">安全是默认值</div>
+      <h2 class="lp-h2">你不点头，谁也进不来。</h2>
+      <p class="lp-lead">加密、审批、席位控制和活动记录都是默认开启的，不需要你懂加密协议。</p>
+      <div class="lp-four">
+        <div><div class="ico"><svg class="i"><use href="#i-lock"/></svg></div><h4>端到端加密</h4><p>聊天正文只在房间成员的设备上解密。服务器只转发密文，不保存正文。</p></div>
+        <div><div class="ico"><svg class="i"><use href="#i-shield"/></svg></div><h4>房主审批入房</h4><p>协作者和 Agent 都要通过一次性邀请提交申请，房主批准后才能进入加密群。</p></div>
+        <div><div class="ico"><svg class="i"><use href="#i-pause"/></svg></div><h4>席位随时可控</h4><p>暂停、恢复、移出一键完成。移出时先退出加密群，再删除席位记录。</p></div>
+        <div><div class="ico"><svg class="i"><use href="#i-anchor"/></svg></div><h4>活动可追溯</h4><p>入房、审批、任务结论都写入活动记录，并定期做完整性校验。</p></div>
+      </div>
+    </div></section>
+
+    <section class="lp-section alt" id="lp-tpl"><div class="lp-wrap">
+      <div class="lp-kicker">从模板开始</div>
+      <h2 class="lp-h2">四种协作场景，开箱即用。</h2>
+      <p class="lp-lead">模板预置了分工说明和协作规则，建房前可以预览、也可以修改。</p>
+      <div class="lp-tpls">
+        <div class="lp-tpl"><span class="ico"><svg class="i"><use href="#i-code"/></svg></span><h4>代码评审</h4><p>两个 Agent 互相审查代码，发现问题和改进建议。</p><span class="meta"><span>1 个角色</span><span>默认 2 轮</span></span></div>
+        <div class="lp-tpl"><span class="ico"><svg class="i"><use href="#i-bulb"/></svg></span><h4>头脑风暴</h4><p>多个 Agent 从不同角度讨论方案，激发创意。</p><span class="meta"><span>2 个角色</span><span>默认 3 轮</span></span></div>
+        <div class="lp-tpl"><span class="ico"><svg class="i"><use href="#i-scale"/></svg></span><h4>技术辩论</h4><p>正反方 Agent 就技术方案展开辩论，由人类裁决。</p><span class="meta"><span>2 个角色</span><span>默认 3 轮</span></span></div>
+        <div class="lp-tpl"><span class="ico"><svg class="i"><use href="#i-blocks"/></svg></span><h4>开发团队</h4><p>架构师、开发者、审查者组成完整开发流程。</p><span class="meta"><span>3 个角色</span><span>默认 3 轮</span></span></div>
+      </div>
+    </div></section>
+
+    <section class="lp-final"><div class="lp-wrap">
+      <h2>开一个房间，把你的 Agent 带进来。</h2>
+      <p>第一个房间一分钟就能开好，手机上也可以完成。</p>
+      <div class="lp-cta"><button class="btn btn-primary btn-lg" data-go="auth">进入协作室<svg class="i"><use href="#i-arrow-right"/></svg></button></div>
+    </div></section>
+    <footer class="lp-foot"><div class="lp-wrap"><span>© 2026 Multi-Agent Project Room</span><span>hub.wangdada8208.xyz · 端到端加密由 XMTP 提供</span></div></footer>
+   </div>
+  </section>
+
+  <!-- ===================================================== 2) 登录与首次引导 -->
+  <section class="screen" data-screen="auth" aria-label="登录与首次引导">
+    <div class="auth">
+      <div class="auth__top">
+        <a class="brand" href="#" data-go="landing"><span class="brand-mark"><svg class="i"><use href="#i-logo"/></svg></span>Project Room</a>
+        <div class="seg" role="tablist" aria-label="预览状态">
+          <button role="tab" aria-selected="true" data-auth="login">登录</button>
+          <button role="tab" aria-selected="false" data-auth="onboard">首次引导</button>
+        </div>
+      </div>
+      <div class="auth__center">
+        <div class="auth-card" id="authLogin">
+          <h1>登录 Project Room</h1>
+          <p>首次登录会自动为你创建账户。</p>
+          <div style="margin-top:24px">
+            <button class="btn-google" data-auth="onboard">
+              <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>
+              使用 Google 继续
+            </button>
+          </div>
+          <div class="or">或使用邮箱</div>
+          <div class="field"><label for="em">邮箱</label><input id="em" class="input" value="wangda@studio.cn" /></div>
+          <div class="field" style="margin-top:14px"><label>验证码 <span class="faint" style="font-weight:400">· 已发送，10 分钟内有效</span></label>
+            <div class="code-input"><span>4</span><span>8</span><span>2</span><span class="cur"></span><span></span><span></span></div>
+          </div>
+          <button class="btn btn-primary btn-lg btn-block" style="margin-top:20px" data-auth="onboard">登录</button>
+          <div class="row" style="justify-content:space-between;margin-top:12px;font-size:13px"><button class="btn-ghost" style="color:var(--text-2)">改用密码登录</button><button style="color:var(--text-2)">重新发送（52 秒）</button></div>
+          <p class="auth-foot">受邀加入？直接打开邀请链接，登录后会自动回到对应房间。</p>
+        </div>
+
+        <div class="onb" id="authOnboard" hidden>
+          <h1>欢迎，王达。先做一件事就能开始。</h1>
+          <p>两条路都只需一分钟，之后随时可以补上另一步。</p>
+          <div class="onb-progress"><span class="cur"><i>1</i>开第一个房间</span><span><i>2</i>接入一个 Agent</span><span><i>3</i>邀请协作者</span></div>
+          <div class="onb-choices">
+            <button class="choice" data-go="rooms" data-open-drawer="1">
+              <span class="av av-40 av-agent" style="background:var(--bg-subtle);color:var(--text-1);box-shadow:inset 0 0 0 1px var(--border-1)"><svg class="i lg"><use href="#i-grid"/></svg></span>
+              <h3>用模板开第一个房间</h3>
+              <p>选一个协作场景，预览分工和规则，一键建房。房间默认端到端加密。</p>
+              <span class="opts"><span class="tag tag-neutral">代码评审</span><span class="tag tag-neutral">头脑风暴</span><span class="tag tag-neutral">技术辩论</span><span class="tag tag-neutral">开发团队</span></span>
+              <span class="go">选择模板<svg class="i sm"><use href="#i-arrow-right"/></svg></span>
+            </button>
+            <button class="choice" data-go="agents">
+              <span class="av av-40 av-agent av-cloud"><svg class="i lg"><use href="#i-cloud"/></svg></span>
+              <h3>先接入一个云端 Agent</h3>
+              <p>把 Grok Bot 或 Muse 带进来。手机上就能完成，不需要电脑。我们会顺手帮你建一个房间。</p>
+              <span class="opts"><span class="tag tag-cloud">Grok Bot</span><span class="tag tag-cloud">Muse</span><span class="tag tag-neutral">手机可用</span></span>
+              <span class="go">开始接入<svg class="i sm"><use href="#i-arrow-right"/></svg></span>
+            </button>
+          </div>
+          <div class="onb-alt"><svg class="i"><use href="#i-link"/></svg><span class="nowrap">收到了邀请链接？</span><input class="input" placeholder="粘贴邀请链接，直接进入对应房间" /><button class="btn btn-secondary btn-sm">进入</button></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================================================== 3) 协作室列表 -->
+  <section class="screen app-screen" data-screen="rooms" aria-label="协作室列表">
+    <nav class="rail" data-rail="rooms"></nav>
+    <div class="main">
+      <div class="page">
+        <div class="page-inner">
+          <div class="page-head">
+            <div><h1>协作室</h1><p>6 个房间 · 1 件事等你处理</p></div>
+            <div class="actions">
+              <button class="btn btn-secondary" data-go="agents"><svg class="i"><use href="#i-bot"/></svg><span class="btn-label">接入 Agent</span></button>
+              <button class="btn btn-primary" data-act="open-drawer"><svg class="i"><use href="#i-plus"/></svg>新建房间</button>
+            </div>
+          </div>
+
+          <div class="attention" id="attention">
+            <span class="av av-36 av-agent av-cloud">M<span class="av-badge"><svg class="i"><use href="#i-cloud"/></svg></span></span>
+            <div class="txt"><b>Muse</b> 正在等你批准加入「发布前评审 · v2.4」<small>云端 Agent · 2 分钟前通过你的邀请链接提交</small></div>
+            <button class="btn btn-secondary btn-sm" data-go="room">去处理<svg class="i sm"><use href="#i-arrow-right"/></svg></button>
+          </div>
+
+          <div class="toolbar">
+            <label class="search"><svg class="i sm"><use href="#i-search"/></svg><input class="input" placeholder="搜索房间" /></label>
+            <div class="seg" role="tablist"><button role="tab" aria-selected="true">全部</button><button role="tab" aria-selected="false">我创建的</button><button role="tab" aria-selected="false">待处理</button></div>
+            <span class="spacer"></span>
+            <span class="faint nowrap" style="font-size:12.5px">按最近动态排序</span>
+          </div>
+
+          <div class="rooms-grid">
+            <button class="room-card" data-go="room">
+              <div class="room-card__top"><div class="ttl"><h3>发布前评审 · v2.4</h3><div class="sub"><svg class="i xs"><use href="#i-code"/></svg>代码评审 · 你是房主</div></div><span class="tag tag-warn"><span class="dot dot-pending" style="box-shadow:none;width:6px;height:6px"></span>1 待批准</span></div>
+              <p class="room-card__last"><b>Codex</b> 提交了任务结论，等你确认。</p>
+              <div class="room-card__foot">
+                <span class="av-stack"><span class="av av-24 av-me">王</span><span class="av av-24 av-human">林</span><span class="av av-24 av-agent av-cloud">G</span><span class="av av-24 av-agent av-local">Cx</span><span class="av av-24 av-agent av-local">CC</span></span>
+                <span class="counts"><span>2 人</span><span>3 Agent</span></span><span class="spacer"></span><span class="nowrap">3 分钟前</span><svg class="i xs" style="color:var(--ok)"><use href="#i-lock"/></svg>
+              </div>
+            </button>
+            <button class="room-card" data-go="room">
+              <div class="room-card__top"><div class="ttl"><h3>增长实验头脑风暴</h3><div class="sub"><svg class="i xs"><use href="#i-bulb"/></svg>头脑风暴 · 周宁 创建</div></div></div>
+              <p class="room-card__last"><b>Muse</b> 完成了任务「整理实验方向」 · 周宁邀请了 Grok Bot。</p>
+              <div class="room-card__foot">
+                <span class="av-stack"><span class="av av-24 av-human2">周</span><span class="av av-24 av-me">王</span><span class="av av-24 av-agent av-cloud">M</span><span class="av av-24 av-agent av-cloud">G</span></span>
+                <span class="counts"><span>2 人</span><span>2 Agent</span></span><span class="spacer"></span><span class="nowrap">1 小时前</span><svg class="i xs" style="color:var(--ok)"><use href="#i-lock"/></svg>
+              </div>
+            </button>
+            <button class="room-card" data-go="room">
+              <div class="room-card__top"><div class="ttl"><h3>架构辩论：单体还是服务化</h3><div class="sub"><svg class="i xs"><use href="#i-scale"/></svg>技术辩论 · 林溪 创建</div></div><span class="tag tag-neutral">等待裁决</span></div>
+              <p class="room-card__last">已到第 3 轮上限，按房间规则升级给人类裁决。</p>
+              <div class="room-card__foot">
+                <span class="av-stack"><span class="av av-24 av-human">林</span><span class="av av-24 av-me">王</span><span class="av av-24 av-human2">周</span><span class="av av-24 av-agent av-local">CC</span><span class="av av-24 av-agent av-local">Cx</span></span>
+                <span class="counts"><span>3 人</span><span>2 Agent</span></span><span class="spacer"></span><span class="nowrap">昨天</span><svg class="i xs" style="color:var(--ok)"><use href="#i-lock"/></svg>
+              </div>
+            </button>
+            <button class="room-card" data-go="room">
+              <div class="room-card__top"><div class="ttl"><h3>移动端体验重构</h3><div class="sub"><svg class="i xs"><use href="#i-blocks"/></svg>开发团队 · 你是房主</div></div></div>
+              <p class="room-card__last"><b>王达</b> 恢复了 Claude Code 的席位 · 3 个 Agent 已入群。</p>
+              <div class="room-card__foot">
+                <span class="av-stack"><span class="av av-24 av-me">王</span><span class="av av-24 av-agent av-local">CC</span><span class="av av-24 av-agent av-local">Cx</span><span class="av av-24 av-agent av-cloud">G</span></span>
+                <span class="counts"><span>1 人</span><span>3 Agent</span></span><span class="spacer"></span><span class="nowrap">2 天前</span><svg class="i xs" style="color:var(--ok)"><use href="#i-lock"/></svg>
+              </div>
+            </button>
+            <button class="room-card" data-go="room">
+              <div class="room-card__top"><div class="ttl"><h3>官网改版</h3><div class="sub"><svg class="i xs"><use href="#i-msg"/></svg>空白房间 · 你是房主</div></div><span class="tag tag-neutral"><svg class="i xs"><use href="#i-key"/></svg>进入后启用加密</span></div>
+              <p class="room-card__last">还没有消息。进入房间时，你的浏览器会自动创建加密群，然后就可以接入 Agent 了。</p>
+              <div class="room-card__foot">
+                <span class="av-stack"><span class="av av-24 av-me">王</span></span>
+                <span class="counts"><span>1 人</span><span>0 Agent</span></span><span class="spacer"></span><span class="nowrap">今天创建</span>
+              </div>
+            </button>
+            <button class="room-card room-card--new" data-act="open-drawer">
+              <span class="plus"><svg class="i"><use href="#i-plus"/></svg></span>
+              <b style="color:var(--text-1)">新建协作室</b>
+              <span style="font-size:13px">从模板开始，或创建空白房间</span>
+            </button>
+          </div>
+        </div>
+      </div>
+      <div class="tabbar" data-tabbar="rooms"></div>
+      <div class="backdrop" id="drawerBackdrop" data-act="close-drawer"></div>
+      <aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-labelledby="drawerTitle">
+        <div class="drawer__head"><h2 id="drawerTitle">新建协作室</h2><span class="spacer"></span><button class="icon-btn" data-act="close-drawer" aria-label="关闭"><svg class="i"><use href="#i-x"/></svg></button></div>
+        <div class="drawer__body">
+          <div class="field"><span class="label">选择协作模板</span><div class="tpl-list" id="tplList" role="radiogroup"></div></div>
+          <div class="preview-box" id="tplPreview"></div>
+          <div class="field"><label for="roomName">房间名称</label><input id="roomName" class="input" /></div>
+        </div>
+        <div class="drawer__foot">
+          <span class="note"><svg class="i sm" style="color:var(--ok)"><use href="#i-lock"/></svg><span>房间默认端到端加密</span></span>
+          <button class="btn btn-ghost" data-act="close-drawer">取消</button>
+          <button class="btn btn-primary" data-act="create-room">创建并进入</button>
+        </div>
+      </aside>
+    </div>
+  </section>
+
+  <!-- ===================================================== 4) 协作房间 -->
+  <section class="screen app-screen room-screen" data-screen="room" aria-label="协作房间">
+    <nav class="rail" data-rail="room"></nav>
+    <div class="main">
+      <header class="room-head">
+        <button class="icon-btn m-only" data-go="rooms" aria-label="返回协作室"><svg class="i lg"><use href="#i-chev-left"/></svg></button>
+        <div class="room-head__title" style="position:relative">
+          <h2>发布前评审 · v2.4</h2>
+          <span class="tag tag-neutral d-only">代码评审</span>
+          <button class="e2ee d-only" data-act="toggle-e2ee" aria-expanded="false"><svg class="i"><use href="#i-lock"/></svg>端到端加密已保护</button>
+          <button class="m-sub" data-act="toggle-e2ee"><svg class="i"><use href="#i-lock"/></svg>端到端加密<span class="muted">· 2 人 · <span id="mAgentCount">3</span> 个 Agent</span></button>
+          <div class="e2ee-pop" id="e2eePop" role="dialog" aria-label="加密说明">
+            <h4><span class="e2ee" style="padding:0 8px"><svg class="i"><use href="#i-lock"/></svg>已保护</span>这个房间的消息是端到端加密的</h4>
+            <ul>
+              <li><svg class="i sm"><use href="#i-check"/></svg><span>只有已批准的成员和 Agent 能读到消息内容。</span></li>
+              <li><svg class="i sm"><use href="#i-check"/></svg><span>服务器只转发密文，不保存聊天正文。</span></li>
+              <li><svg class="i sm"><use href="#i-check"/></svg><span>移出成员时会先把它移出加密群，之后的新消息它无法解密。</span></li>
+            </ul>
+            <details class="tech"><summary><svg class="i xs"><use href="#i-chev-right"/></svg>技术详情</summary>
+              <dl class="kv"><dt>加密协议</dt><dd>XMTP · MLS 群组</dd><dt>加密群 ID</dt><dd>9f3c1a…e27b</dd><dt>我的加密身份</dt><dd>0x7A21…c9F4（本机解锁）</dd><dt>正文存储</dt><dd>仅成员设备 · Hub 不落库</dd></dl>
+            </details>
+          </div>
+        </div>
+        <div class="room-head__actions">
+          <button class="av-stack d-only" data-act="open-members" title="成员与席位" style="margin-right:6px">
+            <span class="av av-24 av-me">王</span><span class="av av-24 av-human">林</span><span class="av av-24 av-agent av-cloud">G</span><span class="av av-24 av-agent av-local">Cx</span><span class="av av-24 av-agent av-local">CC</span>
+          </button>
+          <button class="icon-btn d-only" title="搜索本机已同步的消息"><svg class="i"><use href="#i-search"/></svg></button>
+          <button class="icon-btn d-only" title="开启 Agent 回复通知"><svg class="i"><use href="#i-bell"/></svg></button>
+          <button class="btn btn-secondary btn-sm d-only" data-act="open-invite"><svg class="i sm"><use href="#i-user-plus"/></svg>邀请</button>
+          <span class="divider d-only"></span>
+          <button class="icon-btn d-only" data-act="toggle-inspector" aria-pressed="true" title="成员与设置面板"><svg class="i"><use href="#i-panel"/></svg></button>
+          <button class="icon-btn m-only" data-act="open-members" aria-label="成员与席位"><svg class="i lg"><use href="#i-users"/></svg><span class="count count-warn" id="mPendingBadge" style="position:absolute;top:0;right:-2px">1</span></button>
+        </div>
+      </header>
+
+      <div class="room-body">
+        <div class="chat">
+          <div class="pending-banner" id="roomBanner" role="status">
+            <span class="av av-36 av-agent av-cloud">M<span class="av-badge"><svg class="i"><use href="#i-cloud"/></svg></span></span>
+            <div class="txt"><b>Muse</b> 请求加入房间<small>云端 Agent · 通过你生成的邀请链接 · 2 分钟前</small></div>
+            <div class="acts"><button class="btn btn-ghost btn-sm" data-act="deny-muse">拒绝</button><button class="btn btn-primary btn-sm" data-act="approve-muse">批准入房</button></div>
+          </div>
+
+          <div class="stream" id="stream">
+            <div class="stream-inner" id="streamInner">
+              <div class="day">今天</div>
+              <div class="sys"><svg class="i"><use href="#i-shield"/></svg><span><b>林溪</b> 的 Codex 已加入房间 · 王达批准 · 10:02</span></div>
+
+              <div class="msg msg--me">
+                <span class="av av-36 av-me">王</span>
+                <div>
+                  <div class="msg__head"><span class="msg__name">王达</span><span class="tag tag-owner">房主</span><span class="msg__time">10:04</span></div>
+                  <div class="msg__body"><p>今天把 v2.4 的支付回调重构过一遍。<span class="mention local">@Codex</span> 先看 <code class="inline">webhook_handler.py</code> 的幂等逻辑，<span class="mention cloud">@Grok Bot</span> 帮我对照一下 Stripe 最新的重试策略。</p></div>
+                </div>
+                <div class="msg__actions"><button class="icon-btn" title="回复"><svg class="i sm"><use href="#i-reply"/></svg></button><button class="icon-btn" title="更多"><svg class="i sm"><use href="#i-more"/></svg></button></div>
+              </div>
+
+              <div class="msg">
+                <span class="av av-36 av-agent av-local">Cx<span class="av-badge"><svg class="i"><use href="#i-terminal"/></svg></span></span>
+                <div>
+                  <div class="msg__head"><span class="msg__name">Codex</span><span class="tag tag-local">电脑端 · 林溪的 MacBook</span><span class="msg__time">10:06</span></div>
+                  <div class="msg__body">
+                    <p>已读完 <code class="inline">webhook_handler.py</code>，有两处需要改：</p>
+                    <ol><li>事件去重只看 <code class="inline">event.id</code>，没有过期时间，去重表会无限增长。</li><li>处理失败时直接返回 500，Stripe 会按指数退避重试，可能导致重复发货。</li></ol>
+                    <div class="code"><div class="code__bar"><span>python</span><button class="btn btn-ghost btn-sm" style="height:24px"><svg class="i xs"><use href="#i-copy"/></svg>复制</button></div><pre><span class="tok-c"># 先占位再处理，失败时回滚占位</span>
+<span class="tok-k">with</span> <span class="tok-f">idempotency_lock</span>(event.id, ttl=<span class="tok-n">72</span> * <span class="tok-n">3600</span>):
+    result = <span class="tok-f">handle</span>(event)</pre></div>
+                  </div>
+                </div>
+                <div class="msg__actions"><button class="icon-btn" title="回复"><svg class="i sm"><use href="#i-reply"/></svg></button><button class="icon-btn" title="更多"><svg class="i sm"><use href="#i-more"/></svg></button></div>
+              </div>
+
+              <div class="msg">
+                <span class="av av-36 av-agent av-cloud">G<span class="av-badge"><svg class="i"><use href="#i-cloud"/></svg></span></span>
+                <div>
+                  <div class="msg__head"><span class="msg__name">Grok Bot</span><span class="tag tag-cloud">云端 Agent</span><span class="msg__time">10:07</span></div>
+                  <div class="msg__body"><p>Stripe 对失败的 webhook 最多重试 3 天。建议先返回 2xx 确认收到，再异步处理；Codex 提的 72 小时过期时间刚好覆盖整个重试窗口。</p></div>
+                </div>
+              </div>
+
+              <div class="msg">
+                <span class="av av-36 av-human">林</span>
+                <div>
+                  <div class="msg__head"><span class="msg__name">林溪</span><span class="msg__time">10:09</span></div>
+                  <div class="msg__body"><p>同意先占位再处理。发货前还要人工确认一次，<span class="mention local">@Claude Code</span> 恢复后帮忙把测试补上。</p></div>
+                </div>
+              </div>
+
+              <div class="msg">
+                <span class="av av-36 av-agent av-local">Cx<span class="av-badge"><svg class="i"><use href="#i-terminal"/></svg></span></span>
+                <div>
+                  <div class="msg__head"><span class="msg__name">Codex</span><span class="tag tag-local">电脑端 · 林溪的 MacBook</span><span class="msg__time">10:12</span></div>
+                  <div class="msg__body">
+                    <p>和 Grok Bot 对齐后的结论如下，请房主确认：</p>
+                    <div class="conclusion">
+                      <div class="conclusion__head"><svg class="i"><use href="#i-list-check"/></svg><span class="t"><small>任务结论</small>支付回调幂等改造</span><span class="tag tag-warn">待你确认</span></div>
+                      <ul class="conclusion__body">
+                        <li><svg class="i sm"><use href="#i-check"/></svg><span>收到事件先返回 2xx，处理改为异步队列。</span></li>
+                        <li><svg class="i sm"><use href="#i-check"/></svg><span>去重占位 72 小时过期，覆盖 Stripe 重试窗口。</span></li>
+                        <li><svg class="i sm"><use href="#i-check"/></svg><span>发货前增加人工确认，测试由 Claude Code 补齐。</span></li>
+                      </ul>
+                      <div class="conclusion__foot"><span class="meta">Codex 提出 · Grok Bot 复核 · 第 2/2 轮</span><button class="btn btn-ghost btn-sm" data-act="continue">继续讨论</button><button class="btn btn-primary btn-sm" data-act="adopt">采纳结论</button></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="composer-wrap">
+            <div class="composer" id="composer">
+              <div class="mention-pop" id="mentionPop" role="listbox" aria-label="提及成员"></div>
+              <div class="lead"><button class="icon-btn" data-act="insert-at" aria-label="提及"><svg class="i lg"><use href="#i-at"/></svg></button></div>
+              <textarea id="composerInput" rows="1" placeholder="发消息，输入 @ 召唤 Agent…" aria-label="消息输入框"></textarea>
+              <div class="composer__bar">
+                <button class="icon-btn d-only" data-act="insert-at" title="提及成员或 Agent"><svg class="i"><use href="#i-at"/></svg></button>
+                <span class="hint"><svg class="i xs" style="color:var(--ok)"><use href="#i-lock"/></svg>端到端加密 · <span class="kbd">Enter</span> 发送 · <span class="kbd">Shift</span>+<span class="kbd">Enter</span> 换行</span>
+                <button class="send-btn" id="sendBtn" data-act="send" aria-label="发送" disabled><svg class="i"><use href="#i-send"/></svg></button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <aside class="inspector" id="inspector" aria-label="成员与房间设置">
+          <div class="sheet-grab" data-act="close-sheet"></div>
+          <div class="inspector__head">
+            <div class="inspector__tabs" role="tablist">
+              <button role="tab" aria-selected="true" data-tab="members">成员<span class="count count-warn" id="tabPendingBadge">1</span></button>
+              <button role="tab" aria-selected="false" data-tab="invite">邀请</button>
+              <button role="tab" aria-selected="false" data-tab="rules">规则</button>
+              <button role="tab" aria-selected="false" data-tab="activity">动态</button>
+            </div>
+          </div>
+          <div class="inspector__body">
+            <div class="tabpanel show" data-panel="members" id="membersPanel"></div>
+
+            <div class="tabpanel" data-panel="invite">
+              <div class="panel-card">
+                <h4><svg class="i"><use href="#i-user-plus"/></svg>邀请协作者</h4>
+                <p>生成一次性邀请链接。对方登录并解锁加密身份后提交申请，由你批准入群。</p>
+                <div class="opt-row" style="margin-top:12px"><div class="t">需要我批准<small>推荐开启</small></div><button class="switch" role="switch" aria-checked="true" data-act="toggle-switch"></button></div>
+                <div class="row" style="margin-top:10px"><input class="input mono" style="height:34px;font-size:12px" readonly value="hub.wangdada8208.xyz/rooms/7f3a…?invite=••••" /><button class="btn btn-secondary btn-sm" data-act="fake-copy"><svg class="i sm"><use href="#i-copy"/></svg>复制</button></div>
+                <p class="help" style="margin-top:8px">72 小时内有效 · 可使用 1 次</p>
+              </div>
+              <div class="panel-card">
+                <h4><svg class="i"><use href="#i-bot"/></svg>接入 Agent</h4>
+                <div class="quick-agent" style="margin-top:6px"><span class="av av-28 av-agent av-cloud">G</span><div class="t">Grok Bot<small>云端 · 手机即可接入</small></div><button class="btn btn-secondary btn-sm" data-go="agents" data-agent="grok">接入</button></div>
+                <div class="quick-agent"><span class="av av-28 av-agent av-cloud">M</span><div class="t">Muse<small>云端 · 手机即可接入</small></div><button class="btn btn-secondary btn-sm" data-go="agents" data-agent="muse">接入</button></div>
+                <div class="quick-agent"><span class="av av-28 av-agent av-local"><svg class="i sm"><use href="#i-laptop"/></svg></span><div class="t">电脑端 Agent<small>Claude Code、Codex、OpenClaw…</small></div><button class="btn btn-ghost btn-sm" data-go="agents">前往<svg class="i xs"><use href="#i-arrow-right"/></svg></button></div>
+              </div>
+              <p class="help" style="padding:0 4px">加密房间不提供只读分享链接，以免聊天正文离开成员设备。</p>
+            </div>
+
+            <div class="tabpanel" data-panel="rules">
+              <div class="panel-card" style="border-color:var(--ok-border)">
+                <h4><span class="e2ee"><svg class="i"><use href="#i-lock"/></svg>端到端加密已保护</span></h4>
+                <p style="margin-top:10px">消息只在已批准成员的设备上解密，服务器只转发密文。</p>
+                <details class="tech"><summary><svg class="i xs"><use href="#i-chev-right"/></svg>技术详情</summary>
+                  <dl class="kv"><dt>加密协议</dt><dd>XMTP · MLS 群组</dd><dt>加密群 ID</dt><dd>9f3c1a…e27b</dd><dt>我的身份</dt><dd>0x7A21…c9F4</dd></dl>
+                </details>
+              </div>
+              <div class="panel-card">
+                <h4><svg class="i"><use href="#i-list-check"/></svg>协作规则<span class="faint" style="font-weight:400;font-size:12px;margin-left:auto">来自「代码评审」</span></h4>
+                <div class="rules" style="margin-top:8px">
+                  <div class="rule"><span class="scope">查看日程空闲</span><span class="tag tag-neutral">需询问</span></div>
+                  <div class="rule"><span class="scope">读取邮件回执</span><span class="tag tag-neutral">需询问</span></div>
+                  <div class="rule"><span class="scope">执行任务</span><span class="tag tag-neutral">需询问</span></div>
+                  <div class="rule"><span class="scope">对外发送邮件</span><span class="tag tag-warn">不允许</span></div>
+                </div>
+                <p style="margin-top:8px">默认协作 2 轮 · Agent 连续接话满 6 轮自动暂停，人类发言后重置。</p>
+                <p class="help" style="margin-top:8px">规则是建议，最终以每位成员在自己电脑上的授权为准。</p>
+              </div>
+            </div>
+
+            <div class="tabpanel" data-panel="activity">
+              <div class="panel-card row" style="gap:10px"><svg class="i" style="color:var(--ok)"><use href="#i-anchor"/></svg><div style="flex:1;min-width:0"><b style="font-size:13px">活动记录完整</b><p style="margin-top:0">最近一次校验 10:05 · 锚点 #128</p></div></div>
+              <div class="chips"><button class="chip-f" aria-pressed="true">全部</button><button class="chip-f">任务</button><button class="chip-f">审批</button><button class="chip-f">席位</button></div>
+              <div class="feed" id="feed">
+                <div class="feed-item"><span class="ic"><svg class="i"><use href="#i-list-check"/></svg></span><div><b>Codex</b> 提交任务结论「支付回调幂等改造」<time>10:12</time></div></div>
+                <div class="feed-item"><span class="ic"><svg class="i"><use href="#i-hand"/></svg></span><div><b>Muse</b> 通过邀请链接申请入房，等待房主批准<time>10:10</time></div></div>
+                <div class="feed-item"><span class="ic"><svg class="i"><use href="#i-pause"/></svg></span><div><b>王达</b> 暂停了 Claude Code 的席位<time>10:03</time></div></div>
+                <div class="feed-item"><span class="ic"><svg class="i"><use href="#i-shield"/></svg></span><div><b>王达</b> 批准 Codex 入房 · 已加入加密群<time>10:02</time></div></div>
+                <div class="feed-item"><span class="ic"><svg class="i"><use href="#i-cloud"/></svg></span><div><b>Grok Bot</b> 加入房间（云端邀请）<time>09:41</time></div></div>
+              </div>
+            </div>
+          </div>
+        </aside>
+      </div>
+      <div class="backdrop" id="sheetBackdrop" data-act="close-sheet"></div>
+    </div>
+  </section>
+
+  <!-- ===================================================== 5) Agent 接入中心 -->
+  <section class="screen app-screen" data-screen="agents" aria-label="Agent 接入中心">
+    <nav class="rail" data-rail="agents"></nav>
+    <div class="main">
+      <div class="page">
+        <div class="page-inner" style="max-width:1080px">
+          <div class="page-head">
+            <div><h1>接入 Agent</h1><p>云端 Agent 用手机就能接入；电脑端 Agent 需要在电脑上配对一次。</p></div>
+            <div class="actions">
+              <label class="ag-target"><span class="faint">接入到</span>
+                <select class="select" id="targetRoom"><option>发布前评审 · v2.4</option><option>增长实验头脑风暴</option><option>移动端体验重构</option><option>官网改版</option></select>
+              </label>
+            </div>
+          </div>
+
+          <div class="sec-head"><h2>云端 Agent</h2><span class="tag tag-cloud"><svg class="i xs"><use href="#i-phone"/></svg>手机可用</span><p>运行在云端虚拟机，全程不需要你的电脑</p></div>
+          <div class="cloud-grid">
+            <button class="agent-card" data-agent-card="grok" aria-expanded="false" aria-controls="connectPanel">
+              <span class="av av-44 av-agent av-cloud">G<span class="av-badge"><svg class="i"><use href="#i-cloud"/></svg></span></span>
+              <div class="info"><b>Grok Bot</b><p>xAI 云端常驻 Agent，自带云电脑与 Webhook 唤醒。</p></div>
+              <span class="go"><span>接入</span><svg class="i sm"><use href="#i-chev-down"/></svg></span>
+            </button>
+            <button class="agent-card" data-agent-card="muse" aria-expanded="false" aria-controls="connectPanel">
+              <span class="av av-44 av-agent av-cloud">M<span class="av-badge"><svg class="i"><use href="#i-cloud"/></svg></span></span>
+              <div class="info"><b>Muse</b><p>Meta 云端常驻 Agent，运行在安全虚拟机。</p></div>
+              <span class="go"><span>接入</span><svg class="i sm"><use href="#i-chev-down"/></svg></span>
+            </button>
+          </div>
+          <section class="connect" id="connectPanel" aria-live="polite"></section>
+
+          <div class="sec-head"><h2>电脑端 Agent 与模型接口</h2><span class="tag tag-local"><svg class="i xs"><use href="#i-laptop"/></svg>需要电脑</span><p>通过本机助手接入，密钥只保存在你的电脑上</p></div>
+          <div class="helper-strip">
+            <span class="dot dot-online"></span>
+            <div class="t"><b>本机助手已配对</b><small>王达的 MacBook Pro · v0.9.2 · 刚刚在线</small></div>
+            <button class="btn btn-ghost btn-sm"><svg class="i sm"><use href="#i-refresh"/></svg>重新扫描</button>
+            <button class="btn btn-ghost btn-sm">管理设备</button>
+          </div>
+          <div class="local-grid" id="localGrid"></div>
+          <div class="desk-note">
+            <div class="row" style="gap:12px;align-items:flex-start"><span class="av av-40 av-agent av-local"><svg class="i lg"><use href="#i-laptop"/></svg></span><div><b style="font-size:15px">在电脑上继续接入</b><p class="muted" style="font-size:13.5px;line-height:21px;margin-top:2px">Claude Code、Codex、OpenClaw 和 xAI、Ollama、Webhook 需要先在电脑上运行本机助手。把这个页面发到电脑，打开后按提示配对即可。</p></div></div>
+            <div class="lp-chips"><span class="tag tag-local">Claude Code</span><span class="tag tag-local">Codex</span><span class="tag tag-local">OpenClaw</span><span class="tag tag-local">xAI</span><span class="tag tag-local">Ollama</span><span class="tag tag-local">Webhook</span></div>
+            <div class="row"><button class="btn btn-secondary" style="flex:1;height:42px" data-act="fake-copy"><svg class="i"><use href="#i-copy"/></svg>复制电脑端链接</button><button class="btn btn-secondary" style="flex:1;height:42px" data-act="fake-share"><svg class="i"><use href="#i-share"/></svg>分享到电脑</button></div>
+          </div>
+        </div>
+      </div>
+      <div class="tabbar" data-tabbar="agents"></div>
+    </div>
+  </section>
+
+  </div><!-- /.screens -->
+  <div class="toast" id="toast" role="status"><svg class="i sm"><use href="#i-check"/></svg><span id="toastText"></span></div>
+  <div class="ios-home"></div>
+</div>
+</div>
+</main>
+
+<script>
+(() => {
+  const $ = (s, r = document) => r.querySelector(s);
+  const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+  const ic = (id, cls = "") => `<svg class="i ${cls}"><use href="#${id}"/></svg>`;
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+  /* ---------------- 状态（与 URL 同步，便于截图复现） ---------------- */
+  const qs = new URLSearchParams(location.search);
+  const [hScreen, hDevice] = location.hash.replace("#", "").split("/");
+  const S = {
+    screen: qs.get("screen") || hScreen || "landing",
+    device: qs.get("device") || hDevice || "desktop",
+    theme: qs.get("theme") || "light",
+    state: qs.get("state") || "",
+  };
+  if (qs.get("capture")) document.body.classList.add("capture");
+  if (qs.get("fullpage")) document.body.classList.add("fullpage");
+
+  const stage = $("#stage");
+  function apply() {
+    document.documentElement.dataset.theme = S.theme;
+    stage.dataset.device = S.device;
+    $$(".screen").forEach((el) => el.classList.toggle("is-active", el.dataset.screen === S.screen));
+    $$("[data-go]", $("#pvBar")).forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.go === S.screen)));
+    $$("[data-device-go]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.deviceGo === S.device)));
+    $$("[data-theme-go]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.themeGo === S.theme)));
+    $("#iosStatus").dataset.tone = S.screen === "auth" ? "canvas" : "surface";
+    renderRails();
+    const insp = $("#inspector");
+    if (S.device === "mobile") { insp.classList.remove("is-collapsed"); } else { closeSheet(); }
+    if (!qs.get("capture")) history.replaceState(null, "", `#${S.screen}/${S.device}`);
+  }
+  function go(screen) { S.screen = screen; closeDrawer(); closePops(); apply(); const sc = $(`.screen[data-screen="${screen}"]`); sc && (sc.scrollTop = 0); $$(".page", sc).forEach((p) => (p.scrollTop = 0)); }
+
+  /* ---------------- 左侧栏 & 手机 Tab 栏 ---------------- */
+  const ROOMS = [
+    { name: "发布前评审 · v2.4", icon: "i-code", pending: true },
+    { name: "增长实验头脑风暴", icon: "i-bulb" },
+    { name: "架构辩论：单体还是服务化", icon: "i-scale" },
+    { name: "移动端体验重构", icon: "i-blocks" },
+    { name: "官网改版", icon: "i-msg" },
+  ];
+  function renderRails() {
+    const pendingCount = seats.filter((s) => s.state === "pending").length;
+    $$("[data-rail]").forEach((rail) => {
+      const at = rail.dataset.rail;
+      rail.innerHTML = `
+        <div class="rail__top"><a class="brand" href="#" data-go="landing"><span class="brand-mark">${ic("i-logo")}</span>Project Room</a></div>
+        <button class="nav-item" data-go="rooms" ${at === "rooms" ? 'aria-current="page"' : ""}>${ic("i-grid")}协作室</button>
+        <button class="nav-item" data-go="agents" ${at === "agents" ? 'aria-current="page"' : ""}>${ic("i-bot")}接入 Agent</button>
+        <button class="nav-item" data-go="room">${ic("i-hand")}待处理${pendingCount ? `<span class="count count-warn">${pendingCount}</span>` : ""}</button>
+        <div class="rail__label"><span>我的房间</span><button class="icon-btn" style="width:24px;height:24px" data-act="open-drawer" title="新建房间">${ic("i-plus", "sm")}</button></div>
+        ${ROOMS.map((r, i) => `<button class="room-link" data-go="room" ${at === "room" && i === 0 ? 'aria-current="page"' : ""}>
+            <span class="glyph">${ic(r.icon)}</span><span class="name">${esc(r.name)}</span>
+            ${r.pending && pendingCount ? '<span class="dot dot-pending"></span>' : ""}${r.unread ? `<span class="count">${r.unread}</span>` : ""}</button>`).join("")}
+        <div class="rail__foot"><span class="av av-28 av-me">王</span><div class="who">王达<small>wangda@studio.cn</small></div><button class="icon-btn" title="设置">${ic("i-sliders")}</button></div>`;
+    });
+    $$("[data-tabbar]").forEach((bar) => {
+      const at = bar.dataset.tabbar;
+      bar.innerHTML = `
+        <button data-go="rooms" ${at === "rooms" ? 'aria-current="page"' : ""}>${ic("i-grid")}协作室${pendingCount ? `<span class="count count-warn">${pendingCount}</span>` : ""}</button>
+        <button data-go="agents" ${at === "agents" ? 'aria-current="page"' : ""}>${ic("i-bot")}接入 Agent</button>
+        <button data-go="auth">${ic("i-user")}我的</button>`;
+    });
+  }
+
+  /* ---------------- 房间：席位数据（对应 HubSeatView） ---------------- */
+  const seats = [
+    { id: "muse", name: "Muse", kind: "cloud", letter: "M", state: "pending", meta: "通过你的邀请链接 · 2 分钟前" },
+    { id: "grok", name: "Grok Bot", kind: "cloud", letter: "G", state: "active", meta: "王达接入" },
+    { id: "codex", name: "Codex", kind: "local", letter: "Cx", state: "active", meta: "林溪的 MacBook" },
+    { id: "claude", name: "Claude Code", kind: "local", letter: "CC", state: "paused", meta: "王达的工作站" },
+  ];
+  let confirmRemove = null;
+  const avAgent = (s, size = 28) => `<span class="av av-${size} av-agent av-${s.kind}">${s.letter}<span class="av-badge">${ic(s.kind === "cloud" ? "i-cloud" : "i-terminal")}</span></span>`;
+
+  function seatRow(s) {
+    if (s.state === "pending" || s.state === "joining") {
+      return `<div class="seat seat--pending">${avAgent(s)}
+        <div class="seat__info"><div class="seat__name"><span class="nm">${s.name}</span><span class="tag tag-cloud">云端</span></div>
+        <div class="seat__meta">${s.state === "joining" ? '<span class="spin" style="width:10px;height:10px;border-width:1.5px"></span>正在加入加密群…' : esc(s.meta)}</div></div>
+        ${s.state === "pending" ? `<div class="full"><button class="btn btn-secondary btn-sm" data-act="deny-muse">拒绝</button><button class="btn btn-primary btn-sm" data-act="approve-muse">批准入房</button></div>` : ""}</div>`;
+    }
+    const paused = s.state === "paused";
+    const status = paused ? '<span class="dot dot-paused"></span>已暂停' : '<span class="dot dot-online"></span>已入群';
+    const confirm = confirmRemove === s.id
+      ? `<div class="seat-confirm"><span>先移出加密群，再删除席位。移出后 ${s.name} 无法再读取新消息。</span><button class="btn btn-ghost btn-sm" data-act="cancel-remove">取消</button><button class="btn btn-sm btn-danger-ghost" style="border:1px solid var(--danger-border)" data-act="do-remove" data-id="${s.id}">移出</button></div>` : "";
+    return `<div class="seat ${paused ? "is-paused" : ""} ${confirm ? "has-confirm" : ""}">${avAgent(s)}
+      <div class="seat__info"><div class="seat__name"><span class="nm">${s.name}</span></div>
+      <div class="seat__meta">${status}<span class="sep"></span><span class="truncate">${esc(s.meta)}</span></div></div>
+      <div class="seat__acts">
+        <button class="icon-btn" data-act="toggle-pause" data-id="${s.id}" title="${paused ? "恢复席位" : "暂停席位（保留席位，停止回复）"}">${ic(paused ? "i-play" : "i-pause", "sm")}</button>
+        <button class="icon-btn" data-act="ask-remove" data-id="${s.id}" title="移出房间">${ic("i-trash", "sm")}</button>
+      </div>${confirm}</div>`;
+  }
+  function renderMembers() {
+    const pending = seats.filter((s) => s.state === "pending" || s.state === "joining");
+    const cloud = seats.filter((s) => s.kind === "cloud" && (s.state === "active" || s.state === "paused"));
+    const local = seats.filter((s) => s.kind === "local" && (s.state === "active" || s.state === "paused"));
+    $("#membersPanel").innerHTML = `
+      ${pending.length ? `<div class="group"><h5>待批准<span class="count count-warn">${pending.length}</span></h5>${pending.map(seatRow).join("")}</div>` : ""}
+      <div class="group"><h5>人类成员<span class="count">2</span></h5>
+        <div class="seat"><span class="av av-28 av-me">王</span><div class="seat__info"><div class="seat__name"><span class="nm">王达</span><span class="tag tag-owner">房主</span><span class="faint" style="font-weight:400;font-size:12px">你</span></div><div class="seat__meta"><span class="dot dot-online"></span>在线</div></div></div>
+        <div class="seat"><span class="av av-28 av-human">林</span><div class="seat__info"><div class="seat__name"><span class="nm">林溪</span></div><div class="seat__meta"><span class="dot dot-online"></span>在线<span class="sep"></span>协作者</div></div></div>
+      </div>
+      <div class="group"><h5>${ic("i-cloud", "xs")}云端 Agent<span class="count">${cloud.length}</span></h5>${cloud.map(seatRow).join("") || '<p class="help" style="padding:0 4px">还没有云端 Agent。</p>'}</div>
+      <div class="group"><h5>${ic("i-laptop", "xs")}电脑端 Agent<span class="count">${local.length}</span></h5>${local.map(seatRow).join("") || '<p class="help" style="padding:0 4px">还没有电脑端 Agent。</p>'}
+        <button class="add-row" data-go="agents">${ic("i-plus", "sm")}接入更多 Agent</button></div>`;
+    const pc = seats.filter((s) => s.state === "pending").length;
+    [$("#tabPendingBadge"), $("#mPendingBadge")].forEach((b) => { b.textContent = pc; b.hidden = pc === 0; });
+    $("#mAgentCount").textContent = cloud.length + local.length;
+    renderRails();
+  }
+
+  function appendToStream(html) {
+    const wrap = document.createElement("div");
+    wrap.innerHTML = html.trim();
+    const node = wrap.firstChild;
+    node.classList.add("rise");
+    $("#streamInner").appendChild(node);
+    const st = $("#stream"); st.scrollTop = st.scrollHeight;
+  }
+  const now = () => { const d = new Date(); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
+
+  function approveMuse() {
+    const muse = seats.find((s) => s.id === "muse");
+    if (muse.state !== "pending") return;
+    muse.state = "joining"; renderMembers();
+    const banner = $("#roomBanner");
+    banner.classList.add("is-joining");
+    banner.querySelector(".txt").innerHTML = `<b>正在把 Muse 加入加密群…</b><small>由你的浏览器完成，通常几秒钟</small>`;
+    banner.querySelector(".acts").innerHTML = '<span class="spin" style="color:var(--info)"></span>';
+    $("#attention") && $("#attention").remove();
+    setTimeout(() => {
+      muse.state = "active"; muse.meta = "王达批准 · 刚刚"; renderMembers();
+      banner.classList.add("is-gone");
+      appendToStream(`<div class="sys">${ic("i-shield")}<span>你批准了 <b>Muse</b> 入房 · 已加入加密群 · ${now()}</span></div>`);
+      prependFeed("i-shield", "<b>王达</b> 批准 Muse 入房 · 已加入加密群");
+      setTimeout(() => appendToStream(`<div class="msg">${avAgent(muse, 36)}<div><div class="msg__head"><span class="msg__name">Muse</span><span class="tag tag-cloud">云端 Agent</span><span class="msg__time">${now()}</span></div><div class="msg__body"><p>大家好，我是 Muse。我读完了上面的讨论，可以把幂等方案整理成一份上线检查清单，需要的话 @ 我。</p></div></div></div>`), 1100);
+    }, 1100);
+  }
+  function denyMuse() {
+    const i = seats.findIndex((s) => s.id === "muse");
+    if (i < 0 || seats[i].state !== "pending") return;
+    seats.splice(i, 1); renderMembers();
+    $("#roomBanner").classList.add("is-gone");
+    appendToStream(`<div class="sys">${ic("i-x")}<span>你拒绝了 <b>Muse</b> 的入房申请 · ${now()}</span></div>`);
+    prependFeed("i-x", "<b>王达</b> 拒绝了 Muse 的入房申请");
+  }
+  function prependFeed(icon, html) {
+    const f = $("#feed"); const d = document.createElement("div");
+    d.className = "feed-item rise"; d.innerHTML = `<span class="ic">${ic(icon)}</span><div>${html}<time>${now()}</time></div>`;
+    f.prepend(d);
+  }
+
+  /* ---------------- @ 提及选择器 ---------------- */
+  const input = $("#composerInput"), pop = $("#mentionPop"), sendBtn = $("#sendBtn");
+  let mentionOpen = false, mentionIdx = 0, mentionItems = [];
+  function mentionCandidates(q) {
+    const agents = seats.filter((s) => s.state === "active" || s.state === "paused").map((s) => ({
+      name: s.name, group: "Agent", av: avAgent(s, 24), sub: s.state === "paused" ? '<span class="dot dot-paused"></span>已暂停' : `<span class="dot dot-online"></span>${s.kind === "cloud" ? "云端" : "电脑端"}`, disabled: s.state === "paused", kind: s.kind,
+    }));
+    const all = [
+      { name: "全体 Agent", insert: "全体", group: "快捷", av: `<span class="av av-24 av-agent" style="background:var(--bg-muted);color:var(--text-1)">${ic("i-users", "xs")}</span>`, sub: "所有在线 Agent 依次回复" },
+      ...agents,
+      { name: "林溪", group: "人类", av: '<span class="av av-24 av-human">林</span>', sub: '<span class="dot dot-online"></span>在线' },
+    ];
+    const ql = q.toLowerCase();
+    return all.filter((m) => !ql || m.name.toLowerCase().includes(ql) || (m.insert || "").includes(ql));
+  }
+  function renderMention(q) {
+    mentionItems = mentionCandidates(q);
+    if (!mentionItems.length) { closeMention(); return; }
+    mentionIdx = Math.min(mentionIdx, mentionItems.length - 1);
+    if (mentionItems[mentionIdx].disabled) mentionIdx = mentionItems.findIndex((m) => !m.disabled);
+    let lastGroup = "";
+    pop.innerHTML = mentionItems.map((m, i) => {
+      const head = m.group !== lastGroup ? `<h6>${m.group}</h6>` : ""; lastGroup = m.group;
+      return `${head}<button class="mention-opt" role="option" data-i="${i}" aria-selected="${i === mentionIdx}" aria-disabled="${!!m.disabled}">${m.av}<span class="n"><b>${m.name}</b></span><span class="s">${m.sub}</span></button>`;
+    }).join("") + `<footer><span><span class="kbd">↑</span> <span class="kbd">↓</span> 选择</span><span><span class="kbd">Enter</span> 插入</span><span><span class="kbd">Esc</span> 关闭</span></footer>`;
+    pop.classList.add("show"); mentionOpen = true;
+  }
+  function closeMention() { pop.classList.remove("show"); mentionOpen = false; mentionIdx = 0; }
+  function mentionQuery() {
+    const before = input.value.slice(0, input.selectionStart);
+    const m = before.match(/(^|\s)@([^\s@]*)$/);
+    return m ? m[2] : null;
+  }
+  function insertMention(i) {
+    const m = mentionItems[i]; if (!m || m.disabled) return;
+    const pos = input.selectionStart, before = input.value.slice(0, pos), after = input.value.slice(pos);
+    const replaced = before.replace(/@([^\s@]*)$/, `@${m.insert || m.name} `);
+    input.value = replaced + after; input.focus(); input.selectionStart = input.selectionEnd = replaced.length;
+    closeMention(); onInput();
+  }
+  function autoGrow() { input.style.height = "auto"; input.style.height = Math.min(input.scrollHeight, 160) + "px"; }
+  function onInput() { autoGrow(); sendBtn.disabled = !input.value.trim(); const q = mentionQuery(); q === null ? closeMention() : renderMention(q); }
+  input.addEventListener("input", onInput);
+  input.addEventListener("click", onInput);
+  input.addEventListener("keydown", (e) => {
+    if (mentionOpen) {
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault(); const d = e.key === "ArrowDown" ? 1 : -1; let n = mentionIdx;
+        do { n = (n + d + mentionItems.length) % mentionItems.length; } while (mentionItems[n].disabled && n !== mentionIdx);
+        mentionIdx = n; renderMention(mentionQuery() || ""); return;
+      }
+      if (e.key === "Enter" || e.key === "Tab") { e.preventDefault(); insertMention(mentionIdx); return; }
+      if (e.key === "Escape") { e.preventDefault(); closeMention(); return; }
+    }
+    if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); send(); }
+  });
+  pop.addEventListener("mousedown", (e) => { const b = e.target.closest(".mention-opt"); if (b) { e.preventDefault(); insertMention(Number(b.dataset.i)); } });
+
+  function renderText(t) {
+    const names = seats.map((s) => [s.name, s.kind]);
+    let html = esc(t);
+    names.forEach(([n, k]) => { html = html.split(`@${esc(n)}`).join(`<span class="mention ${k}">@${esc(n)}</span>`); });
+    html = html.replace(/@(全体|林溪)/g, '<span class="mention">@$1</span>');
+    return html.replace(/\n/g, "<br>");
+  }
+  function send() {
+    const t = input.value.trim(); if (!t) return;
+    appendToStream(`<div class="msg msg--me"><span class="av av-36 av-me">王</span><div><div class="msg__head"><span class="msg__name">王达</span><span class="tag tag-owner">房主</span><span class="msg__time">${now()}</span></div><div class="msg__body"><p>${renderText(t)}</p></div></div></div>`);
+    input.value = ""; onInput();
+    const target = seats.find((s) => s.state === "active" && t.includes(`@${s.name}`));
+    if (target) setTimeout(() => appendToStream(`<div class="msg">${avAgent(target, 36)}<div><div class="msg__head"><span class="msg__name">${target.name}</span><span class="tag tag-${target.kind}">${target.kind === "cloud" ? "云端 Agent" : "电脑端 · " + target.meta}</span><span class="msg__time">${now()}</span></div><div class="msg__body"><p>收到，我先看一下上下文，几分钟内给出结论。</p></div></div></div>`), 1200);
+  }
+
+  /* ---------------- 模板建房抽屉（数据对应 /api/v1/templates） ---------------- */
+  const SCOPE_LABEL = { "calendar.free_busy": "查看日程空闲", "email.receipt": "读取邮件回执", "task.run": "执行任务", "gmail.send": "对外发送邮件" };
+  const base = { "calendar.free_busy": "ask", "email.receipt": "ask", "task.run": "ask" };
+  const TPL = [
+    { key: "code_review", name: "代码评审", icon: "i-code", desc: "两个 Agent 互相审查代码，发现问题和改进建议", rounds: 2,
+      roles: [["审查者 Reviewer", "代码审查、安全检查、性能分析；不关注需求分析"]], rules: { ...base, "gmail.send": "cannot" },
+      notes: ["评审房间默认不对外发信，如需请主人在本机放行。", "所有数据读取与任务请求默认由主人当场决定。"] },
+    { key: "brainstorm", name: "头脑风暴", icon: "i-bulb", desc: "多个 Agent 从不同角度讨论方案，激发创意", rounds: 3,
+      roles: [["创意者 Creative", "提出大胆想法、打破常规"], ["分析者 Analyst", "评估可行性、识别成本与风险"]], rules: { ...base, "gmail.send": "cannot" },
+      notes: ["讨论房间默认不对外发信。", "所有数据读取与任务请求默认由主人当场决定。"] },
+    { key: "debate", name: "技术辩论", icon: "i-scale", desc: "正反方 Agent 就技术方案展开辩论，人类裁决", rounds: 3,
+      roles: [["正方 Pro", "支持当前方案、列举优势与成功案例"], ["反方 Con", "质疑当前方案、指出风险与替代方案"]], rules: { ...base, "gmail.send": "cannot" },
+      notes: ["辩论房间默认不对外发信。", "三轮无法达成共识时升级给人类裁决。"] },
+    { key: "dev_team", name: "开发团队", icon: "i-blocks", desc: "架构师 + 开发者 + 审查者的完整开发流程", rounds: 3,
+      roles: [["架构师 Architect", "系统设计、技术选型、架构评审"], ["开发者 Developer", "功能实现、代码编写、单元测试"], ["审查者 Reviewer", "代码审查、质量把关、安全检查"]], rules: { ...base, "gmail.send": "ask" },
+      notes: ["对外发信仍需主人当场批准。", "三轮无法达成共识时升级给人类裁决。"] },
+    { key: "", name: "空白房间", icon: "i-msg", desc: "不预置规则，适合任意讨论", rounds: null, roles: [], rules: null, notes: [] },
+  ];
+  let tplSel = "code_review";
+  function renderTpl() {
+    $("#tplList").innerHTML = TPL.map((t) => `<button class="tpl-opt" role="radio" aria-checked="${t.key === tplSel}" data-tpl="${t.key}"><span class="ico">${ic(t.icon)}</span><span style="min-width:0"><b>${t.name}</b><small>${t.desc}</small></span></button>`).join("");
+    const t = TPL.find((x) => x.key === tplSel);
+    $("#tplPreview").innerHTML = t.key ? `
+      <header>${ic("i-list-check", "sm")}协作规则预览<small>默认 ${t.rounds} 轮 · 建房后可在「规则」中修改</small></header>
+      <section><h5>分工</h5><div class="roles">${t.roles.map(([r, d]) => `<div class="role"><b>${r}</b><span>${d}</span></div>`).join("")}</div></section>
+      <section><h5>Agent 行为规则</h5><div class="rules">${Object.entries(t.rules).map(([k, v]) => `<div class="rule"><span class="scope">${SCOPE_LABEL[k]}<code>${k}</code></span><span class="tag ${v === "cannot" ? "tag-warn" : "tag-neutral"}">${v === "cannot" ? "不允许" : "需询问"}</span></div>`).join("")}</div>
+        <ul class="notes">${t.notes.map((n) => `<li>${n}</li>`).join("")}</ul></section>
+      <section class="row" style="justify-content:space-between"><span class="help">规则是建议，最终以各成员本机授权为准。</span><button class="btn btn-ghost btn-sm">自定义${ic("i-chev-right", "xs")}</button></section>`
+      : `<header>${ic("i-msg", "sm")}空白房间</header><section><p class="muted" style="font-size:13px;line-height:20px">不预置分工和规则。建房后可以在房间的「规则」面板里随时补充。</p></section>`;
+    const d = new Date(); $("#roomName").value = `${t.key ? t.name : "新房间"} · ${d.getMonth() + 1}月${d.getDate()}日`;
+  }
+  function openDrawer() { if (S.screen !== "rooms") go("rooms"); renderTpl(); $("#drawer").classList.add("show"); $("#drawerBackdrop").classList.add("show"); }
+  function closeDrawer() { $("#drawer").classList.remove("show"); $("#drawerBackdrop").classList.remove("show"); }
+
+  /* ---------------- Agent 接入中心 ---------------- */
+  const PRESET = {
+    grok: { title: "Grok Bot", where: "Grok 云电脑", addr: "0x3fA9…71c2",
+      more: `<b>Webhook 实时唤醒（可选）</b>：在指令末尾追加 <code class="inline">--wake-url &lt;你的 Webhook 地址&gt; --wake-key-env GROK_WEBHOOK_KEY</code>，有新消息时会立即唤醒 Grok Bot。` },
+    muse: { title: "Muse", where: "Muse 安全虚拟机", addr: "0x91Cd…0be4",
+      more: `<b>出站审查</b>：如果虚拟机开启了出站权限审查，请放行 <code class="inline">hub.wangdada8208.xyz</code> 与 XMTP 网络。` },
+  };
+  const cloud = { open: null, stage: "idle", copied: false, full: false, timer: 0 };
+  function cmdText(p) {
+    return `<span class="p">$ </span>curl -fsSL https://hub.wangdada8208.xyz/downloads/xmtp-member-latest.tar.gz -o /tmp/mapr.tar.gz && mkdir -p ~/.mapr-bot/app && tar -xzf /tmp/mapr.tar.gz -C ~/.mapr-bot/app --strip-components=1 && (cd ~/.mapr-bot/app && npm ci --omit=dev) && node --experimental-strip-types ~/.mapr-bot/app/src/cli.ts <span class="hl">bridge --invite "https://hub.wangdada8208.xyz/rooms/7f3a…?invite=k9Qx…" --name "${p.title}" --env "production"</span>`;
+  }
+  function cmdShort(p) {
+    return `<span class="p">$ </span>curl … xmtp-member-latest.tar.gz && tar … && npm ci …
+<span class="c"># ↑ 下载并安装桥接程序（已包含在复制内容中）</span>
+<span class="p">$ </span>node …/cli.ts <span class="hl">bridge \\
+    --invite "https://hub.wangdada8208.xyz/rooms/7f3a…?invite=k9Qx…" \\
+    --name "${p.title}" --env "production"</span>`;
+  }
+  function renderConnect() {
+    const panel = $("#connectPanel");
+    $$("[data-agent-card]").forEach((c) => c.setAttribute("aria-expanded", String(c.dataset.agentCard === cloud.open)));
+    if (!cloud.open) { panel.classList.remove("show"); panel.innerHTML = ""; return; }
+    const p = PRESET[cloud.open], st = cloud.stage, room = $("#targetRoom").value;
+    const gen = st === "generating";
+    const s1 = gen ? "active" : "done", s2 = gen ? "" : (st === "ready" && !cloud.copied ? "active" : "done"), s3 = st === "approved" ? "done" : (st === "pending" || cloud.copied ? "active" : "");
+    const tl = [];
+    tl.push(`<div class="tl ${gen ? "wait" : "ok"}"><span class="m">${gen ? "" : ic("i-check")}</span><div>${gen ? "正在生成一次性邀请…" : "邀请已生成"}<small>${gen ? "" : "10:21 · 仅限「" + esc(room) + "」"}</small></div></div>`);
+    if (st === "pending" || st === "approved") {
+      tl.push(`<div class="tl ok"><span class="m">${ic("i-check")}</span><div>${p.title} 已连接并提交入房申请<small>10:23</small></div></div>`);
+    } else if (!gen) {
+      tl.push(`<div class="tl wait"><span class="m"></span><div>等待 ${p.title} 运行指令…<small>通常 1–2 分钟，本页会自动刷新</small></div></div>`);
+    }
+    if (st === "pending") {
+      tl.push(`<div class="tl wait"><span class="m"></span><div style="min-width:0">等你批准
+        <div class="req"><div class="who">${avAgent({ kind: "cloud", letter: p.title[0] }, 28)}<div style="min-width:0"><b>${p.title}</b> 请求加入房间<small>${p.addr}</small></div></div>
+        <div class="acts"><button class="btn btn-secondary btn-sm" data-act="cloud-deny">拒绝</button><button class="btn btn-primary btn-sm" data-act="cloud-approve">批准入房</button></div></div></div></div>`);
+    } else if (st === "approved") {
+      tl.push(`<div class="tl ok"><span class="m">${ic("i-check")}</span><div style="min-width:0">已批准入房
+        <div class="req ok"><div class="who">${avAgent({ kind: "cloud", letter: p.title[0] }, 28)}<div style="min-width:0"><b>${p.title}</b> 已获得席位<small>打开房间后，你的浏览器会把它加入加密群</small></div></div>
+        <div class="acts"><button class="btn btn-primary btn-sm" data-go="room">进入房间${ic("i-arrow-right", "sm")}</button></div></div></div></div>`);
+    } else {
+      tl.push(`<div class="tl idle"><span class="m"></span><div>批准入房<small>申请到达后会在这里出现</small></div></div>`);
+    }
+    panel.innerHTML = `
+      <div class="connect__head">${avAgent({ kind: "cloud", letter: p.title[0] }, 28)}<h3>接入 ${p.title}<small>到「${esc(room)}」<span class="d-only"> · 三步完成，全程无需电脑</span></small></h3><button class="icon-btn" data-act="cloud-close" aria-label="收起">${ic("i-x")}</button></div>
+      <div class="connect__steps">
+        <div class="step ${s1}">
+          <div class="step__n"><i>${s1 === "done" ? ic("i-check", "xs") : "1"}</i>设置邀请</div>
+          <div class="m-line row" style="font-size:12.5px;color:var(--text-2)">${ic("i-shield", "sm")}<span class="spacer">需我批准 · 72 小时内有效 · 仅限 1 次</span><button class="btn btn-ghost btn-sm" data-act="step-open">修改</button></div>
+          <div class="m-collapse">
+            <div class="opt-row"><div class="t">入房需要我批准<small>推荐开启，更安全</small></div><button class="switch" role="switch" aria-checked="true" data-act="toggle-switch"></button></div>
+            <div class="facts"><span>${ic("i-clock", "sm")}72 小时内有效</span><span>${ic("i-key", "sm")}仅可使用 1 次</span><span>${ic("i-lock", "sm")}只能进入所选房间</span></div>
+            <button class="btn btn-ghost btn-sm" style="align-self:flex-start">${ic("i-refresh", "sm")}重新生成</button>
+          </div>
+        </div>
+        <div class="step ${s2}">
+          <div class="step__n"><i>${s2 === "done" ? ic("i-check", "xs") : "2"}</i>复制接入指令</div>
+          ${gen ? `<div class="row muted" style="font-size:13px"><span class="spin"></span>正在生成专属指令…</div>` : `
+          <div class="m-line row" style="font-size:12.5px;color:var(--text-2)">${ic("i-copy", "sm")}<span class="spacer">已复制，发给 ${p.title} 运行即可</span><button class="btn btn-ghost btn-sm" data-act="step-open">查看指令</button></div>
+          <div class="m-collapse">
+          <div class="cmd"><div class="cmd__bar"><span>在 ${p.where}的终端运行</span><span class="row" style="gap:4px"><button class="btn-copy" data-act="cmd-toggle">${cloud.full ? "收起" : "完整指令"}</button><button class="btn-copy" data-act="cloud-copy">${ic(cloud.copied ? "i-check" : "i-copy", "xs")}${cloud.copied ? "已复制" : "复制"}</button></span></div><pre>${cloud.full ? cmdText(p) : cmdShort(p)}</pre></div>
+          <button class="btn ${cloud.copied ? "btn-secondary" : "btn-primary"}" data-act="cloud-copy">${ic(cloud.copied ? "i-check" : "i-copy", "sm")}${cloud.copied ? `已复制，发给 ${p.title}` : "复制接入指令"}</button>
+          <details class="more"><summary>${ic("i-chev-right", "xs")}高级选项与说明</summary><p>${p.more}</p><p>群消息会写入 <code class="inline">~/.mapr-bot/mailbox/inbound.jsonl</code>；把回复保存到 <code class="inline">outbox/</code> 目录即可自动加密发送。</p></details></div>`}
+        </div>
+        <div class="step ${s3}">
+          <div class="step__n"><i>${s3 === "done" ? ic("i-check", "xs") : "3"}</i>批准入房</div>
+          <div class="timeline">${tl.join("")}</div>
+        </div>
+      </div>`;
+    panel.classList.add("show");
+  }
+  function openCloud(id, preset) {
+    clearTimeout(cloud.timer);
+    if (cloud.open === id && !preset) { cloud.open = null; renderConnect(); return; }
+    cloud.open = id; cloud.copied = false;
+    if (preset) { cloud.stage = preset; cloud.copied = preset !== "ready"; renderConnect(); return; }
+    cloud.stage = "generating"; renderConnect();
+    cloud.timer = setTimeout(() => { cloud.stage = "ready"; renderConnect(); }, 650);
+    if (S.device === "mobile") setTimeout(() => $("#connectPanel").scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+  }
+  function renderLocal() {
+    const L = [
+      { n: "Claude Code", s: "Anthropic 终端编程 Agent", l: "CC", st: `<span style="color:var(--ok)">${ic("i-check", "xs")}</span>已在本机检测到 · v2.1`, b: `<button class="btn btn-primary btn-sm" data-act="fake-join" data-name="Claude Code">加入房间</button>` },
+      { n: "Codex", s: "OpenAI 终端编码 Agent", l: "Cx", st: `<span class="tag tag-ok">已在当前房间</span>`, b: `<button class="btn btn-ghost btn-sm" data-go="room">查看席位</button>` },
+      { n: "Gemini CLI", s: "Google 终端 Agent", l: "Gm", st: `<span class="faint">本机未检测到</span>`, b: `<button class="btn btn-secondary btn-sm">查看安装命令</button>` },
+      { n: "OpenClaw", s: "通过命令行 Agent 预设接入", l: "OC", st: `<span class="faint">在本机助手中添加</span>`, b: `<button class="btn btn-secondary btn-sm">配置${ic("i-ext", "xs")}</button>` },
+      { n: "xAI 模型接口", s: "API Key 只存在本机", l: "x", st: `<span class="faint">未配置</span>`, b: `<button class="btn btn-secondary btn-sm">配置${ic("i-ext", "xs")}</button>` },
+      { n: "Ollama 本机模型", s: "Qwen、DeepSeek、Llama", l: "Ol", st: `<span class="faint">未配置</span>`, b: `<button class="btn btn-secondary btn-sm">配置${ic("i-ext", "xs")}</button>` },
+      { n: "Webhook", s: "LangGraph、Dify、自研服务", l: ic("i-webhook", "xs"), st: `<span class="faint">未配置</span>`, b: `<button class="btn btn-secondary btn-sm">配置${ic("i-ext", "xs")}</button>` },
+    ];
+    $("#localGrid").innerHTML = L.map((x) => `<div class="lc"><div class="lc__top"><span class="av av-36 av-agent av-local">${x.l}</span><div><b>${x.n}</b><small>${x.s}</small></div></div><div class="lc__st">${x.st}</div>${x.b}</div>`).join("")
+      + `<button class="lc" style="border-style:dashed;background:transparent;align-items:flex-start;justify-content:center;color:var(--text-2);text-align:left">${ic("i-laptop")}<b style="color:var(--text-1);font-size:14px">连接另一台电脑</b><span style="font-size:12px;line-height:17px">生成新的配对命令，支持 macOS、Linux 与 Windows</span></button>`;
+  }
+
+  /* ---------------- 通用：Toast / 弹层 / Sheet ---------------- */
+  let toastTimer = 0;
+  function toast(t) { $("#toastText").textContent = t; const el = $("#toast"); el.classList.add("show"); clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove("show"), 1800); }
+  function closePops() { $("#e2eePop").classList.remove("show"); closeMention(); }
+  function openSheet(tab) { setTab(tab); $("#inspector").classList.add("sheet-open"); $("#sheetBackdrop").classList.add("show"); }
+  function closeSheet() { $("#inspector").classList.remove("sheet-open"); $("#sheetBackdrop").classList.remove("show"); }
+  function setTab(tab) {
+    $$(".inspector__tabs [data-tab]").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.tab === tab)));
+    $$(".tabpanel").forEach((p) => p.classList.toggle("show", p.dataset.panel === tab));
+  }
+  function showInspector(tab) {
+    if (S.device === "mobile") { openSheet(tab); return; }
+    $("#inspector").classList.remove("is-collapsed");
+    $('[data-act="toggle-inspector"]').setAttribute("aria-pressed", "true");
+    setTab(tab);
+  }
+
+  /* ---------------- 事件委托 ---------------- */
+  document.addEventListener("click", (e) => {
+    const t = e.target.closest("[data-go],[data-act],[data-tab],[data-tpl],[data-agent-card],[data-auth],[data-device-go],[data-theme-go]");
+    if (!t) { if (!e.target.closest(".e2ee-pop")) $("#e2eePop").classList.remove("show"); return; }
+    if (t.dataset.deviceGo) { S.device = t.dataset.deviceGo; apply(); return; }
+    if (t.dataset.themeGo) { S.theme = t.dataset.themeGo; apply(); return; }
+    if (t.dataset.auth) {
+      const on = t.dataset.auth === "onboard";
+      $("#authLogin").hidden = on; $("#authOnboard").hidden = !on;
+      $$(".auth__top [data-auth]").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.auth === t.dataset.auth)));
+      return;
+    }
+    if (t.dataset.tab) { setTab(t.dataset.tab); return; }
+    if (t.dataset.tpl !== undefined && t.classList.contains("tpl-opt")) { tplSel = t.dataset.tpl; renderTpl(); return; }
+    if (t.dataset.agentCard) { openCloud(t.dataset.agentCard); return; }
+    if (t.dataset.go) {
+      e.preventDefault();
+      go(t.dataset.go);
+      if (t.dataset.openDrawer) setTimeout(openDrawer, 60);
+      if (t.dataset.agent) setTimeout(() => openCloud(t.dataset.agent), 60);
+      return;
+    }
+    const id = t.dataset.id;
+    switch (t.dataset.act) {
+      case "open-drawer": openDrawer(); break;
+      case "close-drawer": closeDrawer(); break;
+      case "create-room": { const n = $("#roomName").value.trim() || "新房间"; closeDrawer(); toast(`已创建「${n}」，正在进入房间`); setTimeout(() => go("room"), 700); break; }
+      case "approve-muse": approveMuse(); break;
+      case "deny-muse": denyMuse(); break;
+      case "toggle-pause": { const s = seats.find((x) => x.id === id); s.state = s.state === "paused" ? "active" : "paused"; renderMembers(); toast(s.state === "paused" ? `已暂停 ${s.name}，席位保留` : `已恢复 ${s.name}`); prependFeed(s.state === "paused" ? "i-pause" : "i-play", `<b>王达</b> ${s.state === "paused" ? "暂停" : "恢复"}了 ${s.name} 的席位`); break; }
+      case "ask-remove": confirmRemove = id; renderMembers(); break;
+      case "cancel-remove": confirmRemove = null; renderMembers(); break;
+      case "do-remove": { const i = seats.findIndex((x) => x.id === id); const n = seats[i].name; seats.splice(i, 1); confirmRemove = null; renderMembers(); toast(`${n} 已移出加密群并删除席位`); appendToStream(`<div class="sys">${ic("i-x")}<span><b>${n}</b> 已被移出房间 · ${now()}</span></div>`); break; }
+      case "toggle-e2ee": e.stopPropagation(); $("#e2eePop").classList.toggle("show"); break;
+      case "toggle-inspector": { const c = $("#inspector").classList.toggle("is-collapsed"); t.setAttribute("aria-pressed", String(!c)); break; }
+      case "open-members": showInspector("members"); break;
+      case "open-invite": showInspector("invite"); break;
+      case "close-sheet": closeSheet(); break;
+      case "insert-at": { input.focus(); const p = input.selectionStart; const pre = input.value.slice(0, p); input.value = pre + (pre && !/\s$/.test(pre) ? " @" : "@") + input.value.slice(p); input.selectionStart = input.selectionEnd = p + (pre && !/\s$/.test(pre) ? 2 : 1); onInput(); break; }
+      case "send": send(); break;
+      case "adopt": input.value = "✅ 采纳结论「支付回调幂等改造」，@Codex 按此方案提交 PR，@Claude Code 恢复后补测试。"; onInput(); input.focus(); break;
+      case "continue": input.value = "@Codex @Grok Bot 关于人工确认这一步，"; onInput(); input.focus(); break;
+      case "toggle-switch": t.setAttribute("aria-checked", String(t.getAttribute("aria-checked") !== "true")); break;
+      case "fake-copy": toast("已复制到剪贴板"); break;
+      case "fake-share": toast("已打开系统分享面板"); break;
+      case "fake-join": toast(`${t.dataset.name} 席位已创建，进入房间后自动加入加密群`); break;
+      case "lp-approve": {
+        const b = $("#lpBanner"); b.classList.add("is-joining"); b.querySelector(".acts").innerHTML = '<span class="spin" style="color:var(--info)"></span>';
+        b.querySelector(".txt").innerHTML = "<b>正在把 Muse 加入加密群…</b><small>由你的浏览器完成</small>";
+        setTimeout(() => { b.style.background = "var(--ok-bg)"; b.style.borderColor = "var(--ok-border)"; b.querySelector(".acts").innerHTML = `<span style="color:var(--ok)">${ic("i-check")}</span>`; b.querySelector(".txt").innerHTML = "<b>Muse 已加入房间</b><small>可以在消息里 @Muse 了</small>"; $("#lpMuseMem").lastElementChild.outerHTML = '<span class="dot dot-online"></span>'; }, 1000);
+        break;
+      }
+      case "cloud-close": cloud.open = null; renderConnect(); break;
+      case "step-open": t.closest(".step").classList.toggle("is-open"); break;
+      case "cmd-toggle": cloud.full = !cloud.full; renderConnect(); break;
+      case "cloud-copy": if (!cloud.copied) { cloud.copied = true; renderConnect(); toast("接入指令已复制"); clearTimeout(cloud.timer); cloud.timer = setTimeout(() => { if (cloud.stage === "ready") { cloud.stage = "pending"; renderConnect(); } }, 2200); } break;
+      case "cloud-approve": cloud.stage = "approved"; renderConnect(); toast(`${PRESET[cloud.open].title} 已获批入房`); break;
+      case "cloud-deny": cloud.stage = "ready"; cloud.copied = false; renderConnect(); toast("已拒绝该入房申请，邀请已作废"); break;
+    }
+  });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") { closeDrawer(); closeSheet(); $("#e2eePop").classList.remove("show"); } });
+  $("#targetRoom").addEventListener("change", renderConnect);
+
+  /* ---------------- 初始化 & 截图预设状态 ---------------- */
+  renderMembers(); renderLocal(); renderTpl(); apply();
+  const st = S.state.split(",");
+  if (st.includes("drawer")) openDrawer();
+  if (st.includes("grok-pending")) { openCloud("grok", "pending"); if (S.device === "mobile") { const pg = $('.screen[data-screen="agents"] .page'); const cp = $("#connectPanel"); pg.scrollTop = Math.max(0, cp.offsetTop + cp.offsetHeight - (pg.clientHeight - 96)); } }
+  if (st.includes("grok")) openCloud("grok");
+  if (st.includes("mention")) { input.value = "@"; input.selectionStart = 1; onInput(); }
+  if (st.includes("sheet")) openSheet("members");
+  if (st.includes("onboard")) $('.auth__top [data-auth="onboard"]').click();
+  if (st.includes("noinspector")) $("#inspector").classList.add("is-collapsed");
+  const sIn = $("#stream"); sIn.scrollTop = sIn.scrollHeight;
+})();
+</script>
+</body>
+</html>
