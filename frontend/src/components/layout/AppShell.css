@@ -1,0 +1,92 @@
+.app-shell {
+  display: flex;
+  height: 100dvh;
+  min-width: 0;
+  background: var(--bg-canvas);
+  color: var(--text-1);
+  font: var(--fs-body)/var(--lh-body) var(--font-sans);
+  --bg-card: var(--bg-surface);
+  --bg-page: var(--bg-canvas);
+  --text-primary: var(--text-1);
+  --text-secondary: var(--text-2);
+  --text-muted: var(--text-3);
+  --legacy-bg-subtle: var(--bg-subtle);
+  --legacy-bg-hover: var(--bg-hover);
+  --border: var(--border-1);
+  --border-strong: var(--border-2);
+  --legacy-accent: var(--accent);
+  --legacy-accent-hover: var(--accent-hover);
+  --success: var(--ok);
+  --success-bg: var(--ok-bg);
+  --success-border: var(--ok-border);
+  --warning: var(--warn);
+  --warning-bg: var(--warn-bg);
+  --legacy-danger: var(--danger);
+  --legacy-danger-bg: var(--danger-bg);
+  --legacy-danger-border: var(--danger-border);
+}
+.app-shell a { text-decoration: none; }
+.app-shell :focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.app-shell__main { flex: 1; min-width: 0; min-height: 0; overflow: auto; }
+.app-rail { width: var(--rail-w); flex: none; display: flex; flex-direction: column; gap: 18px; background: var(--bg-rail); border-right: 1px solid var(--border-1); padding: var(--s-4) var(--s-3) var(--s-3); }
+.app-rail__brand { display: flex; align-items: center; gap: 10px; padding: 4px 6px; color: var(--text-1); font-size: 15px; line-height: 19px; }
+.app-rail__brand > span { display: grid; place-items: center; flex: none; width: 32px; height: 32px; border-radius: var(--r-md); background: var(--accent); color: var(--accent-fg); }
+.app-rail__brand small { display: block; color: var(--text-3); font-size: 11.5px; font-weight: 400; }
+.app-rail__nav, .app-rail__rooms { display: flex; flex-direction: column; gap: 2px; }
+.app-rail nav a { display: flex; align-items: center; gap: 10px; min-height: 36px; padding: 0 10px; border-radius: var(--r-md); color: var(--text-2); font-size: 13.5px; }
+.app-rail nav a:hover, .app-account summary:hover { background: var(--bg-hover); }
+.app-rail nav a[aria-current="page"] { background: var(--bg-muted); color: var(--text-1); font-weight: 600; }
+.app-rail__nav a .workbench-count { margin-left: auto; }
+.workbench-count { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 4px; border-radius: var(--r-full); background: var(--warn-bg); color: var(--warn); font-size: 11px; font-weight: 600; }
+.app-rail__rooms { flex: 1; min-height: 0; overflow: auto; }
+.app-rail__rooms h2 { color: var(--text-3); padding: 0 10px 4px; font-size: 12px; font-weight: 600; }
+.app-rail__rooms a > span { display: grid; place-items: center; flex: none; width: 22px; height: 22px; border: 1px solid var(--border-1); border-radius: var(--r-sm); background: var(--bg-surface); }
+.app-rail__rooms strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: inherit; }
+.app-account { position: relative; flex: none; }
+.app-account summary { list-style: none; display: flex; align-items: center; gap: 8px; padding: 8px; cursor: pointer; border-radius: var(--r-md); }
+.app-account summary::-webkit-details-marker { display: none; }
+.app-account summary span:nth-child(2) { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.app-account__menu { position: absolute; bottom: 100%; left: 0; min-width: 150px; padding: 6px; display: grid; gap: 2px; z-index: var(--z-popover); background: var(--bg-raised); box-shadow: var(--sh-pop); border-radius: var(--r-lg); }
+.app-account__menu > span, .app-account__menu button { text-align: left; padding: 5px 10px; border-radius: var(--r-sm); }
+.app-account__menu > span { font-size: 12px; color: var(--text-2); }
+.app-account__menu button { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.app-account__menu button:hover, .app-account__menu button[aria-pressed="true"] { background: var(--bg-muted); }
+.app-mobile-tabs { display: none; }
+@media (min-width: 768px) and (max-width: 1023px) {
+  .app-rail { width: 64px; padding-inline: 8px; }
+  .app-rail__brand strong, .app-rail__nav a > span, .app-rail__rooms h2, .app-rail__rooms strong, .app-rail .app-account summary > :not(:first-child) { display: none; }
+  .app-rail nav a { justify-content: center; padding-inline: 0; position: relative; }
+  .app-rail__nav .workbench-count { position: absolute; top: 0; right: 0; }
+}
+@media (max-width: 767px) {
+  .app-shell { flex-direction: column; }
+  .app-shell--room { height: calc(100dvh - var(--kb, 0px)); }
+  .app-rail { display: none; }
+  .app-mobile-tabs { display: grid; flex: none; grid-template-columns: repeat(3, 1fr); padding: 4px 8px calc(3px + var(--safe-bottom)); border-top: 1px solid var(--border-1); background: var(--bg-surface); }
+  .app-mobile-tabs > a, .app-account--mobile summary { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-height: 44px; color: var(--text-2); font-size: 11px; line-height: 16px; padding: 0; }
+  .app-mobile-tabs > a[aria-current="page"] { color: var(--text-1); font-weight: 650; }
+  .app-account--mobile .app-account__menu { left: auto; right: 0; }
+}
+.app-rail { padding: 12px 10px; gap: 2px; }
+.app-rail__brand { padding: 4px 6px 12px; font-size: 14px; }
+.app-rail__brand > span { width: 26px; height: 26px; }
+.app-rail__nav > a[aria-current="page"] { background: var(--bg-surface); box-shadow: var(--sh-1), 0 0 0 1px var(--border-1); }
+.app-rail__rooms h2 { display: flex; align-items: center; justify-content: space-between; padding: 14px 10px 4px; }
+.app-rail__rooms h2 a { padding: 0 4px; min-height: 26px; }
+.app-rail__pending-dot { width: 7px; height: 7px; flex: none; margin-left: auto; border-radius: var(--r-full); background: var(--presence-pending); }
+.app-account:not(.app-account--mobile) { border-top: 1px solid var(--border-1); }
+.app-account:not(.app-account--mobile) summary > span:nth-child(2) { display: grid; }
+.app-account summary small { color: var(--text-3); overflow: hidden; text-overflow: ellipsis; font-size: 12px; line-height: 18px; }
+.app-account:not(.app-account--mobile) summary > .ui-avatar { --avatar-size: 28px; }
+.app-mobile-tabs > a { position: relative; }
+.app-mobile-tabs > a > .workbench-count { position: absolute; top: 3px; left: calc(50% + 9px); }
+.workbench-count { background: var(--presence-pending); color: var(--gray-950); }
+@media (min-width: 768px) and (max-width: 1023px) {
+  .app-rail__rooms h2, .app-rail .app-account summary > span:nth-child(2) { display: none; }
+}
+.app-shell .ui-button--primary { color: var(--accent-fg); }
+.app-shell .ui-button--secondary { color: var(--text-1); }
+.app-shell .input, .app-shell .role-select { min-width: 0; }
+.app-shell .input { color-scheme: inherit; }
+[data-theme="light"] .app-shell { color-scheme: light; }
+[data-theme="dark"] .app-shell { color-scheme: dark; }

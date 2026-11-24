@@ -22,7 +22,7 @@ import {
   type RedemptionView,
 } from "../lib/localHelper";
 import { createRoom, fetchRooms } from "../lib/api";
-import { AgentJoinSection } from "./AgentsPage";
+import { AgentJoinSection, AgentsPage } from "./AgentsPage";
 
 vi.mock("../lib/localHelper", async (importOriginal) => ({
   ...await importOriginal<typeof import("../lib/localHelper")>(),
@@ -171,7 +171,9 @@ async function clickPreset(name: string, label = "一键配置并接入") {
 }
 
 async function openCloudPanel(name: "Grok Bot" | "Muse") {
-  await clickPreset(name, "一键生成云端接入指令");
+  const card = [...container.querySelectorAll<HTMLButtonElement>(".wb-cloud-card")].find((button) => button.querySelector("strong")?.textContent === name);
+  if (!card) throw new Error(`找不到「${name}」预设卡片`);
+  await act(async () => card.click());
   const panel = container.querySelector(`section[aria-label="${name} 云端接入"]`);
   if (!panel) throw new Error(`找不到「${name}」云端接入面板`);
   return panel;
@@ -437,4 +439,22 @@ it("keeps the Hub open and shows recovery instructions if a seat join cannot rea
   );
   expect(window.location.href).toBe(url);
   expect(container.textContent).toContain("请确认电脑上的本机助手已启动，并在浏览器中允许本地网络访问");
+});
+
+it("uses the iPhone handoff card and never renders or opens a loopback link in the Agent center", async () => {
+  vi.spyOn(navigator, "userAgent", "get").mockReturnValue(mobileUA);
+  vi.mocked(fetchRooms).mockResolvedValue([{ id: "room-42", name: "目标房间", description: "", created_at: "" }]);
+  await act(async () => root.render(<QueryClientProvider client={queryClient}>
+    <MemoryRouter initialEntries={["/agents?room=room-42&agent=muse"]}><AgentsPage /></MemoryRouter>
+  </QueryClientProvider>));
+  await advanceTime(2);
+  const panel = container.querySelector('section[aria-label="Muse 云端接入"]');
+  expect(panel?.querySelector<HTMLInputElement>('[role="switch"]')?.checked).toBe(true);
+  expect(container.textContent).toContain("在电脑上继续接入");
+  expect(container.textContent).toContain("复制电脑端链接");
+  expect(container.querySelector(".wb-local")).toBeNull();
+  expect(container.innerHTML).not.toContain("127.0.0.1");
+  expect(probeHelper).not.toHaveBeenCalled();
+  expect(createPairingCode).not.toHaveBeenCalled();
+  expect(openWindow).not.toHaveBeenCalled();
 });

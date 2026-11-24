@@ -126,6 +126,15 @@ export function useNotification(
     return granted;
   }, []);
 
+  const toggle = async () => {
+    if (enabled) {
+      setEnabledState(false);
+      localStorage.setItem(PERMISSION_KEY, "false");
+      return false;
+    }
+    return requestPermission();
+  };
+
   useEffect(() => {
     const payloads = evaluateNotificationPayloads(trackerRef.current, {
       messages,
@@ -148,5 +157,5 @@ export function useNotification(
     }
   }, [messages, enabled, scopeKey, ready]);
 
-  return { enabled, requestPermission };
+  return { enabled, requestPermission, toggle };
 }

@@ -18,3 +18,7 @@ export type RoomTabId =
 export function tabVisibleInRoom(tabId: RoomTabId, isEncrypted: boolean): boolean {
   return !(isEncrypted && tabId === "files");
 }
+
+export function filterVisibleInRoom(filter: RoomTabId | "all", isEncrypted: boolean): boolean {
+  return filter === "all" || tabVisibleInRoom(filter, isEncrypted);
+}

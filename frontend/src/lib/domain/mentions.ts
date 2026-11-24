@@ -6,6 +6,7 @@ export interface MentionCandidate {
   name: string;
   actor: "shortcut" | "human" | "cloud" | "local";
   disabled: boolean;
+  status?: "已入群" | "待入群";
 }
 
 export function parseMentionQuery(text: string, cursor = text.length) {

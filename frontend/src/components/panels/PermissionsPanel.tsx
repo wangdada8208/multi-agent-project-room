@@ -91,6 +91,7 @@ function draftFromHouseRules(rules: HouseRules | undefined | null): {
 
 export interface PermissionsPanelProps {
   roomId: string;
+  section?: "members" | "invite" | "rules";
   isEncrypted?: boolean;
   isOwner?: boolean;
   xmtpClient?: XmtpClientLike | null;
@@ -106,6 +107,7 @@ export interface PermissionsPanelProps {
 
 export function PermissionsPanel({
   roomId,
+  section,
   isEncrypted = true,
   isOwner,
   xmtpClient,
@@ -135,7 +137,7 @@ export function PermissionsPanel({
 
   // 加密群邀请：可复用表单 + 邀请列表
   const [invMaxUses, setInvMaxUses] = useState(1);
-  const [invRequiresApproval, setInvRequiresApproval] = useState(false);
+  const [invRequiresApproval, setInvRequiresApproval] = useState(Boolean(section));
   const [invScopeChecks, setInvScopeChecks] = useState<string[]>([]);
   const [invCustomScope, setInvCustomScope] = useState("");
   const [inviteLink, setInviteLink] = useState("");
@@ -210,13 +212,13 @@ export function PermissionsPanel({
     isOwner ?? members.some((m) => m.user_id === currentUser?.id && m.role === "owner");
 
   const refreshInvites = useCallback(async () => {
-    if (!effectiveIsOwner) return;
+    if (!effectiveIsOwner || (section && section !== "invite")) return;
     try {
       setInvites(await listRoomInvites(roomId));
     } catch {
       /* 列表读取失败不阻塞面板 */
     }
-  }, [effectiveIsOwner, roomId]);
+  }, [effectiveIsOwner, roomId, section]);
 
   const refetchPending = pendingRequests?.query.refetch;
   const refreshRedemptions = useCallback(async () => {
@@ -231,8 +233,8 @@ export function PermissionsPanel({
 
   useEffect(() => {
     void refreshInvites();
-    if (!refetchPending) void refreshRedemptions();
-  }, [refreshInvites, refreshRedemptions, refetchPending]);
+    if (!section && !refetchPending) void refreshRedemptions();
+  }, [refreshInvites, refreshRedemptions, refetchPending, section]);
 
   async function handleInvite() {
     if (!inviteUsername.trim()) return;
@@ -492,7 +494,7 @@ export function PermissionsPanel({
   return (
     <div className="panel-section" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       {/* ── 可复用加密入群邀请（加密房间房主首选） ── */}
-      {isEncrypted && effectiveIsOwner && (
+      {(!section || section === "invite") && isEncrypted && effectiveIsOwner && (
         <div
           style={{
             display: "flex",
@@ -500,20 +502,20 @@ export function PermissionsPanel({
             gap: 12,
             padding: "12px",
             borderRadius: 12,
-            background: "#f5f5f7",
-            border: "1px solid rgba(0, 0, 0, 0.08)",
+            background: "var(--bg-canvas)",
+            border: "1px solid var(--border-1)",
           }}
         >
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <Shield size={14} strokeWidth={1.9} style={{ color: "#0071e3" }} />
-            <strong style={{ fontSize: 13, color: "#1d1d1f" }}>邀请真人协作者进入加密群</strong>
+            <Shield size={14} strokeWidth={1.9} style={{ color: "var(--info)" }} />
+            <strong style={{ fontSize: 13, color: "var(--text-1)" }}>邀请真人协作者进入加密群</strong>
           </div>
-          <p style={{ fontSize: 12, color: "#6e6e73", lineHeight: 1.5 }}>
+          <p style={{ fontSize: 12, color: "var(--text-2)", lineHeight: 1.5 }}>
             生成可复用的加密入群链接；受邀人登录并签名后可获得房间权限并加入加密群。
           </p>
 
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-            <label style={{ fontSize: 12, color: "#1d1d1f", display: "flex", alignItems: "center", gap: 4 }}>
+            <label style={{ fontSize: 12, color: "var(--text-1)", display: "flex", alignItems: "center", gap: 4 }}>
               可用次数
               <input
                 className="input"
@@ -525,7 +527,7 @@ export function PermissionsPanel({
                 style={{ width: 64, fontSize: 12.5 }}
               />
             </label>
-            <label style={{ fontSize: 12, color: "#1d1d1f", display: "flex", alignItems: "center", gap: 4 }}>
+            <label style={{ fontSize: 12, color: "var(--text-1)", display: "flex", alignItems: "center", gap: 4 }}>
               <input
                 type="checkbox"
                 checked={invRequiresApproval}
@@ -533,7 +535,7 @@ export function PermissionsPanel({
               />
               需房主批准
             </label>
-            <label style={{ fontSize: 12, color: "#1d1d1f", display: "flex", alignItems: "center", gap: 4 }}>
+            <label style={{ fontSize: 12, color: "var(--text-1)", display: "flex", alignItems: "center", gap: 4 }}>
               角色
               <select
                 className="role-select"
@@ -547,14 +549,14 @@ export function PermissionsPanel({
           </div>
 
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            <span style={{ fontSize: 12, color: "#6e6e73" }}>
+            <span style={{ fontSize: 12, color: "var(--text-2)" }}>
               建议授权范围（仅元数据建议，不授予实际权限；本机规则才是权威）：
             </span>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               {KNOWN_SCOPE_OPTIONS.map((scope) => (
                 <label
                   key={scope}
-                  style={{ fontSize: 12, color: "#1d1d1f", display: "flex", alignItems: "center", gap: 3 }}
+                  style={{ fontSize: 12, color: "var(--text-1)", display: "flex", alignItems: "center", gap: 3 }}
                 >
                   <input
                     type="checkbox"
@@ -599,14 +601,14 @@ export function PermissionsPanel({
                 gap: 6,
                 padding: "9px 10px",
                 borderRadius: 9,
-                background: "#ffffff",
-                border: "1px solid rgba(0, 0, 0, 0.08)",
+                background: "var(--bg-surface)",
+                border: "1px solid var(--border-1)",
               }}
             >
               <code
                 style={{
                   fontSize: 11.5,
-                  color: "#1d1d1f",
+                  color: "var(--text-1)",
                   wordBreak: "break-all",
                   lineHeight: 1.45,
                 }}
@@ -621,7 +623,7 @@ export function PermissionsPanel({
 
           {invites.length > 0 && (
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              <span style={{ fontSize: 12, fontWeight: 600, color: "#1d1d1f" }}>已有邀请</span>
+              <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text-1)" }}>已有邀请</span>
               {invites.map((inv) => {
                 const canRevoke =
                   !inv.revoked_at && !inv.is_expired && (inv.use_count ?? 0) < (inv.max_uses ?? 1);
@@ -633,7 +635,7 @@ export function PermissionsPanel({
                       alignItems: "center",
                       gap: 6,
                       fontSize: 11.5,
-                      color: "#6e6e73",
+                      color: "var(--text-2)",
                       padding: "4px 0",
                     }}
                   >
@@ -663,7 +665,7 @@ export function PermissionsPanel({
           <div
             style={{
               paddingTop: 10,
-              borderTop: "1px solid rgba(0, 0, 0, 0.08)",
+              borderTop: "1px solid var(--border-1)",
               display: "flex",
               flexDirection: "column",
               gap: 6,
@@ -673,13 +675,13 @@ export function PermissionsPanel({
               style={{
                 fontSize: 12,
                 fontWeight: 600,
-                color: "#1d1d1f",
+                color: "var(--text-1)",
                 display: "inline-flex",
                 alignItems: "center",
                 gap: 5,
               }}
             >
-              <KeyRound size={13} strokeWidth={1.8} style={{ color: "#6e6e73" }} />
+              <KeyRound size={13} strokeWidth={1.8} style={{ color: "var(--text-2)" }} />
               <span>按加密地址直接拉人入群</span>
             </label>
             <div style={{ display: "flex", gap: 6 }}>
@@ -701,7 +703,7 @@ export function PermissionsPanel({
               </button>
             </div>
             {!xmtpClient && (
-              <span style={{ fontSize: 11.5, color: "#6e6e73" }}>
+              <span style={{ fontSize: 11.5, color: "var(--text-2)" }}>
                 请先在聊天区解锁你的本机加密身份以启用直接拉群。
               </span>
             )}
@@ -715,7 +717,7 @@ export function PermissionsPanel({
       )}
 
       {/* ── 房主待批准的入群申请 ── */}
-      {effectiveIsOwner && redemptions.length > 0 && (
+      {!section && effectiveIsOwner && redemptions.length > 0 && (
         <div
           style={{
             display: "flex",
@@ -723,11 +725,11 @@ export function PermissionsPanel({
             gap: 8,
             padding: "12px",
             borderRadius: 12,
-            background: "#fff8e6",
-            border: "1px solid rgba(0, 0, 0, 0.08)",
+            background: "var(--warn-bg)",
+            border: "1px solid var(--border-1)",
           }}
         >
-          <strong style={{ fontSize: 13, color: "#1d1d1f" }}>
+          <strong style={{ fontSize: 13, color: "var(--text-1)" }}>
             待批准的入群申请 ({redemptions.length})
           </strong>
           {redemptions.map((red) => (
@@ -738,13 +740,13 @@ export function PermissionsPanel({
                 alignItems: "center",
                 gap: 8,
                 fontSize: 12,
-                color: "#1d1d1f",
+                color: "var(--text-1)",
                 flexWrap: "wrap",
               }}
             >
               <span
                 className="trust-badge"
-                style={{ marginLeft: 0, border: "1px solid rgba(0,0,0,0.12)" }}
+                style={{ marginLeft: 0, border: "1px solid var(--border-2)" }}
               >
                 {red.kind === "agent" ? "云端 Agent" : "真人"}
               </span>
@@ -752,7 +754,7 @@ export function PermissionsPanel({
                 {red.kind === "agent" && "displayName" in red && typeof red.displayName === "string"
                   ? red.displayName : `${(red.redeemer_address ?? red.redeemer_user_id ?? "?").slice(0, 14)}…`}
               </code>
-              <span style={{ color: "#6e6e73", fontSize: 11 }}>
+              <span style={{ color: "var(--text-2)", fontSize: 11 }}>
                 {red.created_at ? new Date(red.created_at).toLocaleString() : ""}
               </span>
               <div style={{ display: "flex", gap: 6, marginLeft: "auto" }}>
@@ -782,8 +784,9 @@ export function PermissionsPanel({
       )}
 
       {/* ── 按用户名管理房间角色 ── */}
-      <div className="field">
-        <label style={{ display: "inline-flex", alignItems: "center", gap: 5, color: "#1d1d1f" }}>
+      {(!section || section === "members") && <>
+      {(!section || effectiveIsOwner) && <div className="field">
+        <label style={{ display: "inline-flex", alignItems: "center", gap: 5, color: "var(--text-1)" }}>
           <UserPlus size={14} strokeWidth={1.8} />
           <span>按用户名添加房间成员权限</span>
         </label>
@@ -812,7 +815,7 @@ export function PermissionsPanel({
             添加
           </button>
         </div>
-      </div>
+      </div>}
 
       {loadError && <p className="panel-error">{loadError}</p>}
       {message && <p className="ok-text">{message}</p>}
@@ -829,11 +832,11 @@ export function PermissionsPanel({
             alignItems: "center",
             gap: 8,
             fontSize: 12,
-            color: "#6e6e73",
+            color: "var(--text-2)",
             padding: "8px 10px",
             borderRadius: 9,
-            background: "#f5f5f7",
-            border: "1px solid rgba(0, 0, 0, 0.06)",
+            background: "var(--bg-canvas)",
+            border: "1px solid var(--border-1)",
             flexWrap: "wrap",
           }}
         >
@@ -872,12 +875,12 @@ export function PermissionsPanel({
                 className={`msg__avatar ${m.user_type === "agent" ? "msg__avatar--agent" : ""}`}
                 style={{ width: 28, height: 28, fontSize: 12 }}
               >
-                {(m.display_name || m.username).charAt(0).toUpperCase()}
+                {(m.display_name || m.username || m.user_id).charAt(0).toUpperCase()}
               </span>
               <div className="permission-row__info">
-                <strong>{m.display_name || m.username}</strong>
+                <strong>{m.display_name || m.username || m.user_id}</strong>
                 <small>
-                  @{m.username}
+                  {m.username && `@${m.username}`}
                   {m.xmtp_address && (
                     <code style={{ fontFamily: "var(--mono)", marginLeft: 6 }}>
                       {m.xmtp_address.slice(0, 6)}…{m.xmtp_address.slice(-4)}
@@ -915,10 +918,10 @@ export function PermissionsPanel({
                   alignItems: "center",
                   gap: 8,
                   fontSize: 11.5,
-                  color: "#8a6500",
+                  color: "var(--warn)",
                   padding: "6px 10px",
                   borderRadius: 8,
-                  background: "#fff8e6",
+                  background: "var(--warn-bg)",
                   flexWrap: "wrap",
                 }}
               >
@@ -948,8 +951,10 @@ export function PermissionsPanel({
         ))}
       </div>
 
+      </>}
+
       {/* ── 房间规则建议（house_rules：只是建议，本机规则才是权威） ── */}
-      {effectiveIsOwner && (
+      {(!section || section === "rules") && effectiveIsOwner && (
         <div
           style={{
             display: "flex",
@@ -957,22 +962,22 @@ export function PermissionsPanel({
             gap: 8,
             padding: "12px",
             borderRadius: 12,
-            background: "#f5f5f7",
-            border: "1px solid rgba(0, 0, 0, 0.08)",
+            background: "var(--bg-canvas)",
+            border: "1px solid var(--border-1)",
           }}
         >
-          <strong style={{ fontSize: 13, color: "#1d1d1f" }}>
+          <strong style={{ fontSize: 13, color: "var(--text-1)" }}>
             房间规则建议
             {settingsVersion != null && (
-              <span style={{ fontWeight: 400, color: "#6e6e73" }}>（元数据版本 v{settingsVersion}）</span>
+              <span style={{ fontWeight: 400, color: "var(--text-2)" }}>（元数据版本 v{settingsVersion}）</span>
             )}
           </strong>
-          <p style={{ fontSize: 11.5, color: "#6e6e73", lineHeight: 1.5 }}>
+          <p style={{ fontSize: 11.5, color: "var(--text-2)", lineHeight: 1.5 }}>
             这里只是发给各个 Agent 本机助手的建议；本机规则和主人的当场决定才是权威，Hub 不能放大任何人的权限。
             保存会整体覆盖当前建议。
           </p>
           {savedSettings == null && (
-            <p style={{ fontSize: 11.5, color: "#8a6500", lineHeight: 1.5 }}>
+            <p style={{ fontSize: 11.5, color: "var(--warn)", lineHeight: 1.5 }}>
               服务器暂不提供现有建议内容的回读，这里无法预填房间已有的模板配置；
               保存后现有建议会被你填写的内容整体替换。
             </p>
