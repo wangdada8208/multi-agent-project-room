@@ -35,8 +35,7 @@ SIGNATURE_RE = re.compile(r"^0x[0-9a-fA-F]{130}$")
 # Domain separator baked into every signed message.
 DOMAIN = "MAPR-XP1"
 NONCE_TTL_SECONDS = 600
-# Bounds table growth without rate-limiting legitimate concurrent sign-ins:
-# a single (action, address) may hold at most this many live challenges.
+# A single (action, address) may hold at most this many open challenges.
 MAX_LIVE_NONCES_PER_ADDRESS = 32
 
 ACTION_INVITE_REDEEM = "invite-redeem"
@@ -94,7 +93,7 @@ async def issue_nonce(
         raise HTTPException(status_code=422, detail="Unknown nonce action")
     normalized = normalize_address(address)
     now = _now()
-    # Opportunistic sweep of this address's dead challenges, then cap live ones.
+    # Keep consumed challenges until expiry so replays still return 409.
     await db.execute(
         delete(XmtpAuthNonce)
         .where(
@@ -109,6 +108,7 @@ async def issue_nonce(
         .where(
             XmtpAuthNonce.action == action,
             XmtpAuthNonce.address == normalized,
+            XmtpAuthNonce.consumed_at.is_(None),
             XmtpAuthNonce.expires_at > now,
         )
     )

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { mkdtemp, readFile, stat } from "node:fs/promises";
-import http from "node:http";
+import http, { type IncomingHttpHeaders } from "node:http";
 import type { AddressInfo } from "node:net";
 import os from "node:os";
 import path from "node:path";
@@ -201,7 +201,7 @@ test("mapr task dispatches task to local console", async () => {
 interface FakeHubState {
   registerCalls: any[];
   nonceCalls: any[];
-  pollCalls: number;
+  pollCalls: { url: URL; headers: IncomingHttpHeaders }[];
   registerResponse: { status: number; body: unknown };
   pollResponses: { status: number; body: unknown }[];
 }
@@ -232,8 +232,8 @@ function fakeInviteHub(state: FakeHubState) {
         return;
       }
       if (req.method === "GET" && url.pathname === "/api/v1/invites/tok-join-1/agent-register") {
-        const idx = Math.min(state.pollCalls, state.pollResponses.length - 1);
-        state.pollCalls += 1;
+        const idx = Math.min(state.pollCalls.length, state.pollResponses.length - 1);
+        state.pollCalls.push({ url, headers: req.headers });
         const r = state.pollResponses[idx];
         json(r.status, r.body);
         return;
@@ -259,7 +259,7 @@ test("mapr join：完整邀请 URL 注册成功，.env 与 policy.json 0600 落�
   const state: FakeHubState = {
     registerCalls: [],
     nonceCalls: [],
-    pollCalls: 0,
+    pollCalls: [],
     registerResponse: { status: 200, body: CONSUMED },
     pollResponses: [],
   };
@@ -336,7 +336,7 @@ test("mapr join：pending 时用签名 GET 轮询直到 consumed", async () => {
   const state: FakeHubState = {
     registerCalls: [],
     nonceCalls: [],
-    pollCalls: 0,
+    pollCalls: [],
     registerResponse: { status: 200, body: { status: "pending", redemption_id: "red-1" } },
     pollResponses: [
       { status: 200, body: { status: "pending", redemption_id: "red-1" } },
@@ -354,7 +354,16 @@ test("mapr join：pending 时用签名 GET 轮询直到 consumed", async () => {
       { stdout: (m) => stdout.push(m), stderr: () => {} }
     );
     assert.equal(code, 0);
-    assert.ok(state.pollCalls >= 1, "pending must be polled with fresh signed nonces");
+    assert.equal(state.pollCalls.length, 2);
+    assert.equal(state.nonceCalls.length, 3);
+    for (const [index, { url, headers }] of state.pollCalls.entries()) {
+      assert.equal(url.search, "");
+      assert.equal(headers["x-mapr-address"], state.nonceCalls[index + 1].address);
+      assert.equal(headers["x-mapr-nonce"], `nonce-${index + 2}`);
+      const signature = headers["x-mapr-signature"];
+      assert.ok(typeof signature === "string");
+      assert.match(signature, /^0x[0-9a-f]{130}$/);
+    }
     const out = JSON.parse(stdout.join(""));
     assert.equal(out.status, "consumed");
     const envText = await readFile(path.join(dir, ".env"), "utf8");
@@ -369,7 +378,7 @@ test("mapr join：审批被拒（409）时干净退出且不落盘令牌", async
   const state: FakeHubState = {
     registerCalls: [],
     nonceCalls: [],
-    pollCalls: 0,
+    pollCalls: [],
     registerResponse: { status: 200, body: { status: "pending", redemption_id: "red-1" } },
     pollResponses: [{ status: 409, body: { detail: "Redemption request was denied" } }],
   };
