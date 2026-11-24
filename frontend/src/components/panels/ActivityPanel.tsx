@@ -8,7 +8,7 @@ import {
   type HubActivityFeed,
   type LocalActivityResult,
 } from "../../lib/activityApi";
-import { listLocalSeats } from "../../lib/localHelper";
+import { isMobileBrowser, listLocalSeats } from "../../lib/localHelper";
 
 const SOURCE_LABEL: Record<string, string> = {
   local_ledger: "本机账本",
@@ -40,15 +40,15 @@ function formatTime(iso: string | null | undefined): string {
 }
 
 function statusColor(status: string | null | undefined): string {
-  if (!status) return "#6e6e73";
-  if (status === "ok" || status === "completed" || status === "approved") return "#1d7a3c";
+  if (!status) return "var(--text-2)";
+  if (status === "ok" || status === "completed" || status === "approved") return "var(--ok)";
   if (status === "denied" || status === "failed" || status === "rejected" || status === "uncertain") {
-    return "#b3261e";
+    return "var(--danger)";
   }
-  return "#8a6500";
+  return "var(--warn)";
 }
 
-export function ActivityPanel({ roomId }: { roomId: string }) {
+export function ActivityPanel({ roomId, integrityOnly = false }: { roomId: string; integrityOnly?: boolean }) {
   const [actorFilter, setActorFilter] = useState("");
   const [appFilter, setAppFilter] = useState("");
   const [kindFilter, setKindFilter] = useState("");
@@ -74,7 +74,7 @@ export function ActivityPanel({ roomId }: { roomId: string }) {
     try {
       const [hub, seats] = await Promise.all([
         fetchHubActivity(roomId, filters),
-        listLocalSeats().catch(() => []),
+        isMobileBrowser() ? Promise.resolve([]) : listLocalSeats().catch(() => []),
       ]);
       setHubFeed(hub);
       const roomPorts = Array.from(
@@ -140,27 +140,27 @@ export function ActivityPanel({ roomId }: { roomId: string }) {
           gap: 4,
           fontSize: 12,
           borderColor: hasTamper
-            ? "rgba(179, 38, 30, 0.35)"
+            ? "var(--danger-border)"
             : hasLegacyOrMissing
-              ? "rgba(138, 101, 0, 0.3)"
-              : "rgba(29, 122, 60, 0.3)",
+              ? "var(--warn-border)"
+              : "var(--ok-border)",
           background: hasTamper
-            ? "rgba(179, 38, 30, 0.06)"
+            ? "var(--danger-bg)"
             : hasLegacyOrMissing
-              ? "rgba(138, 101, 0, 0.05)"
-              : "rgba(29, 122, 60, 0.06)",
+              ? "var(--warn-bg)"
+              : "var(--ok-bg)",
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 600 }}>
           {hasTamper ? (
             <>
-              <ShieldAlert size={14} color="#b3261e" />
-              <span style={{ color: "#b3261e" }}>检测到本机账本完整性异常或截断</span>
+              <ShieldAlert size={14} color="var(--danger)" />
+              <span style={{ color: "var(--danger)" }}>检测到本机账本完整性异常或截断</span>
             </>
           ) : hasLegacyOrMissing ? (
             <>
-              <AlertTriangle size={14} color="#8a6500" />
-              <span style={{ color: "#8a6500" }}>
+              <AlertTriangle size={14} color="var(--warn)" />
+              <span style={{ color: "var(--warn)" }}>
                 {integrity.checkedPorts === 0
                   ? "未连上本机席位账本，当前仅展示 Hub 元数据"
                   : "本机链完整（含历史未加链条目）"}
@@ -168,24 +168,25 @@ export function ActivityPanel({ roomId }: { roomId: string }) {
             </>
           ) : (
             <>
-              <ShieldCheck size={14} color="#1d7a3c" />
-              <span style={{ color: "#1d7a3c" }}>本机哈希链校验通过</span>
+              <ShieldCheck size={14} color="var(--ok)" />
+              <span style={{ color: "var(--ok)" }}>本机哈希链校验通过</span>
             </>
           )}
         </div>
-        <div style={{ color: "#6e6e73", fontSize: 11.5 }}>
+        <div style={{ color: "var(--text-2)", fontSize: 11.5 }}>
           已校验本机端：{integrity.checkedPorts}（不可达 {integrity.unreachablePorts}） · 已加链{" "}
           {integrity.chainedCount} 条 · 历史未验证 {integrity.legacyUnverifiedCount} 条 · Hub 签名检查点{" "}
           {integrity.hubCheckpoints.length} 个
         </div>
         {integrity.issues.map((issue, idx) => (
-          <div key={`${issue.port}-${issue.code}-${idx}`} style={{ color: "#b3261e", fontSize: 11.5 }}>
+          <div key={`${issue.port}-${issue.code}-${idx}`} style={{ color: "var(--danger)", fontSize: 11.5 }}>
             端口 {issue.port} 第 {issue.line} 行：<code>{issue.code}</code>
             {issue.detail ? ` — ${issue.detail}` : ""}
           </div>
         ))}
       </div>
 
+      {!integrityOnly && <>
       {/* 过滤栏 */}
       <div className="panel-card" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
         <input
@@ -248,7 +249,7 @@ export function ActivityPanel({ roomId }: { roomId: string }) {
       </div>
 
       {error && <div className="panel-error">{error}</div>}
-      {loading && <div style={{ fontSize: 12, color: "#6e6e73" }}>正在加载安全活动流…</div>}
+      {loading && <div style={{ fontSize: 12, color: "var(--text-2)" }}>正在加载安全活动流…</div>}
       {!loading && !error && merged.items.length === 0 && (
         <div className="panel-empty">暂无符合条件的活动记录（仅展示元数据，不记录加密正文）</div>
       )}
@@ -275,8 +276,8 @@ export function ActivityPanel({ roomId }: { roomId: string }) {
               </span>
             )}
           </div>
-          {item.title && <div style={{ color: "#1d1d1f" }}>{item.title}</div>}
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", color: "#6e6e73", fontSize: 11 }}>
+          {item.title && <div style={{ color: "var(--text-1)" }}>{item.title}</div>}
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", color: "var(--text-2)", fontSize: 11 }}>
             {item.actor_id && <span>操作方：{item.actor_id}</span>}
             {item.scope && <span>范围：{item.scope}</span>}
             {item.reason && <span>说明：{item.reason}</span>}
@@ -289,6 +290,7 @@ export function ActivityPanel({ roomId }: { roomId: string }) {
           </div>
         </div>
       ))}
+      </>}
     </div>
   );
 }

@@ -31,6 +31,8 @@ type Source =
   | {
       transport: "xmtp"; messages: readonly RawXmtpMessage[]; inboxAddresses: Record<string, string>;
       seats: HubSeatView[]; roomId: string; myInboxId: string; myUsername: string; userId?: string;
+      humanNames?: ReadonlyMap<string, string>;
+      memberNames?: ReadonlyMap<string, string>;
     };
 
 export function deriveDisplayMessages(source: Source): DisplayMessage[] {
@@ -38,19 +40,23 @@ export function deriveDisplayMessages(source: Source): DisplayMessage[] {
     return source.messages.map((message) => enrich(message, message.sender_id === source.userId,
       source.seats.find((seat) => seat.agent_user_id === message.sender_id)));
   }
-  const { messages, inboxAddresses, seats, roomId, myInboxId, myUsername, userId } = source;
+  const { messages, inboxAddresses, seats, roomId, myInboxId, myUsername, userId, humanNames } = source;
   return messages.map((raw) => {
     const resolved = resolveXmtpSender({ senderInboxId: raw.senderInboxId, myInboxId, myUsername, inboxAddresses, seats });
     const me = Boolean(myInboxId && raw.senderInboxId === myInboxId);
     const seat = seats.find((item) => item.group_status !== "removed" && item.xmtp_address.toLowerCase() === resolved.address)
       ?? seats.find((item) => item.xmtp_address.toLowerCase() === resolved.address);
+    const humanName = !me && !seat ? humanNames?.get(inboxAddresses[raw.senderInboxId]) : undefined;
+    const seatOwner = seat && seat.owner_user_id !== userId ? source.memberNames?.get(seat.owner_user_id) : undefined;
     const message = toLocalChatMessage({
       id: raw.id, roomId, content: raw.content,
       senderId: me ? userId ?? raw.senderInboxId : raw.senderInboxId,
-      senderName: resolved.senderName, senderType: resolved.senderType, createdAt: raw.createdAt,
+      senderName: humanName || resolved.senderName, senderType: resolved.senderType, createdAt: raw.createdAt,
     });
+    const display = enrich(message, me, seat, resolved.trustTier);
     return {
-      ...enrich(message, me, seat, resolved.trustTier),
+      ...display,
+      sourceSubtitle: display.actor === "local" && seatOwner ? `电脑端 · ${seatOwner} 接入` : display.sourceSubtitle,
       xmtpSenderInboxId: raw.senderInboxId,
       ...(raw.replyToId ? { replyToId: raw.replyToId } : {}),
     };

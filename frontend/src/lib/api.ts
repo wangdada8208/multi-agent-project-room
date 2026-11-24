@@ -1,3 +1,4 @@
+import { rememberRoomTemplate } from "./roomTemplate";
 import { useAuthStore, type AuthUser } from "../stores/authStore";
 import type { ChatMessage, Room, RoomTask } from "../types/chat";
 
@@ -489,6 +490,7 @@ export async function createRoomFromTemplate(
   });
   if (!response.ok) throw new Error("Failed to create room from template");
   const payload = (await response.json()) as { room: Room };
+  rememberRoomTemplate(payload.room, templateKey);
   return payload.room;
 }
 
