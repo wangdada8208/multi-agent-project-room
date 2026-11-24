@@ -17,8 +17,14 @@ export function Drawer({ open, onClose, title, children, side = "right", classNa
   useEffect(() => {
     const element = dialog.current;
     if (!element) return;
-    if (open && !element.open) element.showModal();
-    if (!open && element.open) element.close();
+    if (open && !element.open) {
+      if (typeof element.showModal === "function") element.showModal();
+      else element.setAttribute("open", "");
+    }
+    if (!open && element.open) {
+      if (typeof element.close === "function") element.close();
+      else element.removeAttribute("open");
+    }
   }, [open]);
 
   return (
