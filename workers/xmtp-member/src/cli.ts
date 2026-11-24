@@ -4,10 +4,12 @@ import { randomBytes } from "node:crypto";
 import { chmod, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { generatePrivateKey, privateKeyToAccount, type LocalAccount } from "viem/accounts";
+import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { parseUpArgs, runHelper, DEFAULT_HUB_ORIGIN } from "./helper/up.ts";
 import { defaultPolicy, normalizePolicy, type Policy } from "./policy.ts";
 import { isHardForbiddenScope } from "./rulesEngine.ts";
+import { joinHubCall, parseInviteInput, signedProof } from "./inviteRegistration.ts";
+import { runBridgeCommand } from "./bot-bridge.ts";
 import { writeJsonSecure } from "./secureFile.ts";
 
 export interface CliIO {
@@ -48,56 +50,6 @@ function parseArgs(args: string[]): { command: string; subCommand?: string; flag
 }
 
 // ── mapr join：云端 Agent 持邀请链接自助注册（WP6） ──
-
-const JOIN_REQUEST_TIMEOUT_MS = 15_000;
-
-interface HubCallResult {
-  status: number;
-  body: Record<string, unknown> | null;
-}
-
-/** Hub JSON 调用，网络错误收敛为 status 0。 */
-async function joinHubCall(
-  fetchImpl: typeof fetch,
-  base: string,
-  apiPath: string,
-  request: { method: "GET"; headers: HeadersInit } | { method: "POST"; body: unknown }
-): Promise<HubCallResult> {
-  let res: Response;
-  try {
-    res = await fetchImpl(`${base}${apiPath}`, {
-      method: request.method,
-      headers: request.method === "POST" ? { "Content-Type": "application/json" } : request.headers,
-      body: request.method === "POST" ? JSON.stringify(request.body) : undefined,
-      signal: AbortSignal.timeout(JOIN_REQUEST_TIMEOUT_MS),
-    });
-  } catch {
-    return { status: 0, body: null };
-  }
-  let parsed: Record<string, unknown> | null = null;
-  try {
-    const data = await res.json();
-    if (data && typeof data === "object" && !Array.isArray(data)) parsed = data as Record<string, unknown>;
-  } catch {
-    parsed = null;
-  }
-  return { status: res.status, body: parsed };
-}
-
-/** 邀请输入：完整 URL（/rooms/<id>?invite=<token> 或 /invite(s)/<token> 风格路径）或裸 token；URL 顺带给出 Hub 源站。 */
-function parseInviteInput(raw: string): { token: string; origin: string | null } {
-  const s = raw.trim();
-  if (/^https?:\/\//i.test(s)) {
-    const url = new URL(s);
-    const token = (url.searchParams.get("invite") ?? url.searchParams.get("token") ?? "").trim();
-    if (token) return { token, origin: url.origin };
-    const m = url.pathname.match(/\/(invites?|join)\/([^/?#]+)/i);
-    if (m?.[2]) return { token: decodeURIComponent(m[2]), origin: url.origin };
-    throw new Error("invite_token_not_found");
-  }
-  if (!s) throw new Error("invite_required");
-  return { token: s, origin: null };
-}
 
 async function readEnvVars(file: string): Promise<Map<string, string>> {
   const vars = new Map<string, string>();
@@ -142,31 +94,6 @@ async function writeEnvVars(file: string, vars: Map<string, string>): Promise<vo
   await writeFile(tmp, content, { encoding: "utf8", mode: 0o600 });
   await chmod(tmp, 0o600);
   await rename(tmp, file);
-}
-
-/** 领一个服务器一次性 nonce，按后端返回的 message 原文做 EIP-191 签名。 */
-async function signedProof(
-  fetchImpl: typeof fetch,
-  base: string,
-  token: string,
-  account: LocalAccount
-): Promise<{ nonce: string; signature: string }> {
-  const res = await joinHubCall(fetchImpl, base, "/api/v1/invites/nonce", {
-    method: "POST",
-    body: {
-      action: "invite-agent-register",
-      resource: token,
-      address: account.address.toLowerCase(),
-    },
-  });
-  if (res.status !== 200 && res.status !== 201) throw new Error(`nonce_failed:${res.status}`);
-  const nonce = res.body?.nonce;
-  const message = res.body?.message;
-  if (typeof nonce !== "string" || !nonce || typeof message !== "string" || !message) {
-    throw new Error("bad_nonce_response");
-  }
-  const signature = await account.signMessage({ message });
-  return { nonce, signature };
 }
 
 export interface JoinDeps {
@@ -309,6 +236,7 @@ export async function joinWithInvite(
 }
 
 export async function runCli(args: string[], io: CliIO = { stdout: (m) => console.log(m), stderr: (m) => console.error(m) }): Promise<number> {
+  if (args[0] === "bridge") return runBridgeCommand(args.slice(1), io);
   const { command, subCommand, flags, positional } = parseArgs(args);
   const port = flags.port || process.env.OWNER_NOTES_PORT || "8787";
 

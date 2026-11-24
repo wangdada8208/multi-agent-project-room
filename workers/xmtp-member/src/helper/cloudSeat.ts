@@ -57,6 +57,7 @@ async function callSeatApi(
       method,
       headers: { Authorization: `Bearer ${agentToken}` },
       signal: AbortSignal.timeout(timeoutMs),
+      redirect: "error",
     });
   } catch {
     return { status: 0, body: null };
@@ -122,13 +123,15 @@ export async function checkCloudSeat(
 export interface CloudSeatPoller {
   /** 停止轮询（幂等）。 */
   stop(): void;
+  /** 立即自查，并复用正在进行的自查。 */
+  checkNow(): Promise<void>;
 }
 
 /**
  * 周期性自查席位状态，给云端 Agent 的 index.ts 十行接线用。
  * 首次 tick 立即执行，之后按 intervalMs（默认 60s）。
  * - removed：触发一次 onRemoved 后自动停止轮询（席位被撤即终点）；
- * - paused 边沿：onPaused(true/false)；
+ * - 首次确认暂停状态及后续切换：onPaused(true/false)；
  * - 续约成功：onToken(newToken)。
  * 定时器 unref，不阻止进程退出。
  */
@@ -144,11 +147,11 @@ export function startCloudSeatPolling(
   }
 ): CloudSeatPoller {
   let stopped = false;
-  let lastPaused = false;
+  let lastPaused: boolean | undefined;
   let agentToken = options.agentToken;
   let timer: ReturnType<typeof setInterval> | null = null;
 
-  const tick = async (): Promise<void> => {
+  const tick = async (renewToken: boolean): Promise<void> => {
     if (stopped) return;
     const res = await checkCloudSeat({
       hubOrigin: options.hubOrigin,
@@ -156,7 +159,7 @@ export function startCloudSeatPolling(
       timeoutMs: options.timeoutMs,
       seatId: options.seatId,
       agentToken,
-      renewToken: options.renewToken,
+      renewToken,
     });
     if (stopped) return;
     if (res.tokenRenewed) {
@@ -169,6 +172,7 @@ export function startCloudSeatPolling(
       options.onRemoved?.();
       return;
     }
+    if (res.state === "unknown") return;
     const paused = res.state === "paused";
     if (paused !== lastPaused) {
       lastPaused = paused;
@@ -176,10 +180,16 @@ export function startCloudSeatPolling(
     }
   };
 
-  void tick();
-  timer = setInterval(() => void tick(), options.intervalMs ?? DEFAULT_INTERVAL_MS);
+  let checking: Promise<void> | undefined;
+  const checkNow = (renewToken = false): Promise<void> => {
+    checking ??= tick(renewToken).finally(() => { checking = undefined; });
+    return checking;
+  };
+  void checkNow(options.renewToken);
+  timer = setInterval(() => void checkNow(options.renewToken), options.intervalMs ?? DEFAULT_INTERVAL_MS);
   timer.unref();
   return {
+    checkNow: () => checkNow(),
     stop() {
       stopped = true;
       if (timer) clearInterval(timer);
