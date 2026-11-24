@@ -517,6 +517,25 @@ describe("room invite Hub API helpers", () => {
     }
   });
 
+  it("listRoomRedemptions exposes the seat ID for a consumed cloud invite", async () => {
+    const redemption = {
+      id: "red-cloud",
+      token: "invite-cloud",
+      kind: "agent",
+      status: "consumed",
+      seat_id: "seat-cloud",
+    };
+    vi.stubGlobal("fetch", async (input: RequestInfo | URL) => {
+      expect(String(input)).toBe("/api/v1/rooms/room%2Fcloud/redemptions");
+      return jsonResponse({ redemptions: [redemption] });
+    });
+    try {
+      expect(await listRoomRedemptions("room/cloud")).toEqual([redemption]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("approveRedemption and denyRedemption POST to the owner queue endpoints", async () => {
     const originalFetch = globalThis.fetch;
     const seen: { url: string; body: string }[] = [];

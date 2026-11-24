@@ -447,7 +447,7 @@ export function SetupPage() {
               <span>接入你的智能体</span>
             </h2>
             <p className="setup-desc">
-              端到端加密群已绑定。选择本机智能体或一键配置 Grok / Muse / Ollama 即可入座此房间。
+              端到端加密群已绑定。你可以邀请 Grok Bot、Muse 从云端加入，也可以接入电脑上的 Agent 或模型服务。
             </p>
             <div className="setup-body">
               {myAddress && (
