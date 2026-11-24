@@ -1,11 +1,43 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { mkdtemp, readFile, stat } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import http, { type IncomingHttpHeaders } from "node:http";
 import type { AddressInfo } from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { runCli } from "./cli.ts";
+
+test("mapr bridge 转发参数并隐藏注册失败的 Hub 响应原文", async (t) => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "mapr-cli-bridge-"));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const stdout: string[] = [];
+  const stderr: string[] = [];
+  const io = { stdout: (msg: string) => stdout.push(msg), stderr: (msg: string) => stderr.push(msg) };
+  const requests: (string | undefined)[] = [];
+  const server = http.createServer((req, res) => {
+    requests.push(req.url);
+    req.resume();
+    res.setHeader("Content-Type", "application/json");
+    if (req.url?.endsWith("/nonce")) {
+      res.end(JSON.stringify({ nonce: "test-once", message: "approve CLI test" }));
+    } else {
+      res.statusCode = 422;
+      res.end(JSON.stringify({ detail: "response-must-stay-private" }));
+    }
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => { server.close(); });
+  const addr = server.address();
+  assert.ok(addr && typeof addr !== "string");
+
+  assert.equal(await runCli(["bridge", "--help"], io), 0);
+  assert.match(stdout.join("\n"), /mapr bridge.*--wake-url/);
+  const invite = `http://127.0.0.1:${addr.port}/rooms/cli-room?invite=cli-token`;
+  assert.equal(await runCli(["bridge", "--invite", invite, "--state-dir", dir, "--env", "local"], io), 1);
+  assert.deepEqual(requests, ["/api/v1/invites/nonce", "/api/v1/invites/cli-token/agent-register"]);
+  assert.match(stderr.join("\n"), /HTTP 422/);
+  assert.doesNotMatch([...stdout, ...stderr].join("\n"), /response-must-stay-private|cli-token|0x[\da-f]{64,}/);
+});
 
 test("mapr identity create writes .env and prints address JSON without leaking private keys", async () => {
   const dir = await mkdtemp(path.join(os.tmpdir(), "mapr-cli-"));
