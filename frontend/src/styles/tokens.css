@@ -1,3 +1,5 @@
+@import "tailwindcss";
+
 :root {
   /* ---- 原始色板（暖中性灰，避免冷蓝紫科技感） ---- */
   --gray-0: #ffffff;  --gray-25: #fcfcfb; --gray-50: #f7f7f5; --gray-100: #f1f1ee;
