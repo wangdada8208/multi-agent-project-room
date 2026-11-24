@@ -20,6 +20,7 @@ export interface ReplyTargetInfo {
 interface ChatInputProps {
   disabled: boolean;
   onlineAgents: string[];
+  pausedAgents?: readonly string[];
   onSend: (content: string, senderType: SenderType) => boolean | Promise<boolean>;
   roomId?: string;
   identityAddress?: string | null;
@@ -59,6 +60,7 @@ export async function attemptSend(input: {
 export function ChatInput({
   disabled,
   onlineAgents,
+  pausedAgents = [],
   onSend,
   roomId,
   identityAddress,
@@ -174,7 +176,7 @@ export function ChatInput({
           </button>
         </div>
       )}
-      {onlineAgents.length > 0 && (
+      {(onlineAgents.length > 0 || pausedAgents.length > 0) && (
         <div className="chat-input__mentions">
           {onlineAgents.length >= 2 && (
             <button
@@ -195,6 +197,12 @@ export function ChatInput({
               onClick={() => insertMention(agent)}
               disabled={disabled}
             >
+              <AtSign size={12} strokeWidth={1.9} />
+              <span>{agent}</span>
+            </button>
+          ))}
+          {pausedAgents.map((agent) => (
+            <button key={agent} type="button" className="mention-btn" title="已暂停" disabled>
               <AtSign size={12} strokeWidth={1.9} />
               <span>{agent}</span>
             </button>

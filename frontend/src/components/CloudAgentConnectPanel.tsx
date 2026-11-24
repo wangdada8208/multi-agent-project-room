@@ -1,15 +1,16 @@
-import { useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useReducer, useState } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { ArrowRight } from "lucide-react";
 import { Link } from "react-router-dom";
-import { cloudAgentConnectCommand, type CloudAgentPreset } from "../lib/agentPresets";
+import type { CloudAgentPreset } from "../lib/agentPresets";
 import {
-  approveRedemption,
   createRoomInvite,
-  denyRedemption,
   listRoomRedemptions,
   listRoomSeats,
 } from "../lib/localHelper";
+import { cloudInviteReducer, rememberCloudInviteName } from "../lib/domain/cloudInvite";
+import { redemptionsKey, usePendingRequests } from "../hooks/room/usePendingRequests";
+import { roomSeatsKey } from "../hooks/room/useRoomData";
 import { xmtpEnvFromVite } from "../lib/xmtpEnv";
 import type { Room } from "../types/chat";
 import { CopyButton } from "./CopyButton";
@@ -67,8 +68,8 @@ export function CloudAgentConnectPanel({
 
 function CloudInvite({ preset, roomId, hubOrigin }: Pick<CloudAgentConnectPanelProps, "preset" | "roomId" | "hubOrigin">) {
   const [requiresApproval, setRequiresApproval] = useState(false);
-  const queryClient = useQueryClient();
-  const roomQueryKey = ["cloud-agent-connect", roomId];
+  const [flow, dispatch] = useReducer(cloudInviteReducer, { kind: "idle" });
+  const roomPath = `/rooms/${encodeURIComponent(roomId)}`;
   const createInvite = useMutation({
     mutationFn: (requireApproval: boolean) => createRoomInvite(roomId, {
       expires_hours: 72,
@@ -77,16 +78,25 @@ function CloudInvite({ preset, roomId, hubOrigin }: Pick<CloudAgentConnectPanelP
       role: "member",
       proposed_scopes: [],
     }),
+    onSuccess: (invite) => {
+      rememberCloudInviteName(invite.token, preset.title);
+      dispatch({
+        type: "generated", token: invite.token,
+        command: {
+          hubOrigin,
+          inviteUrl: `${window.location.origin}${roomPath}?invite=${encodeURIComponent(invite.token)}`,
+          title: preset.title,
+          env: xmtpEnvFromVite(import.meta.env.VITE_XMTP_ENV),
+        },
+      });
+    },
+    onError: () => dispatch({ type: "generationFailed" }),
   });
-  const token = createInvite.data?.token;
-  const pending = useQuery({
-    queryKey: [...roomQueryKey, "pending"],
-    queryFn: () => listRoomRedemptions(roomId, "pending"),
-    refetchInterval: POLL_INTERVAL_MS,
-    retry: false,
-  });
+  const token = "token" in flow ? flow.token : undefined;
+  const command = "command" in flow ? flow.command : "";
+  const { query: pending, requests: allRequests, decide } = usePendingRequests(roomId, true, POLL_INTERVAL_MS);
   const seats = useQuery({
-    queryKey: [...roomQueryKey, "seats"],
+    queryKey: roomSeatsKey(roomId),
     queryFn: () => listRoomSeats(roomId),
     refetchInterval: POLL_INTERVAL_MS,
     retry: false,
@@ -96,7 +106,7 @@ function CloudInvite({ preset, roomId, hubOrigin }: Pick<CloudAgentConnectPanelP
     (seat.source === "invite" || seat.kind === "cloud-agent"),
   ) ?? [];
   const redemptions = useQuery({
-    queryKey: [...roomQueryKey, "redemptions"],
+    queryKey: redemptionsKey(roomId),
     queryFn: () => listRoomRedemptions(roomId),
     enabled: Boolean(token && cloudSeats.length),
     refetchInterval: POLL_INTERVAL_MS,
@@ -106,22 +116,23 @@ function CloudInvite({ preset, roomId, hubOrigin }: Pick<CloudAgentConnectPanelP
     redemption.token === token && redemption.kind === "agent" && redemption.seat_id === item.seat_id &&
     (redemption.status === "approved" || redemption.status === "consumed"),
   ));
-  const requests = token ? pending.data?.filter((request) =>
-    request.kind === "agent" && request.token === token,
-  ) ?? [] : [];
-  const decide = useMutation({
-    mutationFn: ({ id, approved }: { id: string; approved: boolean }) =>
-      approved ? approveRedemption(roomId, id) : denyRedemption(roomId, id),
-    onSettled: () => queryClient.invalidateQueries({ queryKey: roomQueryKey }),
-  });
+  const requests = token ? allRequests.filter((request) => request.kind === "agent" && request.token === token) : [];
+  const decision = decide.data;
+  const status = seat ? "approved"
+    : decision?.token === token && decision?.status === "denied" ? "denied"
+    : requests.length ? "pending" : null;
+  useEffect(() => {
+    if (token && status) dispatch({ type: status, token });
+  }, [token, status]);
 
-  const roomPath = `/rooms/${encodeURIComponent(roomId)}`;
-  const command = token ? cloudAgentConnectCommand({
-    hubOrigin,
-    inviteUrl: `${window.location.origin}${roomPath}?invite=${encodeURIComponent(token)}`,
-    title: preset.title,
-    env: xmtpEnvFromVite(import.meta.env.VITE_XMTP_ENV),
-  }) : "";
+  const expiresAt = createInvite.data?.expires_at;
+  useEffect(() => {
+    if (!token || !expiresAt) return;
+    const delay = Date.parse(expiresAt) - Date.now();
+    if (delay > 2_147_483_647 || !Number.isFinite(delay)) return;
+    const timer = window.setTimeout(() => dispatch({ type: "expired", token }), Math.max(0, delay));
+    return () => window.clearTimeout(timer);
+  }, [token, expiresAt]);
 
   return (
     <>
@@ -139,7 +150,10 @@ function CloudInvite({ preset, roomId, hubOrigin }: Pick<CloudAgentConnectPanelP
           type="button"
           className="btn btn-primary btn-sm"
           disabled={createInvite.isPending}
-          onClick={() => createInvite.mutate(requiresApproval)}
+          onClick={() => {
+            dispatch({ type: "generate" });
+            createInvite.mutate(requiresApproval);
+          }}
         >
           {createInvite.isPending ? "正在生成接入指令…" : "生成接入指令"}
         </button>
@@ -149,7 +163,7 @@ function CloudInvite({ preset, roomId, hubOrigin }: Pick<CloudAgentConnectPanelP
         <div className="cloud-agent-connect__instructions">
           <strong>直接复制发给 {preset.title} 的完整接入指令</strong>
           <div className="code-block">
-            <CopyButton text={command} label="复制接入指令" />
+            <CopyButton text={command} label="复制接入指令" onCopied={() => { if (token) dispatch({ type: "copied", token }); }} />
             <code>{command}</code>
           </div>
           <p>此邀请有效期为 72 小时，可使用一次。仅把指令发给你要接入的 {preset.title}。</p>

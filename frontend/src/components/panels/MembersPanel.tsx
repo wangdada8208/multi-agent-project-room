@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useSeatActions } from "../../hooks/room/useSeatActions";
 import { Link } from "react-router-dom";
 import {
   ArrowUpRight,
@@ -14,19 +14,12 @@ import {
 } from "lucide-react";
 import type { PresenceParticipant } from "../../types/chat";
 import {
-  pauseRoomSeat,
-  removeRoomSeat,
-  resumeRoomSeat,
   TRUST_TIER_LABEL,
   trustTierOf,
   type HubSeatView,
   type TrustTier,
 } from "../../lib/localHelper";
-import {
-  removeAddressFromXmtpGroup,
-  type XmtpClientLike,
-} from "../../lib/seatGroupSync";
-import { isEthAddress } from "../../lib/xmtpGroup";
+import type { XmtpClientLike } from "../../lib/seatGroupSync";
 import { useAuthStore } from "../../stores/authStore";
 
 const TIER_TITLE: Record<TrustTier, string> = {
@@ -71,10 +64,8 @@ export function MembersPanel({
   const storeUserId = useAuthStore((s) => s.user?.id);
   const effectiveUserId = currentUserId ?? storeUserId;
 
-  const [removingId, setRemovingId] = useState<string | null>(null);
-  const [removeError, setRemoveError] = useState("");
-  const [pausingId, setPausingId] = useState<string | null>(null);
-  const [pauseError, setPauseError] = useState("");
+  const { removingId, removeError, pausingId, pauseError, handleRemoveSeat, handleSetPaused } =
+    useSeatActions(xmtpClient, xmtpGroupId, onSeatRemoved);
 
   const activeSeats = (seats ?? []).filter((s) => s.group_status !== "removed");
   const seatNames = new Set(activeSeats.map((s) => s.agent_display_name));
@@ -84,52 +75,6 @@ export function MembersPanel({
   const humans = participants.filter((p) => p.sender_type === "human");
 
   const agentsTargetUrl = roomId ? `/agents?room=${encodeURIComponent(roomId)}` : "/agents";
-
-  async function handleRemoveSeat(seat: HubSeatView) {
-    setRemovingId(seat.seat_id);
-    setRemoveError("");
-    try {
-      // 先出加密群、再删 Hub 席位行——顺序反了会留下仍可解密新消息的孤儿成员。
-      // group_status="pending" 的席位从未入群，不需要、也不应该做 XMTP 移除。
-      const mustLeaveGroup = seat.group_status !== "pending" && isEthAddress(seat.xmtp_address);
-      if (xmtpGroupId && mustLeaveGroup) {
-        if (!xmtpClient) {
-          throw new Error("请先在聊天区解锁你的加密身份，才能把该席位移出加密群");
-        }
-        try {
-          await removeAddressFromXmtpGroup(xmtpClient, xmtpGroupId, seat.xmtp_address);
-        } catch {
-          throw new Error(
-            "无法把该席位地址移出加密群（移出他人地址通常需要房主客户端执行）。席位记录未删除——等待房主客户端移出加密群。",
-          );
-        }
-      }
-      await removeRoomSeat(seat.room_id, seat.seat_id);
-      onSeatRemoved?.();
-    } catch (err) {
-      setRemoveError(err instanceof Error ? err.message : "移出席位失败");
-    } finally {
-      setRemovingId(null);
-    }
-  }
-
-  async function handleSetPaused(seat: HubSeatView, paused: boolean) {
-    setPausingId(seat.seat_id);
-    setPauseError("");
-    try {
-      // 只改 Hub 席位状态；本机助手在下次心跳（约 30 秒）里停/起进程，席位行不删除。
-      if (paused) {
-        await pauseRoomSeat(seat.room_id, seat.seat_id);
-      } else {
-        await resumeRoomSeat(seat.room_id, seat.seat_id);
-      }
-      onSeatRemoved?.();
-    } catch (err) {
-      setPauseError(err instanceof Error ? err.message : "更新席位状态失败");
-    } finally {
-      setPausingId(null);
-    }
-  }
 
   return (
     <div className="panel-section" style={{ display: "flex", flexDirection: "column", gap: 16 }}>

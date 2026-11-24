@@ -13,9 +13,9 @@ export function XmtpUnlock({ onUnlock }: { onUnlock: (key: string) => void }) {
     <div className="card unlock-card">
       <h3>
         {creating ? (
-          <KeyRound size={18} strokeWidth={1.9} color="var(--accent)" />
+          <KeyRound size={18} strokeWidth={1.9} color="var(--legacy-accent)" />
         ) : (
-          <Lock size={18} strokeWidth={1.9} color="var(--accent)" />
+          <Lock size={18} strokeWidth={1.9} color="var(--legacy-accent)" />
         )}
         <span>{creating ? "设置本机加密口令" : "解锁加密身份"}</span>
       </h3>

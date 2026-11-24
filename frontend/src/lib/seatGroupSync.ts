@@ -82,6 +82,7 @@ export async function syncPendingSeatsToGroup(input: {
   /** 当前用户是房主时，第三趟顺带拉起云端邀请席（它们没有本机助手，入群只能等房主客户端）。 */
   isRoomOwner?: boolean;
   deps: SeatSyncDeps;
+  isActive?: () => boolean;
 }): Promise<SeatSyncOutcome> {
   const outcome: SeatSyncOutcome = { added: [], reported: [] };
   const { client, roomId, groupId, currentUserId, deps } = input;
@@ -104,6 +105,7 @@ export async function syncPendingSeatsToGroup(input: {
   const present = memberAddressSet((await group.members?.()) ?? []);
 
   for (const seat of targets) {
+    if (input.isActive?.() === false) break;
     const address = seat.xmtp_address.toLowerCase();
     try {
       if (!present.has(address)) {
@@ -112,6 +114,7 @@ export async function syncPendingSeatsToGroup(input: {
           const inboxId = await client.fetchInboxIdByIdentifier(identifier);
           if (!inboxId) continue;
         }
+        if (input.isActive?.() === false) break;
         await group.addMembersByIdentifiers([identifier]);
         present.add(address);
         outcome.added.push(seat.seat_id);
@@ -127,33 +130,43 @@ export async function syncPendingSeatsToGroup(input: {
 
 /**
  * 汇总「应该已经在加密群里」的受邀地址（纯函数，可测）：
- * - 已批准/已核销 redemptions 的 redeemer_address；
+ * - 已批准/已核销的人类 redemptions 的 redeemer_address；
  * - 成员行上已绑定的 xmtp_address；
  * - 旧版邀请行的 redeemed_by_address（过渡字段）。
  * 绝不包含 pending/denied/expired/revoked 的核销地址——未批准的申请者不能进加密群。
  */
 export function collectGroupSyncAddresses(input: {
   invites?: { redeemed_by_address?: string | null }[];
-  redemptions?: { status?: string; redeemer_address?: string | null }[];
-  members?: { xmtp_address?: string | null }[];
+  redemptions?: { kind?: string; status?: string; redeemer_address?: string | null }[];
+  members?: { xmtp_address?: string | null; user_type?: string }[];
 }): string[] {
   const candidates: string[] = [];
+  const blocked = new Set((input.redemptions ?? [])
+    .filter((redemption) => redemption.status === "pending" || redemption.status === "denied" ||
+      redemption.status === "expired" || redemption.status === "revoked")
+    .map((redemption) => redemption.redeemer_address?.trim().toLowerCase()));
+  // Agent membership is managed by the live seat path. Historical approvals
+  // and legacy invite fields may still contain addresses of removed seats.
+  const agentAddresses = new Set((input.redemptions ?? []).filter((entry) => entry.kind === "agent")
+    .map((entry) => entry.redeemer_address?.trim().toLowerCase()));
   const seen = new Set<string>();
-  const push = (raw: string | null | undefined) => {
+  const push = (raw: string | null | undefined, approved = false) => {
     const trimmed = raw?.trim();
     if (!trimmed || !isEthAddress(trimmed)) return;
     const lower = trimmed.toLowerCase();
-    if (seen.has(lower)) return;
+    if (seen.has(lower) || agentAddresses.has(lower) || (!approved && blocked.has(lower))) return;
     seen.add(lower);
     candidates.push(lower);
   };
   for (const inv of input.invites ?? []) push(inv.redeemed_by_address);
   for (const red of input.redemptions ?? []) {
     if (red.status === "approved" || red.status === "consumed") {
-      push(red.redeemer_address);
+      push(red.redeemer_address, true);
     }
   }
-  for (const member of input.members ?? []) push(member.xmtp_address);
+  for (const member of input.members ?? []) {
+    if (member.user_type !== "agent") push(member.xmtp_address);
+  }
   return candidates;
 }
 
@@ -166,6 +179,7 @@ export async function syncRedeemedInvitesToGroup(input: {
   roomId: string;
   groupId: string | null | undefined;
   listAddresses: (roomId: string) => Promise<(string | null | undefined)[]>;
+  isActive?: () => boolean;
 }): Promise<{ addedAddresses: string[] }> {
   const addedAddresses: string[] = [];
   const { client, roomId, groupId, listAddresses } = input;
@@ -193,6 +207,7 @@ export async function syncRedeemedInvitesToGroup(input: {
   const present = memberAddressSet((await group.members?.()) ?? []);
 
   for (const addr of candidates) {
+    if (input.isActive?.() === false) break;
     if (present.has(addr)) continue;
     try {
       const identifier = memberIdentifier(addr);
@@ -200,6 +215,7 @@ export async function syncRedeemedInvitesToGroup(input: {
         const inboxId = await client.fetchInboxIdByIdentifier(identifier);
         if (!inboxId) continue;
       }
+      if (input.isActive?.() === false) break;
       await group.addMembersByIdentifiers([identifier]);
       present.add(addr);
       addedAddresses.push(addr);

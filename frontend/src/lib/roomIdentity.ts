@@ -1,4 +1,5 @@
-import { trustTierOf, type HubSeatView, type TrustTier } from "./localHelper";
+import type { HubSeatView } from "./localHelper";
+import { trustTierOf, type TrustTier } from "./seatIdentity";
 import { isEthAddress } from "./xmtpGroup";
 
 export interface XmtpMemberLike {

@@ -1,3 +1,4 @@
+import { ConfirmInline } from "../components/ui/ConfirmInline";
 import { useEffect, useState, type ReactNode } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -65,6 +66,7 @@ export function HomePage() {
 
   const [joinId, setJoinId] = useState("");
   const [actionError, setActionError] = useState("");
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   // 新建房间弹窗状态
@@ -171,11 +173,7 @@ export function HomePage() {
     }
   }
 
-  async function handleDeleteRoom(e: React.MouseEvent, room: Room) {
-    e.stopPropagation();
-    if (!window.confirm(`确定删除房间「${room.name}」吗？删除后将停用该房间的入口。`)) {
-      return;
-    }
+  async function handleDeleteRoom(room: Room) {
     setActionError("");
     setDeletingId(room.id);
     try {
@@ -188,6 +186,7 @@ export function HomePage() {
         setActionError("删除房间失败，请稍后重试。");
         return;
       }
+      setConfirmDelete(null);
       await queryClient.invalidateQueries({ queryKey: ["rooms"] });
     } catch {
       setActionError("网络异常，删除房间失败。");
@@ -338,9 +337,11 @@ export function HomePage() {
                   role="button"
                   tabIndex={0}
                   className="room-card"
-                  onClick={() => enterRoom(room)}
+                  onClick={(event) => {
+                    if (!(event.target instanceof Element && event.target.closest("button"))) enterRoom(room);
+                  }}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
+                    if (e.currentTarget === e.target && (e.key === "Enter" || e.key === " ")) {
                       e.preventDefault();
                       enterRoom(room);
                     }
@@ -357,13 +358,22 @@ export function HomePage() {
                         className="room-card__delete"
                         title="删除房间"
                         aria-label={`删除房间 ${room.name}`}
-                        disabled={deletingId === room.id}
-                        onClick={(e) => void handleDeleteRoom(e, room)}
+                        disabled={deletingId !== null}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setConfirmDelete(room.id);
+                        }}
                       >
                         <Trash2 size={14} strokeWidth={1.8} />
                       </button>
                     </div>
 
+                    {confirmDelete === room.id && (
+                      <ConfirmInline confirmLabel="删除房间" loading={deletingId === room.id}
+                        onCancel={() => setConfirmDelete(null)} onConfirm={() => void handleDeleteRoom(room)}>
+                        删除「{room.name}」后将停用该房间的入口。
+                      </ConfirmInline>
+                    )}
                     {room.description && <p className="room-card__desc">{room.description}</p>}
 
                     <div className="room-card__foot">

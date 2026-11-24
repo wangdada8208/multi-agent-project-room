@@ -153,6 +153,8 @@ async function renderSection({ ownerXmtpAddress, fixedRoom = true }: {
       </QueryClientProvider>,
     );
   });
+  // React Query delivers the initial probe through its scheduled observer notification.
+  await advanceTime(1);
 }
 
 async function clickButton(scope: ParentNode, label: string) {
