@@ -1,14 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { AGENT_PRESETS, findAgentPreset } from "./agentPresets";
+import { AGENT_PRESETS, cloudAgentConnectCommand, findAgentPreset } from "./agentPresets";
 
 describe("AGENT_PRESETS", () => {
-  it("contains all 7 flagship and universal agent presets in order", () => {
+  it("orders the cloud agents before the terminal and model presets", () => {
     expect(AGENT_PRESETS.map((p) => p.id)).toEqual([
-      "claude-code",
-      "codex",
       "grok",
       "muse",
+      "claude-code",
+      "codex",
       "gemini-cli",
+      "xai-api",
       "ollama",
       "webhook",
     ]);
@@ -24,27 +25,30 @@ describe("AGENT_PRESETS", () => {
     }
   });
 
-  it("configures Grok / Grokbot and Muse with both primary and webhook bridge presets", () => {
+  it("provides direct cloud invitations for Grok Bot and Muse", () => {
     const grok = findAgentPreset("grok");
     expect(grok).toMatchObject({
-      title: "Grok / Grokbot",
-      mode: "helper-preset",
-      helperPreset: "grok",
-      altHelperPreset: "grokbot-webhook",
+      title: "Grok Bot",
+      mode: "cloud-agent",
       trustTier: "cloud-api",
     });
 
     const muse = findAgentPreset("muse");
     expect(muse).toMatchObject({
       title: "Muse",
-      mode: "helper-preset",
-      helperPreset: "muse",
-      altHelperPreset: "muse-webhook",
+      mode: "cloud-agent",
       trustTier: "cloud-api",
     });
+    expect(grok).not.toHaveProperty("helperPreset");
+    expect(muse).not.toHaveProperty("helperPreset");
   });
 
-  it("configures Ollama and custom Webhook presets with honest trust tiers", () => {
+  it("configures xAI, Ollama, and custom Webhook through the helper", () => {
+    expect(findAgentPreset("xai-api")).toMatchObject({
+      mode: "helper-preset",
+      helperPreset: "grok",
+      trustTier: "cloud-api",
+    });
     expect(findAgentPreset("ollama")).toMatchObject({
       mode: "helper-preset",
       helperPreset: "ollama",
@@ -64,5 +68,33 @@ describe("AGENT_PRESETS", () => {
       expect(item.subtitle).not.toMatch(emojiPattern);
       expect(item.description).not.toMatch(emojiPattern);
     }
+  });
+});
+
+describe("cloudAgentConnectCommand", () => {
+  it("builds the bridge command using the selected XMTP environment", () => {
+    expect(cloudAgentConnectCommand({
+      hubOrigin: "https://hub.example",
+      inviteUrl: "https://app.example/rooms/room-42?invite=invite%2Btoken",
+      title: "Grok Bot",
+      env: "dev",
+    })).toBe([
+      "curl -fsSL https://hub.example/downloads/xmtp-member-latest.tar.gz -o /tmp/mapr.tar.gz",
+      "mkdir -p ~/.mapr-bot/app",
+      "tar -xzf /tmp/mapr.tar.gz -C ~/.mapr-bot/app --strip-components=1",
+      "(cd ~/.mapr-bot/app && npm ci --omit=dev)",
+      'node --experimental-strip-types ~/.mapr-bot/app/src/cli.ts bridge --invite "https://app.example/rooms/room-42?invite=invite%2Btoken" --name "Grok Bot" --env "dev"',
+    ].join(" && "));
+  });
+
+  it("keeps shell metacharacters inside quoted arguments", () => {
+    const command = cloudAgentConnectCommand({
+      hubOrigin: "https://hub.example",
+      inviteUrl: 'https://app.example/rooms/room-42?invite="quoted"&amount=$1',
+      title: "Muse",
+      env: "local",
+    });
+    expect(command).toContain('--invite "https://app.example/rooms/room-42?invite=\\"quoted\\"&amount=\\$1"');
+    expect(command).toContain('--name "Muse" --env "local"');
   });
 });

@@ -56,15 +56,16 @@ import {
 import { sendXmtpMessage, sendXmtpReply, toLocalChatMessage } from "../lib/xmtpSend";
 import { extractXmtpMessageText, XmtpSearchIndex } from "../lib/xmtpSearch";
 import {
+  HELPER_ORIGIN,
   acceptRoomInvite,
   formatInviteAcceptError,
+  isMobileBrowser,
   issueSignatureNonce,
   listLocalSeats,
   listRoomInvites,
   listRoomRedemptions,
   listRoomSeats,
   markSeatGroupAdded,
-  openHelperPage,
   probeHelper,
   redeemRoomInvite,
   type HubSeatView,
@@ -282,7 +283,8 @@ export function RoomPage() {
     seatsRef.current = roomSeatsQuery.data ?? [];
   }, [roomSeatsQuery.data]);
 
-  // 仅当本机助手在运行且已配对时轻量探测当前房间是否有 crashed 席位，绝不误报红条
+  const isMobile = isMobileBrowser();
+  // 仅当桌面端助手在运行且已配对时，检查当前房间的本机席位。
   const localSeatsQuery = useQuery({
     queryKey: ["local-helper-room-seats", roomId],
     queryFn: async () => {
@@ -294,7 +296,7 @@ export function RoomPage() {
         return [];
       }
     },
-    enabled: Boolean(roomReadyForQueries && isEncrypted),
+    enabled: Boolean(roomReadyForQueries && isEncrypted && !isMobile),
     refetchInterval: 15000,
     retry: false,
   });
@@ -304,7 +306,7 @@ export function RoomPage() {
     [localSeatsQuery.data, roomId],
   );
   const crashKey = crashedLocalSeats.map((s) => s.seatId).sort().join(",");
-  const showCrashBanner = crashedLocalSeats.length > 0 && dismissedCrashKey !== crashKey;
+  const showCrashBanner = !isMobile && crashedLocalSeats.length > 0 && dismissedCrashKey !== crashKey;
 
   const updateInboxMap = useCallback((members: { inboxId?: string; accountIdentifiers?: { identifier?: string }[] }[]) => {
     const next = buildInboxAddressMap(members);
@@ -1116,14 +1118,15 @@ export function RoomPage() {
               <span style={{ flex: 1 }}>
                 检测到本机席位（{crashedLocalSeats.map((s) => s.agentKey).join("、")}）异常退出，可前往本机助手查看原因或重启。
               </span>
-              <button
-                type="button"
+              <a
                 className="btn btn-ghost btn-sm"
-                onClick={() => openHelperPage()}
+                href={`${HELPER_ORIGIN}/`}
+                target="_blank"
+                rel="noopener noreferrer"
               >
                 <span>打开本机助手查看</span>
                 <ExternalLink size={12} strokeWidth={2} />
-              </button>
+              </a>
               <button
                 type="button"
                 className="icon-btn"

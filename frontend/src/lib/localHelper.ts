@@ -4,8 +4,7 @@
  *
  * 浏览器限制：
  * - Chrome 会对「公网页面访问 127.0.0.1」弹出本地网络访问权限提示，用户点允许后 fetch 才能成功。
- * - Safari 等浏览器可能直接拦截。因此每个需要本机助手的动作都必须有「打开本机页面」的后备：
- *   顶层跳转到 http://127.0.0.1:8790/#ticket=... 不受这些限制。
+ * - Safari 等浏览器可能直接拦截。桌面端可在新标签页打开本机助手，携带配对码或加入票据。
  *
  * 权限边界（见 workers/xmtp-member/src/helper/server.ts 的 guardHelperRequest）：
  * 网站来源只能做 public-read、owner-read 与 ticket-write 三类请求；
@@ -39,6 +38,22 @@ export type HelperProbe =
   | { state: "not-running" }
   /** 请求被浏览器拦截（权限提示被拒、或浏览器不允许）。无法区分「没装」与「被拦」时也归到这里。 */
   | { state: "blocked" };
+
+export function isMobileBrowser(
+  ua = typeof navigator === "undefined" ? "" : navigator.userAgent,
+  maxTouchPoints = typeof navigator === "undefined" ? 0 : navigator.maxTouchPoints,
+): boolean {
+  return /iPhone|iPad|iPod|Android|Mobile/i.test(ua)
+    || (/Macintosh/i.test(ua) && maxTouchPoints > 1);
+}
+
+export function resolvePresetOpenDecision(
+  probe: HelperProbe | null,
+  isMobile: boolean,
+): "open-helper" | "guide-mobile" | "guide-install" {
+  if (isMobile) return "guide-mobile";
+  return probe?.state === "running" ? "open-helper" : "guide-install";
+}
 
 export interface LocalAgentView {
   key: string;
@@ -281,11 +296,6 @@ export function helperHandoffUrl(action: HelperHandoffAction): string {
   }
   const params = new URLSearchParams({ ticket: action.ticket, agent: action.agentKey });
   return `${HELPER_ORIGIN}/#${params.toString()}`;
-}
-
-/** 顶层跳转去本机页面。跳转会离开本站，调用前先把必要状态展示给用户。 */
-export function openHelperPage(action?: HelperHandoffAction): void {
-  window.location.href = action ? helperHandoffUrl(action) : `${HELPER_ORIGIN}/`;
 }
 
 /** 生成 Windows PowerShell 一键安装并配对本机助手命令。 */
