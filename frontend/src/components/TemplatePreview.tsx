@@ -11,68 +11,39 @@ export function TemplatePreview({ template }: { template: RoomTemplateInfo }) {
   const scopeRows = Object.entries(rules?.scopes ?? {});
   const notes = rules?.notes ?? [];
   return (
-    <div
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        gap: 8,
-        padding: "10px 12px",
-        borderRadius: 10,
-        background: "#f5f5f7",
-        border: "1px solid rgba(0, 0, 0, 0.06)",
-        fontSize: 12,
-        color: "#1d1d1f",
-      }}
-    >
-      <strong style={{ fontSize: 12.5 }}>模板预置内容预览</strong>
-      <p style={{ fontSize: 11.5, color: "#6e6e73", lineHeight: 1.5, margin: 0 }}>
-        以下仅是发给各 Agent 本机助手的建议；本机规则与主人的当场决定才是权威。
-      </p>
-      {scopeRows.length > 0 && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-          <span style={{ fontSize: 11.5, fontWeight: 600 }}>规则建议</span>
-          {scopeRows.map(([scope, decision]) => (
-            <div key={scope} style={{ display: "flex", gap: 8, fontSize: 11.5 }}>
-              <code style={{ fontFamily: "var(--mono)", flex: 1 }}>{scope}</code>
-              <span style={{ color: "#6e6e73" }}>{HOUSE_RULE_LABEL[decision] ?? decision}</span>
-            </div>
-          ))}
-        </div>
-      )}
-      {notes.length > 0 && (
-        <ul style={{ margin: 0, paddingLeft: 16, fontSize: 11.5, color: "#6e6e73", lineHeight: 1.5 }}>
-          {notes.map((n, i) => (
-            <li key={i}>{n}</li>
-          ))}
-        </ul>
-      )}
-      {template.team_config_markdown && (
-        <details>
-          <summary style={{ fontSize: 11.5, cursor: "pointer", color: "#6e6e73" }}>
-            查看分工说明（Markdown）
-          </summary>
-          <pre
-            style={{
-              margin: "6px 0 0",
-              fontSize: 11,
-              lineHeight: 1.5,
-              whiteSpace: "pre-wrap",
-              wordBreak: "break-word",
-              maxHeight: 180,
-              overflow: "auto",
-              fontFamily: "inherit",
-              color: "#1d1d1f",
-            }}
-          >
-            {template.team_config_markdown}
-          </pre>
-        </details>
-      )}
-      {template.default_max_rounds != null && (
-        <span style={{ fontSize: 11.5, color: "#6e6e73" }}>
-          默认辩论轮次上限：{template.default_max_rounds}
-        </span>
-      )}
+    <div className="wb-preview-box">
+      <header className="wb-preview-box__head">
+        <span>模板预置内容预览</span>
+      </header>
+      <section className="wb-preview-box__section">
+        <p className="wb-preview-box__help">
+          以下仅是发给各 Agent 本机助手的建议；本机规则与主人的当场决定才是权威。
+        </p>
+        {scopeRows.length > 0 && (
+          <div className="wb-preview-rules">
+            {scopeRows.map(([scope, decision]) => (
+              <div key={scope} className="wb-preview-rule">
+                <span className="wb-preview-rule__scope">
+                  <code>{scope}</code>
+                </span>
+                <span>{HOUSE_RULE_LABEL[decision] ?? decision}</span>
+              </div>
+            ))}
+          </div>
+        )}
+        {notes.length > 0 && (
+          <ul className="wb-preview-notes">
+            {notes.map((n, i) => (
+              <li key={i}>{n}</li>
+            ))}
+          </ul>
+        )}
+        {template.default_max_rounds != null && (
+          <p className="wb-preview-box__help">
+            默认辩论轮次上限：{template.default_max_rounds}
+          </p>
+        )}
+      </section>
     </div>
   );
 }

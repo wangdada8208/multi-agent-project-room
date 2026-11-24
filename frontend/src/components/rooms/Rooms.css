@@ -1,0 +1,1165 @@
+/* =====================================================================
+   Rooms Dashboard, Attention Strip, Room Cards, Create Room Drawer
+   Pure Design Token CSS (Quiet Workbench, light & dark, desktop & mobile)
+   ===================================================================== */
+
+.wb-rooms-page {
+  max-width: var(--content-max);
+  margin-inline: auto;
+  padding: 32px 40px 56px;
+}
+
+.wb-rooms-head {
+  display: flex;
+  align-items: flex-end;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.wb-rooms-head__copy {
+  flex: 1;
+  min-width: 0;
+}
+
+.wb-rooms-head h1 {
+  font-family: var(--font-display);
+  font-size: 24px;
+  line-height: 32px;
+  font-weight: var(--fw-bold);
+  letter-spacing: -0.018em;
+  color: var(--text-1);
+}
+
+.wb-rooms-head p {
+  margin-top: 4px;
+  font-size: var(--fs-body);
+  color: var(--text-2);
+}
+
+.wb-rooms-head__actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+
+.wb-rooms-head__actions .ui-button {
+  min-height: 36px;
+}
+
+/* ---- Attention Strip ---- */
+.wb-attention {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px 12px 16px;
+  border-radius: 14px;
+  background: var(--warn-bg);
+  border: 1px solid var(--warn-border);
+  margin-bottom: 20px;
+  font-size: var(--fs-body);
+  color: var(--text-1);
+}
+
+.wb-attention__text {
+  flex: 1;
+  min-width: 0;
+  line-height: 20px;
+}
+
+.wb-attention__text strong {
+  font-weight: var(--fw-semibold);
+}
+
+.wb-attention__text small {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-2);
+  font-size: 12.5px;
+}
+
+/* ---- Toolbar ---- */
+.wb-rooms-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.wb-rooms-search {
+  position: relative;
+  width: 280px;
+  max-width: 100%;
+}
+
+.wb-rooms-search__icon {
+  position: absolute;
+  left: 11px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-3);
+  pointer-events: none;
+}
+
+.wb-rooms-search__input {
+  width: 100%;
+  height: 36px;
+  padding: 0 12px 0 34px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--border-2);
+  background: var(--bg-surface);
+  color: var(--text-1);
+  font-size: var(--fs-body);
+  transition: border-color var(--dur-1), box-shadow var(--dur-1);
+}
+
+.wb-rooms-search__input::placeholder {
+  color: var(--text-3);
+}
+
+.wb-rooms-search__input:focus {
+  outline: none;
+  border-color: var(--text-link);
+  box-shadow: 0 0 0 3px var(--info-bg);
+}
+
+.wb-rooms-toolbar .ui-segmented {
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-1);
+  padding: 3px;
+  border-radius: 10px;
+  gap: 2px;
+}
+
+.wb-rooms-toolbar .ui-segmented label span {
+  height: 28px;
+  padding: 0 12px;
+  display: inline-flex;
+  align-items: center;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  border-radius: 7px;
+}
+
+.wb-rooms-toolbar__sort {
+  margin-left: auto;
+  font-size: 12.5px;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+
+/* ---- Rooms Grid & Room Card ---- */
+.wb-rooms-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.wb-room-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px 18px 14px;
+  border-radius: var(--r-xl);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-1);
+  box-shadow: var(--sh-1);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color var(--dur-1), box-shadow var(--dur-2), transform var(--dur-2);
+  min-width: 0;
+  color: var(--text-1);
+}
+
+.wb-room-card:hover {
+  border-color: var(--border-2);
+  box-shadow: var(--sh-2);
+  transform: translateY(-1px);
+}
+
+.wb-room-card:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.wb-room-card__top {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.wb-room-card__title-wrap {
+  flex: 1;
+  min-width: 0;
+}
+
+.wb-room-card__title {
+  font-size: 15.5px;
+  line-height: 22px;
+  font-weight: var(--fw-semibold);
+  letter-spacing: -0.006em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-1);
+}
+
+.wb-room-card__sub {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 4px;
+  font-size: 12.5px;
+  color: var(--text-3);
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wb-room-card__badges {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+}
+
+.wb-room-card__pending-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--r-full);
+  background: var(--presence-pending);
+  display: inline-block;
+  margin-right: 4px;
+}
+
+.wb-room-card__tag-icon {
+  margin-right: 4px;
+  flex: none;
+}
+
+.wb-room-card__delete {
+  width: 26px;
+  height: 26px;
+  border-radius: var(--r-sm);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-3);
+  opacity: 0;
+  transition: opacity var(--dur-1), background var(--dur-1), color var(--dur-1);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.wb-room-card:hover .wb-room-card__delete,
+.wb-room-card:focus-within .wb-room-card__delete {
+  opacity: 1;
+}
+
+.wb-room-card__delete:hover {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.wb-room-card__confirm {
+  padding: 10px 12px;
+  border-radius: var(--r-lg);
+  background: var(--bg-canvas);
+  border: 1px dashed var(--border-2);
+  font-size: 12.5px;
+}
+
+.wb-room-card__last {
+  font-size: var(--fs-sm);
+  line-height: 20px;
+  color: var(--text-2);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  min-height: 40px;
+}
+
+.wb-room-card__foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 12px;
+  margin-top: auto;
+  border-top: 1px solid var(--border-1);
+  font-size: 12.5px;
+  color: var(--text-3);
+}
+
+.wb-room-card__foot .ui-avatar {
+  --avatar-size: 24px;
+  font-size: 11px;
+}
+
+.wb-room-card__foot .ui-avatar__mark {
+  display: none;
+}
+
+.wb-room-card__foot .ui-avatar-stack__overflow {
+  min-width: 24px;
+  height: 24px;
+  font-size: 10.5px;
+}
+
+.wb-room-card__counts {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.wb-room-card__spacer {
+  flex: 1;
+}
+
+.wb-room-card__time {
+  white-space: nowrap;
+}
+
+.wb-room-card__lock {
+  color: var(--ok);
+  flex: none;
+}
+
+.wb-room-card--new {
+  border-style: dashed;
+  border-color: var(--border-2);
+  background: transparent;
+  box-shadow: none;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: var(--text-2);
+  min-height: 196px;
+}
+
+.wb-room-card--new:hover {
+  background: var(--bg-surface);
+  border-color: var(--border-3);
+}
+
+.wb-room-card__plus {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--border-2);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-surface);
+  margin-bottom: 4px;
+  color: var(--text-1);
+}
+
+.wb-room-card--new strong {
+  color: var(--text-1);
+  font-size: var(--fs-body);
+  font-weight: var(--fw-semibold);
+}
+
+.wb-room-card--new span {
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+}
+
+.wb-rooms-state {
+  padding: 40px 24px;
+  border-radius: var(--r-xl);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-1);
+  text-align: center;
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+}
+
+.wb-rooms-state p {
+  color: var(--text-2);
+  font-size: var(--fs-body);
+}
+
+.wb-rooms-state__actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-top: 6px;
+}
+
+.wb-rooms-alert {
+  margin-bottom: 16px;
+  padding: 10px 14px;
+  border-radius: var(--r-lg);
+  background: var(--danger-bg);
+  border: 1px solid var(--danger-border);
+  color: var(--danger);
+  font-size: var(--fs-sm);
+}
+
+/* ---- Create Room Drawer (520px desktop right drawer / mobile bottom sheet) ---- */
+.wb-create-drawer.ui-drawer--right {
+  width: min(100vw, 520px);
+  height: 100dvh;
+}
+
+.wb-create-drawer.ui-drawer--bottom {
+  max-height: calc(100dvh - max(24px, var(--safe-top)));
+}
+
+.wb-create-drawer .ui-drawer__body {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 0;
+}
+
+.wb-create-drawer .ui-drawer__grab {
+  width: 36px;
+  height: 5px;
+  border-radius: var(--r-full);
+  background: var(--border-3);
+  margin: 10px auto 2px;
+  flex: none;
+}
+
+.wb-create-drawer .ui-drawer__header {
+  height: 60px;
+  padding: 0 16px 0 24px;
+  margin: 0;
+  border-bottom: 1px solid var(--border-1);
+  flex: none;
+}
+
+.wb-create-drawer .ui-drawer__header h2 {
+  font-size: 17px;
+  font-weight: var(--fw-bold);
+  letter-spacing: -0.01em;
+}
+
+.wb-create-drawer__form {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.wb-create-drawer__scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 20px 24px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.wb-create-drawer__field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.wb-create-drawer__label {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  color: var(--text-1);
+}
+
+.wb-create-drawer__input,
+.wb-create-drawer__textarea,
+.wb-create-drawer__select {
+  width: 100%;
+  border-radius: var(--r-md);
+  border: 1px solid var(--border-2);
+  background: var(--bg-surface);
+  color: var(--text-1);
+  font-size: var(--fs-body);
+  transition: border-color var(--dur-1), box-shadow var(--dur-1);
+}
+
+.wb-create-drawer__input {
+  height: 38px;
+  padding: 0 12px;
+}
+
+.wb-create-drawer__textarea {
+  padding: 10px 12px;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 19px;
+  resize: vertical;
+}
+
+.wb-create-drawer__select {
+  height: 34px;
+  padding: 0 10px;
+  font-size: 12.5px;
+  width: auto;
+}
+
+.wb-create-drawer__input:focus,
+.wb-create-drawer__textarea:focus,
+.wb-create-drawer__select:focus {
+  outline: none;
+  border-color: var(--text-link);
+  box-shadow: 0 0 0 3px var(--info-bg);
+}
+
+.wb-create-drawer__foot {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 24px calc(14px + var(--safe-bottom));
+  border-top: 1px solid var(--border-1);
+  background: var(--bg-surface);
+}
+
+.wb-create-drawer__note {
+  flex: 1;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--text-3);
+}
+
+.wb-create-drawer__note svg {
+  color: var(--ok);
+  flex: none;
+}
+
+.wb-create-drawer__error {
+  font-size: var(--fs-sm);
+  color: var(--danger);
+  background: var(--danger-bg);
+  border: 1px solid var(--danger-border);
+  border-radius: var(--r-md);
+  padding: 8px 12px;
+}
+
+/* ---- Template Picker ---- */
+.wb-tpl-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.wb-tpl-opt {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--border-1);
+  background: var(--bg-surface);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--dur-1), background var(--dur-1), box-shadow var(--dur-1);
+  min-width: 0;
+  color: var(--text-1);
+}
+
+.wb-tpl-opt:hover {
+  border-color: var(--border-2);
+}
+
+.wb-tpl-opt[aria-checked="true"] {
+  border-color: var(--text-1);
+  box-shadow: 0 0 0 1px var(--text-1);
+}
+
+.wb-tpl-opt__icon {
+  width: 30px;
+  height: 30px;
+  border-radius: var(--r-md);
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-1);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  color: var(--text-1);
+}
+
+.wb-tpl-opt__copy {
+  min-width: 0;
+  flex: 1;
+}
+
+.wb-tpl-opt__copy strong {
+  display: block;
+  font-size: 13.5px;
+  font-weight: var(--fw-semibold);
+  color: var(--text-1);
+}
+
+.wb-tpl-opt__copy small {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  line-height: 17px;
+  color: var(--text-3);
+}
+
+/* ---- Template Rules Preview ---- */
+.wb-preview-box {
+  border: 1px solid var(--border-1);
+  border-radius: 14px;
+  background: var(--bg-canvas);
+  overflow: hidden;
+}
+
+.wb-preview-box__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border-1);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  background: var(--bg-surface);
+  color: var(--text-1);
+}
+
+.wb-preview-box__head small {
+  margin-left: auto;
+  font-weight: var(--fw-regular);
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+.wb-preview-box__section {
+  padding: 12px 14px;
+}
+
+.wb-preview-box__section + .wb-preview-box__section {
+  border-top: 1px solid var(--border-1);
+}
+
+.wb-preview-box__section h5 {
+  font-size: 12px;
+  font-weight: var(--fw-semibold);
+  color: var(--text-3);
+  margin-bottom: 8px;
+}
+
+.wb-preview-roles {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.wb-preview-role {
+  display: grid;
+  grid-template-columns: 124px minmax(0, 1fr);
+  gap: 10px;
+  font-size: var(--fs-sm);
+  line-height: 19px;
+}
+
+.wb-preview-role strong {
+  font-weight: var(--fw-semibold);
+  color: var(--text-1);
+}
+
+.wb-preview-role span {
+  color: var(--text-2);
+}
+
+.wb-preview-rules {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.wb-preview-rule {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: var(--fs-sm);
+  min-height: 30px;
+}
+
+.wb-preview-rule__scope {
+  flex: 1;
+  min-width: 0;
+  color: var(--text-1);
+}
+
+.wb-preview-rule__scope code {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--text-3);
+  margin-left: 6px;
+}
+
+.wb-preview-notes {
+  margin-top: 8px;
+  padding-left: 16px;
+  list-style: disc;
+  font-size: 12.5px;
+  color: var(--text-2);
+  line-height: 19px;
+}
+
+.wb-preview-box__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.wb-preview-box__help {
+  font-size: 12px;
+  color: var(--text-3);
+  line-height: 18px;
+}
+
+.wb-preview-custom {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.wb-preview-custom__row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.wb-preview-custom__scope-input {
+  flex: 1;
+  min-width: 0;
+  height: 34px;
+  padding: 0 10px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--border-2);
+  background: var(--bg-surface);
+  color: var(--text-1);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.wb-preview-custom__rounds {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+
+.wb-preview-custom__rounds input {
+  width: 76px;
+  height: 34px;
+  padding: 0 10px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--border-2);
+  background: var(--bg-surface);
+  color: var(--text-1);
+  font-size: var(--fs-sm);
+}
+
+.wb-preview-blank {
+  font-size: var(--fs-sm);
+  line-height: 20px;
+  color: var(--text-2);
+}
+
+/* ---- Onboarding View (standalone /setup & embedded first-time /home) ---- */
+.wb-onb-shell {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-canvas);
+  color: var(--text-1);
+}
+
+.wb-onb-shell__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 28px;
+}
+
+.wb-onb-shell__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: var(--fw-bold);
+  font-size: 15px;
+  color: var(--text-1);
+  text-decoration: none;
+}
+
+.wb-onb-shell__mark {
+  width: 26px;
+  height: 26px;
+  border-radius: var(--r-md);
+  background: var(--accent);
+  color: var(--accent-fg);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.wb-onb-shell__center {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px 20px 64px;
+}
+
+.wb-onb {
+  width: 760px;
+  max-width: 100%;
+}
+
+.wb-onb--embedded {
+  width: 100%;
+  margin-top: 8px;
+}
+
+.wb-onb h1,
+.wb-onb h2 {
+  font-family: var(--font-display);
+  font-size: 28px;
+  line-height: 36px;
+  font-weight: var(--fw-bold);
+  letter-spacing: -0.02em;
+  color: var(--text-1);
+}
+
+.wb-onb__lead {
+  color: var(--text-2);
+  margin-top: 8px;
+  font-size: 15px;
+}
+
+.wb-onb-progress {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+.wb-onb-progress__step {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px 0 6px;
+  border-radius: var(--r-full);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-1);
+  font-size: 12.5px;
+  color: var(--text-2);
+  white-space: nowrap;
+}
+
+.wb-onb-progress__step i {
+  font-style: normal;
+  width: 18px;
+  height: 18px;
+  border-radius: var(--r-full);
+  background: var(--bg-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: var(--fw-semibold);
+}
+
+.wb-onb-progress__step--active {
+  color: var(--text-1);
+  border-color: var(--border-3);
+}
+
+.wb-onb-progress__step--active i {
+  background: var(--accent);
+  color: var(--accent-fg);
+}
+
+.wb-onb-choices {
+  margin-top: 24px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.wb-onb-choice {
+  padding: 22px;
+  border-radius: 18px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-1);
+  box-shadow: var(--sh-1);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--dur-1), box-shadow var(--dur-2);
+  color: var(--text-1);
+}
+
+.wb-onb-choice:hover {
+  border-color: var(--border-3);
+  box-shadow: var(--sh-2);
+}
+
+.wb-onb-choice__icon {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--r-lg);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-subtle);
+  color: var(--text-1);
+  border: 1px solid var(--border-1);
+}
+
+.wb-onb-choice__icon--cloud {
+  background: var(--actor-cloud-bg);
+  color: var(--actor-cloud);
+  border-color: var(--actor-cloud-border);
+}
+
+.wb-onb-choice h3 {
+  font-size: 17px;
+  font-weight: var(--fw-bold);
+}
+
+.wb-onb-choice p {
+  font-size: 13.5px;
+  line-height: 21px;
+  color: var(--text-2);
+}
+
+.wb-onb-choice__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.wb-onb-choice__go {
+  margin-top: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: var(--fw-semibold);
+  font-size: 13.5px;
+  color: var(--text-1);
+}
+
+.wb-onb-invite {
+  margin-top: 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 1px dashed var(--border-2);
+  background: var(--bg-surface);
+  font-size: 13.5px;
+  color: var(--text-2);
+}
+
+.wb-onb-invite__label {
+  white-space: nowrap;
+}
+
+.wb-onb-invite__input {
+  flex: 1;
+  min-width: 0;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--border-2);
+  background: var(--bg-canvas);
+  color: var(--text-1);
+  font-size: var(--fs-body);
+}
+
+.wb-onb-invite__input:focus {
+  outline: none;
+  border-color: var(--text-link);
+  box-shadow: 0 0 0 3px var(--info-bg);
+}
+
+.wb-onb-invite__error {
+  margin-top: 8px;
+  font-size: 12.5px;
+  color: var(--danger);
+}
+
+/* ---- Setup Fallback Page (/setup/:roomId) ---- */
+.wb-setup-page {
+  max-width: 640px;
+  margin-inline: auto;
+  padding: 36px 24px 64px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.wb-setup-card {
+  padding: 24px;
+  border-radius: var(--r-xl);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-1);
+  box-shadow: var(--sh-1);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.wb-setup-card h1 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 20px;
+  line-height: 28px;
+  font-weight: var(--fw-bold);
+}
+
+.wb-setup-card p {
+  font-size: var(--fs-body);
+  line-height: 22px;
+  color: var(--text-2);
+}
+
+.wb-setup-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.wb-setup-step {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--r-lg);
+  background: var(--bg-canvas);
+  border: 1px solid var(--border-1);
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+}
+
+.wb-setup-step--done {
+  color: var(--ok);
+  border-color: var(--ok-border);
+  background: var(--ok-bg);
+}
+
+.wb-setup-step--failed {
+  color: var(--danger);
+  border-color: var(--danger-border);
+  background: var(--danger-bg);
+}
+
+.wb-setup-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* ---- Responsive ---- */
+@media (max-width: 1120px) {
+  .wb-rooms-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 767px) {
+  .wb-rooms-page {
+    padding: calc(16px + var(--safe-top)) 16px 28px;
+  }
+  .wb-rooms-head {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+    margin-bottom: 14px;
+  }
+  .wb-rooms-head__actions {
+    margin-left: 0;
+  }
+  .wb-rooms-head__actions > * {
+    flex: 1;
+  }
+  .wb-attention {
+    flex-wrap: wrap;
+  }
+  .wb-attention .ui-button {
+    width: 100%;
+  }
+  .wb-rooms-search {
+    width: 100%;
+  }
+  .wb-rooms-toolbar__sort {
+    display: none;
+  }
+  .wb-rooms-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+  .wb-room-card__delete {
+    opacity: 1;
+  }
+  .wb-tpl-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .wb-preview-role {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
+  }
+  .wb-create-drawer__scroll {
+    padding: 16px;
+  }
+  .wb-create-drawer__foot {
+    padding: 12px 16px calc(12px + var(--safe-bottom));
+  }
+  .wb-create-drawer__note {
+    display: none;
+  }
+  .wb-create-drawer__foot .ui-button {
+    flex: 1;
+    min-height: 44px;
+  }
+  .wb-onb-shell__top {
+    padding: 14px 18px;
+  }
+  .wb-onb-shell__center {
+    align-items: flex-start;
+    padding: 12px 16px 40px;
+  }
+  .wb-onb h1,
+  .wb-onb h2 {
+    font-size: 24px;
+    line-height: 32px;
+  }
+  .wb-onb-choices {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .wb-onb-invite {
+    flex-wrap: wrap;
+  }
+  .wb-onb-invite__input {
+    flex-basis: 100%;
+    font-size: 16px;
+  }
+}

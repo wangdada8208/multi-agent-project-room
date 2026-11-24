@@ -1,0 +1,324 @@
+/* =====================================================================
+   Login Page — Quiet Workbench 400px Minimal Card (light, dark, mobile)
+   Zero hardcoded hex colors: all colors derive from tokens.css.
+   ===================================================================== */
+
+.wb-auth {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-canvas);
+  color: var(--text-1);
+  font-family: var(--font-sans);
+}
+
+.wb-auth__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: calc(18px + var(--safe-top)) 28px 18px;
+}
+
+.wb-auth__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: var(--fw-bold);
+  font-size: 15px;
+  letter-spacing: -0.01em;
+  color: var(--text-1);
+  text-decoration: none;
+}
+
+.wb-auth__mark {
+  width: 26px;
+  height: 26px;
+  border-radius: var(--r-md);
+  background: var(--accent);
+  color: var(--accent-fg);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+
+.wb-auth__center {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px 20px calc(56px + var(--safe-bottom));
+}
+
+.wb-auth-card {
+  width: 400px;
+  max-width: 100%;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-2xl);
+  box-shadow: var(--sh-3);
+  padding: 32px;
+}
+
+.wb-auth-card h1 {
+  font-family: var(--font-display);
+  font-size: var(--fs-h2);
+  line-height: var(--lh-h2);
+  font-weight: var(--fw-bold);
+  letter-spacing: -0.016em;
+  color: var(--text-1);
+}
+
+.wb-auth-card__sub {
+  color: var(--text-2);
+  margin-top: 6px;
+  font-size: var(--fs-body);
+}
+
+.wb-auth-card__next-pill {
+  margin-top: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: var(--r-full);
+  background: var(--info-bg);
+  border: 1px solid var(--info-border);
+  color: var(--info);
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-medium);
+}
+
+.wb-auth-google {
+  margin-top: 22px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.wb-auth-google__slot {
+  width: 100%;
+  min-height: 42px;
+  display: flex;
+  justify-content: center;
+}
+
+.wb-auth-google__fallback {
+  width: 100%;
+  min-height: 42px;
+  border-radius: 10px;
+  border: 1px solid var(--border-2);
+  background: var(--bg-surface);
+  color: var(--text-1);
+  font-weight: var(--fw-medium);
+  font-size: var(--fs-body);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  box-shadow: var(--sh-1);
+}
+
+.wb-auth-or {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--text-3);
+  font-size: var(--fs-caption);
+  margin: 20px 0;
+}
+
+.wb-auth-or::before,
+.wb-auth-or::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border-1);
+}
+
+.wb-auth-form {
+  margin-top: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.wb-auth-form--after-or {
+  margin-top: 0;
+}
+
+.wb-auth-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.wb-auth-field__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.wb-auth-field label {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  color: var(--text-1);
+}
+
+.wb-auth-field__meta {
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-regular);
+  color: var(--text-3);
+}
+
+.wb-auth-input {
+  height: 40px;
+  width: 100%;
+  padding: 0 12px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--border-2);
+  background: var(--bg-surface);
+  font-size: var(--fs-body);
+  color: var(--text-1);
+  transition: border-color var(--dur-1), box-shadow var(--dur-1);
+}
+
+.wb-auth-input::placeholder {
+  color: var(--text-3);
+}
+
+.wb-auth-input:focus {
+  outline: none;
+  border-color: var(--text-link);
+  box-shadow: 0 0 0 3px var(--info-bg);
+}
+
+/* 6-box OTP Code Input */
+.wb-otp-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.wb-otp-cell {
+  height: 46px;
+  width: 100%;
+  text-align: center;
+  border-radius: 10px;
+  border: 1px solid var(--border-2);
+  background: var(--bg-surface);
+  color: var(--text-1);
+  font-family: var(--font-mono);
+  font-size: 18px;
+  font-weight: var(--fw-semibold);
+  transition: border-color var(--dur-1), box-shadow var(--dur-1);
+}
+
+.wb-otp-cell:focus {
+  outline: none;
+  border-color: var(--text-1);
+  box-shadow: 0 0 0 3px var(--bg-subtle);
+}
+
+.wb-auth-submit {
+  width: 100%;
+  margin-top: 6px;
+  min-height: 44px;
+  border-radius: 10px;
+}
+
+.wb-auth-links {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 12px;
+  font-size: var(--fs-sm);
+}
+
+.wb-auth-link-btn {
+  color: var(--text-2);
+  background: transparent;
+  border: 0;
+  padding: 4px 2px;
+  cursor: pointer;
+  font-size: var(--fs-sm);
+  transition: color var(--dur-1);
+}
+
+.wb-auth-link-btn:hover:not(:disabled) {
+  color: var(--text-1);
+}
+
+.wb-auth-link-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.wb-auth-notice {
+  padding: 9px 12px;
+  border-radius: var(--r-md);
+  background: var(--ok-bg);
+  border: 1px solid var(--ok-border);
+  color: var(--ok);
+  font-size: var(--fs-sm);
+  line-height: 19px;
+}
+
+.wb-auth-error {
+  padding: 9px 12px;
+  border-radius: var(--r-md);
+  background: var(--danger-bg);
+  border: 1px solid var(--danger-border);
+  color: var(--danger);
+  font-size: var(--fs-sm);
+  line-height: 19px;
+}
+
+.wb-auth-mode-bar {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+}
+
+.wb-auth-mode-bar button {
+  color: var(--text-1);
+  font-weight: var(--fw-medium);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.wb-auth-foot {
+  margin-top: 18px;
+  font-size: 12.5px;
+  color: var(--text-3);
+  line-height: 19px;
+  text-align: center;
+}
+
+@media (max-width: 767px) {
+  .wb-auth__top {
+    padding: calc(14px + var(--safe-top)) 18px 14px;
+  }
+  .wb-auth__center {
+    align-items: flex-start;
+    padding: 8px 16px calc(40px + var(--safe-bottom));
+  }
+  .wb-auth-card {
+    padding: 24px 20px;
+    box-shadow: var(--sh-1);
+  }
+  .wb-auth-input {
+    font-size: 16px;
+  }
+}

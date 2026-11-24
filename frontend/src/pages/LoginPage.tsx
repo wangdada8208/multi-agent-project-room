@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ClipboardEvent, type FormEvent, type KeyboardEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowLeft, ShieldCheck } from "lucide-react";
+import { ArrowLeft, Infinity as InfinityIcon, Link2 } from "lucide-react";
+import { Button } from "../components/ui/Button";
 import {
   fetchAuthProviders,
   login,
@@ -11,6 +12,7 @@ import {
   sendEmailCode,
 } from "../lib/api";
 import { useAuthStore } from "../stores/authStore";
+import "./LoginPage.css";
 
 declare global {
   interface Window {
@@ -40,6 +42,7 @@ declare global {
 const GIS_SCRIPT_ID = "mapr-google-gsi-script";
 const GIS_SCRIPT_URL = "https://accounts.google.com/gsi/client";
 const GIS_LOAD_TIMEOUT_MS = 8000;
+const OTP_LENGTH = 6;
 
 let gisLoadPromise: Promise<boolean> | null = null;
 
@@ -66,7 +69,6 @@ function loadGoogleIdentityScript(): Promise<boolean> {
     };
 
     const timer = window.setTimeout(() => finish(false), GIS_LOAD_TIMEOUT_MS);
-
     const existing = document.getElementById(GIS_SCRIPT_ID) as HTMLScriptElement | null;
     if (existing) {
       existing.addEventListener("load", () => finish(Boolean(window.google?.accounts?.id)), { once: true });
@@ -86,7 +88,7 @@ function loadGoogleIdentityScript(): Promise<boolean> {
   return gisLoadPromise;
 }
 
-function resolveSafeNext(raw: string | null): string {
+export function resolveSafeNext(raw: string | null): string {
   if (!raw) return "/home";
   const trimmed = raw.trim();
   if (trimmed.startsWith("/") && !trimmed.startsWith("//") && !trimmed.startsWith("/login")) {
@@ -95,13 +97,97 @@ function resolveSafeNext(raw: string | null): string {
   return "/home";
 }
 
+function OtpCodeInput({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: string;
+  onChange: (next: string) => void;
+  disabled?: boolean;
+}) {
+  const refs = useRef<Array<HTMLInputElement | null>>([]);
+  const digits = Array.from({ length: OTP_LENGTH }, (_, i) => value[i] ?? "");
+
+  function focusAt(index: number) {
+    const clamped = Math.max(0, Math.min(OTP_LENGTH - 1, index));
+    refs.current[clamped]?.focus();
+  }
+
+  function updateAt(index: number, raw: string) {
+    const cleaned = raw.replace(/\D/g, "");
+    if (!cleaned) {
+      const next = [...digits];
+      next[index] = "";
+      onChange(next.join(""));
+      return;
+    }
+    const next = [...digits];
+    let cursor = index;
+    for (const ch of cleaned) {
+      if (cursor >= OTP_LENGTH) break;
+      next[cursor] = ch;
+      cursor += 1;
+    }
+    onChange(next.join("").slice(0, OTP_LENGTH));
+    if (cursor < OTP_LENGTH) focusAt(cursor);
+  }
+
+  function handleKeyDown(index: number, event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key === "Backspace" && !digits[index] && index > 0) {
+      event.preventDefault();
+      const next = [...digits];
+      next[index - 1] = "";
+      onChange(next.join(""));
+      focusAt(index - 1);
+    } else if (event.key === "ArrowLeft" && index > 0) {
+      event.preventDefault();
+      focusAt(index - 1);
+    } else if (event.key === "ArrowRight" && index < OTP_LENGTH - 1) {
+      event.preventDefault();
+      focusAt(index + 1);
+    }
+  }
+
+  function handlePaste(event: ClipboardEvent<HTMLInputElement>) {
+    const pasted = event.clipboardData.getData("text").replace(/\D/g, "").slice(0, OTP_LENGTH);
+    if (!pasted) return;
+    event.preventDefault();
+    onChange(pasted);
+    focusAt(Math.min(pasted.length, OTP_LENGTH - 1));
+  }
+
+  return (
+    <div className="wb-otp-grid" role="group" aria-label="6 位邮箱验证码">
+      {digits.map((digit, index) => (
+        <input
+          key={index}
+          ref={(el) => {
+            refs.current[index] = el;
+          }}
+          className="wb-otp-cell"
+          inputMode="numeric"
+          autoComplete={index === 0 ? "one-time-code" : "off"}
+          maxLength={OTP_LENGTH}
+          aria-label={`验证码第 ${index + 1} 位`}
+          value={digit}
+          disabled={disabled}
+          onChange={(e) => updateAt(index, e.target.value)}
+          onKeyDown={(e) => handleKeyDown(index, e)}
+          onPaste={handlePaste}
+        />
+      ))}
+    </div>
+  );
+}
+
 export function LoginPage() {
   const [searchParams] = useSearchParams();
   const initialMode = searchParams.get("mode") === "register" ? "register" : "login";
   const nextPath = resolveSafeNext(searchParams.get("next"));
 
   const [mode, setMode] = useState<"login" | "register">(initialMode);
-  const [loginMethod, setLoginMethod] = useState<"password" | "email_code">("password");
+  const [loginMethod, setLoginMethod] = useState<"email_code" | "password">("email_code");
   const [registerMethod, setRegisterMethod] = useState<"email" | "username">("email");
 
   const [identifier, setIdentifier] = useState("");
@@ -119,9 +205,8 @@ export function LoginPage() {
     login: 0,
   });
 
-  const [googleClientId, setGoogleClientId] = useState(
-    () => (import.meta.env.VITE_GOOGLE_CLIENT_ID ?? "").trim(),
-  );
+  const [googleEnabled, setGoogleEnabled] = useState(false);
+  const [googleClientId, setGoogleClientId] = useState("");
   const [googleReady, setGoogleReady] = useState(false);
   const googleButtonRef = useRef<HTMLDivElement | null>(null);
 
@@ -155,12 +240,18 @@ export function LoginPage() {
       .then((providers) => {
         if (!active) return;
         const cid = (providers.google_client_id || "").trim();
-        if (cid) {
-          setGoogleClientId(cid);
+        const allowGoogle = Boolean(providers.google_enabled && cid);
+        setGoogleEnabled(allowGoogle);
+        setGoogleClientId(allowGoogle ? cid : "");
+        if (!providers.email_enabled) {
+          setLoginMethod((prev) => (prev === "email_code" ? "password" : prev));
+          setRegisterMethod((prev) => (prev === "email" ? "username" : prev));
         }
       })
       .catch(() => {
-        // Ignore provider probe errors; local auth forms remain usable.
+        if (!active) return;
+        setGoogleEnabled(false);
+        setGoogleClientId("");
       });
     return () => {
       active = false;
@@ -168,7 +259,7 @@ export function LoginPage() {
   }, []);
 
   useEffect(() => {
-    if (!googleClientId) {
+    if (!googleEnabled || !googleClientId) {
       setGoogleReady(false);
       return;
     }
@@ -180,7 +271,7 @@ export function LoginPage() {
     return () => {
       cancelled = true;
     };
-  }, [googleClientId]);
+  }, [googleEnabled, googleClientId]);
 
   useEffect(() => {
     if (!googleReady || !googleClientId || !googleButtonRef.current || !window.google?.accounts?.id) {
@@ -195,9 +286,9 @@ export function LoginPage() {
     window.google.accounts.id.renderButton(container, {
       theme: "outline",
       size: "large",
-      shape: "pill",
+      shape: "rectangular",
       text: mode === "register" ? "signup_with" : "signin_with",
-      width: 330,
+      width: 336,
     });
   }, [googleReady, googleClientId, mode]);
 
@@ -236,8 +327,8 @@ export function LoginPage() {
     }
   }
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  async function handleSubmit(event: FormEvent) {
+    event.preventDefault();
     setError("");
     setNotice("");
 
@@ -286,302 +377,319 @@ export function LoginPage() {
     }
   }
 
-  function switchMode(target: "login" | "register") {
-    setMode(target);
-    setError("");
-    setNotice("");
-    setCode("");
-  }
-
   const isSubmitDisabled = (() => {
     if (submitting) return true;
     if (mode === "register") {
       if (registerMethod === "email") {
-        return !email.trim() || code.trim().length < 6 || !password;
+        return !email.trim() || code.trim().length < OTP_LENGTH || !password;
       }
       return !identifier.trim() || !password;
     }
     if (loginMethod === "email_code") {
-      return !email.trim() || code.trim().length < 6;
+      return !email.trim() || code.trim().length < OTP_LENGTH;
     }
     return !identifier.trim() || !password;
   })();
 
+  const showGoogleSection = googleEnabled && Boolean(googleClientId);
+  const hasInviteTarget = nextPath.startsWith("/rooms/");
+
   return (
-    <div className="auth-page">
-      <Link to="/" className="auth-back">
-        <ArrowLeft size={15} strokeWidth={1.9} />
-        返回首页
-      </Link>
+    <div className="wb-auth">
+      <header className="wb-auth__top">
+        <Link to="/" className="wb-auth__brand">
+          <span className="wb-auth__mark" aria-hidden="true">
+            <InfinityIcon size={16} strokeWidth={2.1} />
+          </span>
+          <span>Project Room</span>
+        </Link>
+        <Link to="/" className="ui-button ui-button--ghost ui-button--sm">
+          <ArrowLeft size={14} strokeWidth={1.9} />
+          <span>返回首页</span>
+        </Link>
+      </header>
 
-      <div className="card auth-card">
-        <div className="auth-logo" aria-hidden="true">
-          <ShieldCheck size={22} strokeWidth={1.8} />
-        </div>
-        <h1>{mode === "login" ? "登录协作空间" : "创建协作账户"}</h1>
-        <p className="auth-sub">端到端加密 · 多人多 Agent 协作房间</p>
+      <main className="wb-auth__center">
+        <section className="wb-auth-card" aria-label={mode === "login" ? "登录" : "注册"}>
+          <h1>{mode === "login" ? "登录 Project Room" : "创建协作账户"}</h1>
+          <p className="wb-auth-card__sub">
+            {mode === "login" ? "首次登录会自动为你创建账户。" : "端到端加密 · 多人多 Agent 协作房间"}
+          </p>
 
-        <div className="segmented" role="tablist" aria-label="登录或注册">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={mode === "login"}
-            className={`segmented__btn ${mode === "login" ? "segmented__btn--active" : ""}`}
-            onClick={() => switchMode("login")}
-          >
-            登录
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={mode === "register"}
-            className={`segmented__btn ${mode === "register" ? "segmented__btn--active" : ""}`}
-            onClick={() => switchMode("register")}
-          >
-            注册账号
-          </button>
-        </div>
-
-        <form className="auth-form" onSubmit={handleSubmit}>
-          {mode === "login" && loginMethod === "password" && (
-            <>
-              <div className="field">
-                <label htmlFor="auth-identifier">邮箱或用户名</label>
-                <input
-                  id="auth-identifier"
-                  className="input"
-                  value={identifier}
-                  onChange={(e) => setIdentifier(e.target.value)}
-                  placeholder="输入邮箱或用户名"
-                  autoComplete="username"
-                  autoFocus
-                />
-              </div>
-
-              <div className="field">
-                <label htmlFor="auth-password">密码</label>
-                <input
-                  id="auth-password"
-                  className="input"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="输入密码"
-                  autoComplete="current-password"
-                />
-              </div>
-            </>
+          {hasInviteTarget && (
+            <span className="wb-auth-card__next-pill">
+              <Link2 size={12} strokeWidth={2} aria-hidden="true" />
+              登录后将自动回到邀请房间
+            </span>
           )}
 
-          {mode === "login" && loginMethod === "email_code" && (
+          {showGoogleSection && (
             <>
-              <div className="field">
-                <label htmlFor="auth-email">邮箱</label>
-                <input
-                  id="auth-email"
-                  className="input"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="you@example.com"
-                  autoComplete="email"
-                  autoFocus
-                />
-              </div>
-
-              <div className="field">
-                <label htmlFor="auth-email-code">邮箱验证码</label>
-                <div className="auth-inline-row">
-                  <input
-                    id="auth-email-code"
-                    className="input"
-                    inputMode="numeric"
-                    maxLength={6}
-                    value={code}
-                    onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                    placeholder="6 位数字验证码"
-                    autoComplete="one-time-code"
-                  />
+              <div className="wb-auth-google">
+                {googleReady ? (
+                  <div className="wb-auth-google__slot" ref={googleButtonRef} />
+                ) : (
                   <button
                     type="button"
-                    className="auth-code-btn"
-                    disabled={sendingCode || activeCooldown > 0 || !email.trim()}
-                    onClick={handleSendCode}
+                    className="wb-auth-google__fallback"
+                    disabled
                   >
-                    {sendingCode
-                      ? "发送中…"
-                      : activeCooldown > 0
-                        ? `${activeCooldown}s 后重发`
-                        : "获取验证码"}
+                    使用 Google 继续
                   </button>
-                </div>
+                )}
               </div>
+              <div className="wb-auth-or">或使用邮箱</div>
             </>
           )}
 
-          {mode === "register" && registerMethod === "email" && (
-            <>
-              <div className="field">
-                <label htmlFor="auth-email">邮箱</label>
-                <input
-                  id="auth-email"
-                  className="input"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="you@example.com"
-                  autoComplete="email"
-                  autoFocus
-                />
-              </div>
-
-              <div className="field">
-                <label htmlFor="auth-email-code">邮箱验证码</label>
-                <div className="auth-inline-row">
+          <form
+            className={showGoogleSection ? "wb-auth-form wb-auth-form--after-or" : "wb-auth-form"}
+            onSubmit={handleSubmit}
+          >
+            {mode === "login" && loginMethod === "email_code" && (
+              <>
+                <div className="wb-auth-field">
+                  <label htmlFor="auth-email">邮箱</label>
                   <input
-                    id="auth-email-code"
-                    className="input"
-                    inputMode="numeric"
-                    maxLength={6}
-                    value={code}
-                    onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                    placeholder="6 位数字验证码"
-                    autoComplete="one-time-code"
+                    id="auth-email"
+                    className="wb-auth-input"
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="you@example.com"
+                    autoComplete="email"
+                    autoFocus
                   />
-                  <button
-                    type="button"
-                    className="auth-code-btn"
-                    disabled={sendingCode || activeCooldown > 0 || !email.trim()}
-                    onClick={handleSendCode}
-                  >
-                    {sendingCode
-                      ? "发送中…"
-                      : activeCooldown > 0
-                        ? `${activeCooldown}s 后重发`
-                        : "获取验证码"}
-                  </button>
                 </div>
+
+                <div className="wb-auth-field">
+                  <div className="wb-auth-field__head">
+                    <label>
+                      验证码
+                      {notice && <span className="wb-auth-field__meta"> · 10 分钟内有效</span>}
+                    </label>
+                    <button
+                      type="button"
+                      className="wb-auth-link-btn"
+                      disabled={sendingCode || activeCooldown > 0 || !email.trim()}
+                      onClick={() => void handleSendCode()}
+                    >
+                      {sendingCode
+                        ? "发送中…"
+                        : activeCooldown > 0
+                          ? `重新发送（${activeCooldown} 秒）`
+                          : "获取验证码"}
+                    </button>
+                  </div>
+                  <OtpCodeInput value={code} onChange={setCode} disabled={submitting} />
+                </div>
+              </>
+            )}
+
+            {mode === "login" && loginMethod === "password" && (
+              <>
+                <div className="wb-auth-field">
+                  <label htmlFor="auth-identifier">邮箱或用户名</label>
+                  <input
+                    id="auth-identifier"
+                    className="wb-auth-input"
+                    value={identifier}
+                    onChange={(e) => setIdentifier(e.target.value)}
+                    placeholder="输入邮箱或用户名"
+                    autoComplete="username"
+                    autoFocus
+                  />
+                </div>
+
+                <div className="wb-auth-field">
+                  <label htmlFor="auth-password">密码</label>
+                  <input
+                    id="auth-password"
+                    className="wb-auth-input"
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="输入密码"
+                    autoComplete="current-password"
+                  />
+                </div>
+              </>
+            )}
+
+            {mode === "register" && registerMethod === "email" && (
+              <>
+                <div className="wb-auth-field">
+                  <label htmlFor="auth-reg-email">邮箱</label>
+                  <input
+                    id="auth-reg-email"
+                    className="wb-auth-input"
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="you@example.com"
+                    autoComplete="email"
+                    autoFocus
+                  />
+                </div>
+
+                <div className="wb-auth-field">
+                  <div className="wb-auth-field__head">
+                    <label>邮箱验证码</label>
+                    <button
+                      type="button"
+                      className="wb-auth-link-btn"
+                      disabled={sendingCode || activeCooldown > 0 || !email.trim()}
+                      onClick={() => void handleSendCode()}
+                    >
+                      {sendingCode
+                        ? "发送中…"
+                        : activeCooldown > 0
+                          ? `重新发送（${activeCooldown} 秒）`
+                          : "获取验证码"}
+                    </button>
+                  </div>
+                  <OtpCodeInput value={code} onChange={setCode} disabled={submitting} />
+                </div>
+
+                <div className="wb-auth-field">
+                  <label htmlFor="auth-display-name">显示名称（可选）</label>
+                  <input
+                    id="auth-display-name"
+                    className="wb-auth-input"
+                    value={displayName}
+                    onChange={(e) => setDisplayNameInput(e.target.value)}
+                    placeholder="群内展示的称呼"
+                    autoComplete="name"
+                  />
+                </div>
+
+                <div className="wb-auth-field">
+                  <label htmlFor="auth-reg-password">设置密码</label>
+                  <input
+                    id="auth-reg-password"
+                    className="wb-auth-input"
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="至少 8 位字符"
+                    autoComplete="new-password"
+                  />
+                </div>
+              </>
+            )}
+
+            {mode === "register" && registerMethod === "username" && (
+              <>
+                <div className="wb-auth-field">
+                  <label htmlFor="auth-username">用户名</label>
+                  <input
+                    id="auth-username"
+                    className="wb-auth-input"
+                    value={identifier}
+                    onChange={(e) => setIdentifier(e.target.value)}
+                    placeholder="输入用户名"
+                    autoComplete="username"
+                    autoFocus
+                  />
+                </div>
+
+                <div className="wb-auth-field">
+                  <label htmlFor="auth-user-display-name">显示名称（可选）</label>
+                  <input
+                    id="auth-user-display-name"
+                    className="wb-auth-input"
+                    value={displayName}
+                    onChange={(e) => setDisplayNameInput(e.target.value)}
+                    placeholder="群内展示的称呼"
+                    autoComplete="name"
+                  />
+                </div>
+
+                <div className="wb-auth-field">
+                  <label htmlFor="auth-user-password">设置密码</label>
+                  <input
+                    id="auth-user-password"
+                    className="wb-auth-input"
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="至少 8 位字符"
+                    autoComplete="new-password"
+                  />
+                </div>
+              </>
+            )}
+
+            {notice && (
+              <div className="wb-auth-notice" role="status">
+                {notice}
               </div>
+            )}
 
-              <div className="field">
-                <label htmlFor="auth-display-name">显示名称（可选）</label>
-                <input
-                  id="auth-display-name"
-                  className="input"
-                  value={displayName}
-                  onChange={(e) => setDisplayNameInput(e.target.value)}
-                  placeholder="群内展示的称呼"
-                  autoComplete="name"
-                />
+            {error && (
+              <div className="wb-auth-error" role="alert">
+                {error}
               </div>
+            )}
 
-              <div className="field">
-                <label htmlFor="auth-password">设置密码</label>
-                <input
-                  id="auth-password"
-                  className="input"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="至少 8 位字符"
-                  autoComplete="new-password"
-                />
-              </div>
-            </>
-          )}
+            <Button
+              type="submit"
+              variant="primary"
+              size="lg"
+              className="wb-auth-submit"
+              loading={submitting}
+              disabled={isSubmitDisabled}
+            >
+              {mode === "login" ? "登录" : "创建账户并继续"}
+            </Button>
+          </form>
 
-          {mode === "register" && registerMethod === "username" && (
-            <>
-              <div className="field">
-                <label htmlFor="auth-username">用户名</label>
-                <input
-                  id="auth-username"
-                  className="input"
-                  value={identifier}
-                  onChange={(e) => setIdentifier(e.target.value)}
-                  placeholder="输入用户名"
-                  autoComplete="username"
-                  autoFocus
-                />
-              </div>
+          <div className="wb-auth-links">
+            {mode === "login" ? (
+              <button
+                type="button"
+                className="wb-auth-link-btn"
+                onClick={() => {
+                  setLoginMethod((m) => (m === "email_code" ? "password" : "email_code"));
+                  setError("");
+                  setNotice("");
+                }}
+              >
+                {loginMethod === "email_code" ? "改用密码登录" : "改用邮箱验证码登录"}
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="wb-auth-link-btn"
+                onClick={() => {
+                  setRegisterMethod((m) => (m === "email" ? "username" : "email"));
+                  setError("");
+                  setNotice("");
+                }}
+              >
+                {registerMethod === "email" ? "改用用户名注册" : "改用邮箱验证码注册"}
+              </button>
+            )}
 
-              <div className="field">
-                <label htmlFor="auth-display-name">显示名称（可选）</label>
-                <input
-                  id="auth-display-name"
-                  className="input"
-                  value={displayName}
-                  onChange={(e) => setDisplayNameInput(e.target.value)}
-                  placeholder="群内展示的称呼"
-                  autoComplete="name"
-                />
-              </div>
-
-              <div className="field">
-                <label htmlFor="auth-password">密码</label>
-                <input
-                  id="auth-password"
-                  className="input"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="至少 8 位字符"
-                  autoComplete="new-password"
-                />
-              </div>
-            </>
-          )}
-
-          {notice && (
-            <div className="auth-notice" role="status">
-              {notice}
-            </div>
-          )}
-
-          {error && (
-            <div className="auth-error" role="alert">
-              {error}
-            </div>
-          )}
-
-          <button type="submit" className="btn btn-primary" disabled={isSubmitDisabled}>
-            {submitting ? "处理中…" : mode === "login" ? "继续" : "创建账户并继续"}
-          </button>
-        </form>
-
-        <div className="auth-method-toggle">
-          {mode === "login" ? (
             <button
               type="button"
+              className="wb-auth-link-btn"
               onClick={() => {
-                setLoginMethod((m) => (m === "password" ? "email_code" : "password"));
+                setMode((m) => (m === "login" ? "register" : "login"));
                 setError("");
                 setNotice("");
+                setCode("");
               }}
             >
-              {loginMethod === "password" ? "使用邮箱验证码免密登录" : "使用密码登录"}
+              {mode === "login" ? "注册账号" : "已有账号？去登录"}
             </button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => {
-                setRegisterMethod((m) => (m === "email" ? "username" : "email"));
-                setError("");
-                setNotice("");
-              }}
-            >
-              {registerMethod === "email" ? "改用传统用户名注册" : "使用邮箱验证码注册"}
-            </button>
-          )}
-        </div>
-
-        {googleClientId && googleReady && (
-          <div>
-            <div className="auth-divider">或</div>
-            <div className="auth-google-slot" ref={googleButtonRef} />
           </div>
-        )}
-      </div>
+
+          <p className="wb-auth-foot">
+            受邀加入？直接打开邀请链接，登录后会自动回到对应房间。
+          </p>
+        </section>
+      </main>
     </div>
   );
 }

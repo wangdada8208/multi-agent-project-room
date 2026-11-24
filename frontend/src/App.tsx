@@ -3,6 +3,7 @@ import { Navigate, Route, Routes, useLocation, useParams } from "react-router-do
 import { LoginPage } from "./pages/LoginPage";
 import { LandingPage } from "./pages/LandingPage";
 import { HomePage } from "./pages/HomePage";
+import { OnboardingPage } from "./pages/OnboardingPage";
 import { useVisualViewport } from "./hooks/useVisualViewport";
 import { useAuthStore } from "./stores/authStore";
 
@@ -43,7 +44,7 @@ export function App() {
   return (
     <Suspense
       fallback={
-        <div className="loading-center" style={{ minHeight: "100vh" }}>
+        <div className="loading-center loading-center--full">
           <span className="spinner" />
         </div>
       }
@@ -56,7 +57,7 @@ export function App() {
         <Route path="/" element={<LandingPage />} />
         <Route path="/home" element={<RequireAuth><HomePage /></RequireAuth>} />
         <Route path="/agents" element={<RequireAuth><AgentsPage /></RequireAuth>} />
-        <Route path="/setup" element={<RequireAuth><SetupPage /></RequireAuth>} />
+        <Route path="/setup" element={<RequireAuth><OnboardingPage /></RequireAuth>} />
         <Route path="/setup/:roomId" element={<RequireAuth><SetupPage /></RequireAuth>} />
         <Route path="/rooms/:roomId" element={<RequireAuth><RoomRoute /></RequireAuth>} />
         <Route path="*" element={<Navigate to="/" replace />} />
