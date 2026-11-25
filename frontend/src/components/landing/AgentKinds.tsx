@@ -14,7 +14,7 @@ export function AgentKinds() {
           云端回调与本机 CLI 分别承担在线商议与本机工程执行，互不干扰。
         </p>
 
-        <div className="lp-two" role="region" aria-label="两种 Agent 接入方式">
+        <div className="lp-two lp-fill-visual ui ui-access-modes" role="region" aria-label="两种 Agent 接入方式">
           <article className="lp-kind-col">
             <div className="lp-kind-col__top">
               <div className="lp-kind-marks" aria-hidden="true">

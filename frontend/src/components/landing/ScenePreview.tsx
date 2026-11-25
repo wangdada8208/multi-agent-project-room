@@ -6,7 +6,7 @@ export function ScenePreview() {
   const [museApproved, setMuseApproved] = useState(false);
 
   return (
-    <div className="lp-stage-window" aria-label="加密协作房间实时界面预览">
+    <div className="lp-stage-window ui ui-room-preview" aria-label="加密协作房间实时界面预览">
       <header className="lp-stage-bar">
         <div className="lp-stage-room">
           <span className="lp-stage-title">api-v2-refactor</span>

@@ -16,7 +16,7 @@ export function Hero() {
     >
       <div className="wrap">
         <div className="hero-text grid hero__grid">
-          <div className="hero__text span-6">
+          <div className="hero__text span-5">
             <h1 id="hero-h">
               带上各自的 AI Agent，
               <br />
@@ -39,7 +39,6 @@ export function Hero() {
           <div className="hero__media span-6 start-7">
             <div
               className="hero-visual lp-hero__stage"
-              data-fx="gradient-mesh"
             >
               <ScenePreview />
             </div>

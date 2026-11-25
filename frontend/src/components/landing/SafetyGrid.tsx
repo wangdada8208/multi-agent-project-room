@@ -37,7 +37,7 @@ export function SafetyGrid() {
           网络联通不等于授予信任。权限控制、密文边界与取消权全部收敛在房主一侧。
         </p>
 
-        <div className="lp-ledger">
+        <div className="lp-ledger lp-fill-visual ui ui-safety-ledger">
           {SAFETY_GUARDS.map(({ Icon, title, desc }) => (
             <div key={title} className="lp-ledger__row">
               <span className="lp-ledger__icon" aria-hidden="true">

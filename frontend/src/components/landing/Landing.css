@@ -30,35 +30,59 @@
   white-space: nowrap;
 }
 
-/* One section per screen on desktop >= 1024px */
-.lp-screen {
-  min-height: 100svh;
-  display: grid;
-  align-content: center;
-  padding-block: clamp(72px, 8svh, 112px);
+.lp-page .skip-link {
+  position: fixed;
+  left: max(var(--gut), (100% - var(--container)) / 2);
+  top: 8px;
+  z-index: 100;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  background: var(--p-ink);
+  color: var(--p-bg);
+  border-radius: var(--r-btn);
+  text-decoration: none;
 }
 
-@media (max-width: 1023px) {
-  .lp-screen {
-    min-height: auto;
-    padding-block: 64px;
-  }
+.lp-page .skip-link:focus {
+  width: auto;
+  height: var(--btn-h);
+  padding: 0 var(--s-5);
+  clip-path: none;
+  display: inline-flex;
+  align-items: center;
+  transform: none;
 }
 
-@media (max-width: 639px) {
-  .lp-screen {
-    padding-block: 48px;
-  }
+/* The landing uses system.css's exact one-section-per-screen rhythm. */
+:root[data-surface="landing"] #root,
+.lp-page {
+  display: contents;
+}
+
+.lp-page {
+  --t-h2: clamp(28px, 1.35vw + 20px, 40px);
+}
+
+:root[data-surface="landing"] :focus-visible {
+  outline: 3px solid #071712;
+  outline-offset: 3px;
+}
+
+:root[data-surface="landing"] .ground-inverse :focus-visible {
+  outline-color: #effff8;
+}
+
+.lp-fill-visual {
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 /* ── Screen 1: Hero ── */
 
 .lp-hero.section--hero {
-  min-height: 100svh;
-  display: grid;
-  align-content: center;
-  padding-top: calc(var(--nav, 64px) + clamp(32px, 5svh, 64px));
-  padding-bottom: clamp(40px, 6svh, 72px);
+  overflow: clip;
 }
 
 .lp-hero .hero__text {
@@ -73,7 +97,7 @@
   padding: 0 var(--s-5, 20px);
   border-radius: var(--r-btn, 8px);
   background: var(--action);
-  border-color: var(--action);
+  border-color: transparent;
   color: var(--action-ink);
   font-family: var(--font-text);
   font-size: var(--t-body, 15px);
@@ -99,7 +123,7 @@
 .lp-hero h1 {
   font-family: var(--font-display);
   font-weight: 500;
-  font-size: clamp(32px, 2.35vw + 14px, 46px);
+  font-size: clamp(34px, 1.9vw + 16px, 44px);
   line-height: 1.12;
   letter-spacing: -0.028em;
   color: var(--ink);
@@ -126,13 +150,28 @@
   display: block;
 }
 
-@media (max-width: 1023px) {
-  .lp-hero.section--hero {
-    min-height: auto;
-    padding-top: calc(var(--nav, 64px) + 32px);
-    padding-bottom: 56px;
+@media (min-width: 1024px) {
+  .lp-hero .hero__text {
+    grid-column: 1 / span 5 !important;
   }
 
+  .lp-hero .hero__media {
+    grid-column: 7 / -1 !important;
+    left: auto;
+    right: auto;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    margin: 0;
+    overflow: visible;
+    border-radius: 0;
+    background: transparent;
+    display: flex;
+    align-items: center;
+  }
+}
+
+@media (max-width: 1023px) {
   .lp-hero .hero__text,
   .lp-hero .hero__media {
     grid-column: 1 / -1 !important;
@@ -156,6 +195,13 @@
     margin: 0;
     padding: 0;
   }
+}
+
+
+/* One primary button family across light and dark sections; the inverse CTA differs only by ground. */
+.lp-page .btn--primary,
+.lp-foot .btn--primary {
+  border-color: transparent;
 }
 
 /* Live Interactive Stage Window */
@@ -389,6 +435,11 @@
 
 /* ── Screen 2: Architecture Diagram ── */
 
+.lp-arch {
+  min-height: calc(var(--h, 1) * 100svh) !important;
+}
+
+
 .lp-arch__head {
   display: flex;
   align-items: flex-end;
@@ -532,24 +583,21 @@
 .lp-two {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  border-top: 1px solid var(--line-strong);
-  border-bottom: 1px solid var(--line-strong);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-lg);
+  background: var(--p-bg);
+  overflow: hidden;
 }
 
 .lp-kind-col {
-  padding: clamp(24px, 3vw, 40px) 0;
+  padding: clamp(24px, 3vw, 40px);
   display: flex;
   flex-direction: column;
   gap: 14px;
 }
 
 .lp-kind-col:first-child {
-  padding-right: clamp(24px, 3vw, 44px);
   border-right: 1px solid var(--line-strong);
-}
-
-.lp-kind-col:last-child {
-  padding-left: clamp(24px, 3vw, 44px);
 }
 
 .lp-kind-col__top {
@@ -574,7 +622,7 @@
 }
 
 .lp-kind-col h3 {
-  font-size: clamp(20px, 1.3vw + 14px, 24px);
+  font-size: 20px;
   font-weight: 500;
   color: var(--p-ink);
 }
@@ -596,22 +644,18 @@
   font-size: 12.5px;
   line-height: 1.45;
   color: var(--p-ink);
-  overflow-x: auto;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
-@media (max-width: 767px) {
+@media (max-width: 1023px) {
   .lp-two {
     grid-template-columns: minmax(0, 1fr);
   }
 
   .lp-kind-col:first-child {
-    padding-right: 0;
     border-right: 0;
     border-bottom: 1px solid var(--line-strong);
-  }
-
-  .lp-kind-col:last-child {
-    padding-left: 0;
   }
 }
 
@@ -620,13 +664,16 @@
 .lp-ledger {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  border-top: 1px solid var(--line-strong);
-  border-bottom: 1px solid var(--line-strong);
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  overflow: hidden;
 }
 
 .lp-ledger__row {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 14px;
   padding: clamp(20px, 2.6vw, 32px) clamp(16px, 2vw, 28px);
   border-bottom: 1px solid var(--line);
@@ -634,11 +681,6 @@
 
 .lp-ledger__row:nth-child(odd) {
   border-right: 1px solid var(--line);
-  padding-left: 0;
-}
-
-.lp-ledger__row:nth-child(even) {
-  padding-right: 0;
 }
 
 .lp-ledger__row:nth-last-child(-n + 2) {
@@ -652,7 +694,7 @@
 }
 
 .lp-ledger__row h3 {
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 500;
   color: var(--ink);
   margin-bottom: 6px;
@@ -667,13 +709,13 @@
 @media (max-width: 767px) {
   .lp-ledger {
     grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: repeat(4, minmax(0, 1fr));
   }
 
   .lp-ledger__row,
   .lp-ledger__row:nth-child(odd),
   .lp-ledger__row:nth-child(even) {
     border-right: 0;
-    padding-inline: 0;
     border-bottom: 1px solid var(--line);
   }
 
@@ -758,7 +800,7 @@
 }
 
 .lp-tpl-detail__head h3 {
-  font-size: 22px;
+  font-size: 20px;
   font-weight: 500;
   color: var(--p-ink);
 }
@@ -779,8 +821,7 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 20px;
-  padding-top: 14px;
-  border-top: 1px solid var(--line);
+  padding-top: 0;
 }
 
 .lp-spec-caption {
@@ -856,6 +897,24 @@
     border-bottom: 1px solid var(--line-strong);
   }
 
+}
+
+@media (max-width: 900px) {
+  .lp-tpl-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .lp-tpl-tab {
+    padding: 14px 16px;
+  }
+
+  .lp-tpl-tab__scene {
+    display: none;
+  }
+}
+
+@media (max-width: 639px) {
   .lp-tpl-detail__cols {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -901,4 +960,76 @@
   background: #99f0cf;
   border-color: #99f0cf;
   color: #071712;
+}
+
+
+/* Compact but complete phone composition: the template picker becomes a two-column visual index. */
+@media (max-width: 639px) {
+  .lp-page {
+    --padt: 72px;
+    --padb: 32px;
+  }
+
+  .lp-kinds .lead,
+  .lp-safety .lead,
+  .lp-templates .lead {
+    margin-bottom: 24px;
+  }
+
+  .lp-tpl-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .lp-tpl-tab {
+    padding: 12px;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .lp-tpl-tab__scene {
+    display: none;
+  }
+
+  .lp-tpl-detail {
+    padding: 16px;
+    gap: 12px;
+  }
+
+  .lp-tpl-detail__scene,
+  .lp-tpl-rules li {
+    font-size: 14px;
+  }
+
+  .lp-stage-msg {
+    font-size: 13px;
+    line-height: 1.45;
+  }
+}
+
+
+/* Footer links use the phone's two-column grid instead of three full-width stacked groups. */
+@media (max-width: 639px) {
+  .lp-foot__cols .footer__col {
+    grid-column: auto / span 6 !important;
+  }
+
+  .lp-foot .footer__col h3 {
+    margin-bottom: 8px;
+  }
+}
+
+@media (min-width: 640px) {
+  .lp-foot .closing__cta .btn-row > .btn--xl:first-child {
+    width: min(50%, 640px);
+  }
+}
+
+.lp-foot .closing__cta .btn--primary,
+.lp-foot .closing__cta .ui-button--primary {
+  border-color: transparent;
+}
+
+.lp-foot .closing__cta .btn--primary:hover,
+.lp-foot .closing__cta .ui-button--primary:hover {
+  border-color: transparent;
 }

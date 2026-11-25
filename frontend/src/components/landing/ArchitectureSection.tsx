@@ -106,7 +106,7 @@ export function ArchitectureSection() {
             </p>
           </div>
 
-          <div className="lp-runtimes" aria-label="支持接入的云端与本机工具">
+          <div className="lp-runtimes ui ui-supported-runtimes" aria-label="支持接入的云端与本机工具">
             {SUPPORTED_TOOLS.map((tool) => (
               <span key={tool.brand} className="lp-runtime-item">
                 <AgentBrandIcon brand={tool.brand} kind={tool.kind} size="sm" label={tool.name} />
@@ -116,7 +116,7 @@ export function ArchitectureSection() {
           </div>
         </div>
 
-        <div className="panel lp-arch__panel">
+        <div className="panel lp-arch__panel lp-fill-visual">
           <div
             ref={diagramRef}
             className="dg"
@@ -132,7 +132,7 @@ export function ArchitectureSection() {
             </ul>
           </div>
 
-          <ol className="lp-arch-mobile-flow" aria-label="移动端协作链路">
+          <ol className="lp-arch-mobile-flow ui ui-mobile-architecture-flow" aria-label="移动端协作链路">
             <li>
               <span className="lp-arch-mobile-flow__icon"><Users size={16} strokeWidth={1.8} aria-hidden="true" /></span>
               <span><strong>协作房间会话</strong><small>2 名人类与各自 Agent</small></span>

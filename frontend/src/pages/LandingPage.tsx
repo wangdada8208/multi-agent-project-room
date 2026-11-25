@@ -54,7 +54,7 @@ export function LandingPage() {
 
   return (
     <div className="lp-page bg-paper">
-      <a className="skip" href="#top">
+      <a className="skip-link" href="#top">
         跳到正文
       </a>
 
