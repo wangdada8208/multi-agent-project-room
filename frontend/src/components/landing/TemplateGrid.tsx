@@ -39,8 +39,10 @@ export function TemplateGrid() {
   return (
     <section className="lp-section lp-section--alt" id="lp-tpl">
       <div className="lp-wrap">
-        <div className="lp-kicker">从模板开始</div>
-        <h2 className="lp-h2">四种协作场景，开箱即用。</h2>
+        <div className="lp-section-head">
+          <h2 className="lp-h2">四种协作场景，开箱即用。</h2>
+          <div className="lp-kicker">从模板开始</div>
+        </div>
         <p className="lp-lead">
           模板预置了分工说明和协作规则，建房前可以预览、也可以修改。
         </p>
@@ -51,7 +53,7 @@ export function TemplateGrid() {
               <span className="lp-tpl__ico" aria-hidden="true">
                 <Icon size={17} strokeWidth={1.85} />
               </span>
-              <h4>{name}</h4>
+              <h3>{name}</h3>
               <p>{desc}</p>
               <span className="lp-tpl__meta">
                 <span>{roles}</span>

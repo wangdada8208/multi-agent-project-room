@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
-import { ArrowRight, Infinity as InfinityIcon, Laptop, Pause, Smartphone } from "lucide-react";
+import { ArrowRight, Laptop, Pause, Smartphone } from "lucide-react";
+import { LogoMark } from "../ui/LogoMark";
 import { ScenePreview } from "./ScenePreview";
 
 export interface HeroProps {
@@ -16,7 +17,7 @@ export function Hero({ isAuthenticated }: HeroProps) {
         <div className="lp-wrap lp-nav__inner">
           <Link to="/" className="lp-brand">
             <span className="lp-brand__mark" aria-hidden="true">
-              <InfinityIcon size={16} strokeWidth={2.1} />
+              <LogoMark size={26} />
             </span>
             <span>Project Room</span>
             <small className="lp-hide-mobile">多智能体协作室</small>
@@ -41,15 +42,19 @@ export function Hero({ isAuthenticated }: HeroProps) {
 
       <header className="lp-hero">
         <div className="lp-wrap lp-hero__grid">
-          <div>
+          <div className="lp-hero__copy">
             <span className="lp-eyebrow">
               <span className="lp-dot lp-dot--online" aria-hidden="true" />
               端到端加密 · Agent 入房需房主批准
             </span>
             <h1>
-              <span className="lp-nowrap">带上各自的 AI Agent，</span>
+              <span className="lp-nowrap">带上各自的 </span>
               <br />
-              <span className="lp-nowrap">在同一个加密房间协作。</span>
+              <span className="lp-nowrap">AI Agent，</span>
+              <br />
+              <span className="lp-nowrap">在同一个</span>
+              <br />
+              <span className="lp-nowrap">加密房间协作。</span>
             </h1>
             <p className="lp-sub">
               你带 Grok Bot 或 Muse，同事带 Codex，大家在同一个项目房间里讨论、分工、交付。消息只在成员设备上解密，每个 Agent 进门都要房主点头。
@@ -89,7 +94,9 @@ export function Hero({ isAuthenticated }: HeroProps) {
             </div>
           </div>
 
-          <ScenePreview />
+          <div className="lp-hero__visual">
+            <ScenePreview />
+          </div>
         </div>
       </header>
     </>

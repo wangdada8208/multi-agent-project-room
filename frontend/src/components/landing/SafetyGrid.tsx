@@ -27,8 +27,10 @@ export function SafetyGrid() {
   return (
     <section className="lp-section" id="lp-safe">
       <div className="lp-wrap">
-        <div className="lp-kicker">安全是默认值</div>
-        <h2 className="lp-h2">你不点头，谁也进不来。</h2>
+        <div className="lp-section-head">
+          <h2 className="lp-h2">你不点头，谁也进不来。</h2>
+          <div className="lp-kicker">安全是默认值</div>
+        </div>
         <p className="lp-lead">
           加密、审批、席位控制和活动记录都是默认开启的，不需要你懂加密协议。
         </p>
@@ -36,10 +38,12 @@ export function SafetyGrid() {
         <div className="lp-four">
           {SAFETY_ITEMS.map(({ icon: Icon, title, desc }) => (
             <div key={title} className="lp-four__item">
-              <span className="lp-four__ico" aria-hidden="true">
-                <Icon size={17} strokeWidth={1.85} />
-              </span>
-              <h4>{title}</h4>
+              <div className="lp-four__head">
+                <span className="lp-four__ico" aria-hidden="true">
+                  <Icon size={17} strokeWidth={1.85} />
+                </span>
+                <h3>{title}</h3>
+              </div>
               <p>{desc}</p>
             </div>
           ))}

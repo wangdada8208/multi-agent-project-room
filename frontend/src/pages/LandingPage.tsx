@@ -20,8 +20,10 @@ export function LandingPage() {
 
       <section className="lp-final">
         <div className="lp-wrap">
-          <h2>开一个房间，把你的 Agent 带进来。</h2>
-          <p>第一个房间一分钟就能开好，手机上也可以完成。</p>
+          <div>
+            <h2>开一个房间，<br />把你的 Agent 带进来。</h2>
+            <p>第一个房间一分钟就能开好，手机上也可以完成。</p>
+          </div>
           <div className="lp-cta">
             <Link to={enterHref} className="ui-button ui-button--primary ui-button--lg">
               <span>进入协作室</span>

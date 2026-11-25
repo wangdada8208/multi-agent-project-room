@@ -124,7 +124,7 @@
 .wb-inspector__tabs { display: flex; flex: none; gap: 2px; padding: 3px; border-radius: 10px; background: var(--bg-muted); margin: 12px 12px 0; }
 .wb-inspector__tabs button { flex: 1; height: 30px; border-radius: 7px; font-size: 13px; font-weight: 500; color: var(--text-2); display: flex; align-items: center; justify-content: center; gap: 5px; white-space: nowrap; cursor: pointer; }
 .wb-inspector__tabs button[aria-pressed="true"] { background: var(--bg-surface); color: var(--text-1); box-shadow: var(--sh-1); }
-.wb-inspector__tabs .workbench-count { min-width: 16px; height: 16px; font-size: 10.5px; }
+.wb-inspector__tabs .workbench-count { min-width: 16px; height: 16px; font-size: 11px; }
 .wb-inspector__body { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 14px 12px 24px; }
 .ui-drawer.wb-inspector-dialog { background: var(--bg-canvas); color: var(--text-1); }
 .wb-inspector-dialog .ui-drawer__body { display: flex; flex-direction: column; height: 100%; padding: 0; }
@@ -240,3 +240,241 @@
 .wb-seat--pending { padding-block: 10px; }
 .wb-tab-content > details { color: var(--text-2); font-size: 12px; }
 .wb-tab-content > details[open] > summary { margin-bottom: 8px; }
+
+/* ---- Ink & Ledger encrypted-room refinement (terminal layer) ---- */
+.wb-room {
+  background: var(--bg-canvas);
+}
+.wb-room-head {
+  min-height: 60px;
+  padding-left: 22px;
+  border-bottom: 1.5px solid var(--text-1);
+  background: var(--bg-canvas);
+}
+.wb-room-head__title h1 {
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.022em;
+}
+.wb-room-head .ui-tag {
+  border-radius: var(--r-xs);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+.wb-encryption__badge {
+  border-radius: var(--r-xs);
+  font-weight: 650;
+  letter-spacing: .01em;
+}
+.wb-room-head__actions .ui-icon-button,
+.wb-head-members {
+  border-radius: var(--r-sm);
+}
+.wb-room-head .ui-avatar-stack .ui-avatar {
+  box-shadow: 0 0 0 2px var(--bg-canvas);
+}
+
+.wb-chat {
+  background: var(--bg-canvas);
+}
+.wb-stream {
+  padding-top: 16px;
+}
+.wb-stream__inner {
+  max-width: 810px;
+  padding-inline: 32px;
+  gap: 3px;
+}
+.wb-system {
+  margin-block: 3px 7px;
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: .025em;
+}
+.wb-message {
+  grid-template-columns: 38px minmax(0, 1fr);
+  gap: 12px;
+  padding: 11px 12px 12px;
+  border-radius: var(--r-sm);
+}
+.wb-message > .ui-avatar {
+  --avatar-size: 34px;
+  margin-top: 1px;
+}
+.wb-message--me {
+  background: var(--bg-me);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+.wb-message--cloud:not(.wb-message--me) {
+  box-shadow: inset 2px 0 0 transparent;
+}
+.wb-message--cloud:not(.wb-message--me):hover {
+  box-shadow: inset 2px 0 0 var(--actor-cloud);
+}
+.wb-message--local:not(.wb-message--me):hover {
+  box-shadow: inset 2px 0 0 var(--actor-local);
+}
+.wb-message__content > header {
+  gap: 7px;
+  font-size: 13px;
+  line-height: 19px;
+}
+.wb-message__content > header strong {
+  font-size: 13.5px;
+  font-weight: 680;
+  letter-spacing: -0.006em;
+}
+.wb-message__content > header time {
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+.wb-message__content .ui-tag {
+  min-height: 20px;
+  padding-inline: 6px;
+  font-size: 11px;
+  line-height: 16px;
+}
+.wb-markdown {
+  margin-top: 2px;
+  color: var(--text-1);
+  font-size: 15px;
+  line-height: 25px;
+  letter-spacing: -0.002em;
+}
+.wb-markdown :not(pre) > code {
+  border: 1px solid var(--border-1);
+  background: var(--paper-50);
+  font-size: .9em;
+}
+.wb-code {
+  border-color: var(--border-2);
+  border-radius: var(--r-sm);
+  background: var(--paper-50);
+}
+.wb-code > header {
+  min-height: 31px;
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+.wb-quote {
+  border-left: 2px solid var(--accent);
+  color: var(--text-2);
+  font-size: 12px;
+}
+.wb-message__actions {
+  border-radius: var(--r-sm);
+}
+
+.wb-pending {
+  max-width: 810px;
+  width: calc(100% - 64px);
+  margin-top: 14px;
+  border-left-width: 4px;
+  border-radius: var(--r-sm);
+}
+.wb-composer-wrap {
+  max-width: 858px;
+  padding: 10px 32px 20px;
+}
+.wb-composer {
+  border-color: var(--border-3);
+  border-radius: var(--r-sm);
+  box-shadow: 5px 5px 0 var(--bg-muted);
+}
+.wb-composer:focus-within {
+  border-color: var(--accent);
+  box-shadow: 5px 5px 0 var(--accent-soft);
+}
+.wb-composer .wb-composer__input {
+  min-height: 52px;
+  padding: 13px 14px 5px;
+}
+.wb-send {
+  border-radius: var(--r-xs);
+}
+.wb-mentions {
+  border-radius: var(--r-sm);
+}
+.wb-composer-notice {
+  background: var(--bg-canvas);
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: .035em;
+  text-transform: uppercase;
+}
+
+.wb-inspector {
+  width: var(--inspector-w);
+  border-left: 1.5px solid var(--text-1);
+  background: var(--bg-rail);
+}
+.wb-inspector__tabs {
+  padding: 2px;
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-sm);
+  background: transparent;
+}
+.wb-inspector__tabs button {
+  height: 31px;
+  border-radius: var(--r-xs);
+  font-size: 12px;
+}
+.wb-inspector__tabs button[aria-pressed="true"] {
+  color: var(--accent-fg);
+  background: var(--accent);
+  box-shadow: none;
+}
+.wb-inspector__body {
+  padding: 15px 14px 26px;
+}
+.wb-tab-content h3 {
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: .065em;
+  text-transform: uppercase;
+}
+.wb-seat, .wb-panel-card {
+  border-radius: var(--r-sm);
+  border-color: var(--border-2);
+  box-shadow: none;
+}
+.wb-seat {
+  background: var(--bg-surface);
+}
+.wb-seat .ui-avatar {
+  --avatar-size: 30px;
+}
+.wb-add {
+  border-radius: var(--r-sm);
+}
+
+@media (max-width: 767px) {
+  .wb-room-head {
+    min-height: 55px;
+    padding-left: 3px;
+    border-bottom-width: 1px;
+  }
+  .wb-stream { padding-top: 8px; }
+  .wb-stream__inner { padding-inline: 10px; }
+  .wb-message {
+    grid-template-columns: 33px minmax(0, 1fr);
+    gap: 9px;
+    padding: 9px 7px 10px;
+  }
+  .wb-message > .ui-avatar { --avatar-size: 31px; }
+  .wb-markdown { font-size: 15px; line-height: 24px; }
+  .wb-pending { width: calc(100% - 20px); }
+  .wb-composer-wrap { padding: 6px 9px calc(7px + var(--safe-bottom)); }
+  .wb-composer {
+    border-color: var(--border-2);
+    border-radius: 20px;
+    box-shadow: none;
+  }
+  .wb-send, .wb-mention-trigger { border-radius: var(--r-full); }
+  .wb-inspector { border-left: 0; }
+}

@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, type ClipboardEvent, type FormEvent, type KeyboardEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowLeft, Infinity as InfinityIcon, Link2 } from "lucide-react";
+import { ArrowLeft, KeyRound, Link2, LockKeyhole, ShieldCheck } from "lucide-react";
 import { Button } from "../components/ui/Button";
+import { LogoMark } from "../components/ui/LogoMark";
 import {
   fetchAuthProviders,
   login,
@@ -288,7 +289,7 @@ export function LoginPage() {
       size: "large",
       shape: "rectangular",
       text: mode === "register" ? "signup_with" : "signin_with",
-      width: 336,
+      width: 320,
     });
   }, [googleReady, googleClientId, mode]);
 
@@ -399,7 +400,7 @@ export function LoginPage() {
       <header className="wb-auth__top">
         <Link to="/" className="wb-auth__brand">
           <span className="wb-auth__mark" aria-hidden="true">
-            <InfinityIcon size={16} strokeWidth={2.1} />
+            <LogoMark size={28} />
           </span>
           <span>Project Room</span>
         </Link>
@@ -410,7 +411,29 @@ export function LoginPage() {
       </header>
 
       <main className="wb-auth__center">
-        <section className="wb-auth-card" aria-label={mode === "login" ? "登录" : "注册"}>
+        <div className="wb-auth-frame">
+          <aside className="wb-auth-proof" aria-label="安全边界说明">
+            <div className="wb-auth-proof__index">01 / SEALED ROOM</div>
+            <h2>人类掌舵，Agent<br />在各自边界内协作。</h2>
+            <p>
+              房间消息在你的设备上端到端解密。云端或本机 Agent 都必须先获得批准，才能拿到自己的入房席位。
+            </p>
+            <div className="wb-auth-proof__ledger">
+              <div>
+                <ShieldCheck size={16} strokeWidth={1.9} aria-hidden="true" />
+                <span><strong>房主批准</strong>决定谁能进入</span>
+              </div>
+              <div>
+                <LockKeyhole size={16} strokeWidth={1.9} aria-hidden="true" />
+                <span><strong>XMTP 密文</strong>服务器不可读</span>
+              </div>
+              <div>
+                <KeyRound size={16} strokeWidth={1.9} aria-hidden="true" />
+                <span><strong>密钥留本机</strong>私有代码不出电脑</span>
+              </div>
+            </div>
+          </aside>
+          <section className="wb-auth-card" aria-label={mode === "login" ? "登录" : "注册"}>
           <h1>{mode === "login" ? "登录 Project Room" : "创建协作账户"}</h1>
           <p className="wb-auth-card__sub">
             {mode === "login" ? "首次登录会自动为你创建账户。" : "端到端加密 · 多人多 Agent 协作房间"}
@@ -688,7 +711,8 @@ export function LoginPage() {
           <p className="wb-auth-foot">
             受邀加入？直接打开邀请链接，登录后会自动回到对应房间。
           </p>
-        </section>
+          </section>
+        </div>
       </main>
     </div>
   );

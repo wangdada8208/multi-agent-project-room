@@ -1,16 +1,9 @@
 import { useState } from "react";
 import { ArrowUp, AtSign, Check, Lock, ShieldCheck } from "lucide-react";
 import { Avatar } from "../ui/Avatar";
-import { AvatarStack } from "../ui/AvatarStack";
 import { Button } from "../ui/Button";
 import { Tag } from "../ui/Tag";
 
-const HEADER_AVATARS = [
-  { id: "me", actor: "me" as const, name: "王达", size: "sm" as const },
-  { id: "lin", actor: "human" as const, name: "林溪", size: "sm" as const },
-  { id: "grok", actor: "cloud" as const, name: "Grok Bot", size: "sm" as const },
-  { id: "codex", actor: "local" as const, name: "Codex", size: "sm" as const },
-];
 
 export function ScenePreview() {
   const [museApproved, setMuseApproved] = useState(false);
@@ -25,7 +18,7 @@ export function ScenePreview() {
           端到端加密已保护
         </span>
         <span className="lp-window__spacer" />
-        <AvatarStack avatars={HEADER_AVATARS} max={4} />
+        <span className="lp-window__count">4 个席位</span>
       </div>
 
       <div className="lp-window__body">
@@ -80,6 +73,19 @@ export function ScenePreview() {
             </div>
           </div>
 
+          <div className="lp-msg">
+            <Avatar actor="human" name="林溪" size="sm" />
+            <div>
+              <div className="lp-msg__head">
+                <span className="lp-msg__name">林溪</span>
+                <span className="lp-msg__time">10:08</span>
+              </div>
+              <div className="lp-msg__body">
+                那就按先占位、后处理来改。Muse 进来后请补一遍上线检查清单。
+              </div>
+            </div>
+          </div>
+
           <div className="lp-composer-mini">
             <div
               className={museApproved ? "lp-banner lp-banner--approved" : "lp-banner"}
@@ -125,7 +131,7 @@ export function ScenePreview() {
         </div>
 
         <aside className="lp-window__side" aria-label="房间成员示意">
-          <h6>人类成员</h6>
+          <div className="lp-side-label">人类成员</div>
           <div className="lp-mem">
             <Avatar actor="me" name="王达" size="sm" />
             <span className="lp-mem__name">王达</span>
@@ -137,7 +143,7 @@ export function ScenePreview() {
             <span className="lp-dot lp-dot--online" aria-label="在线" />
           </div>
 
-          <h6>云端 Agent</h6>
+          <div className="lp-side-label">云端 Agent</div>
           <div className="lp-mem">
             <Avatar actor="cloud" name="Grok Bot" size="sm" />
             <span className="lp-mem__name">Grok Bot</span>
@@ -153,7 +159,7 @@ export function ScenePreview() {
             )}
           </div>
 
-          <h6>电脑端 Agent</h6>
+          <div className="lp-side-label">电脑端 Agent</div>
           <div className="lp-mem">
             <Avatar actor="local" name="Codex" size="sm" />
             <span className="lp-mem__name">Codex</span>

@@ -1,15 +1,38 @@
-import { Cloud, Laptop, Webhook } from "lucide-react";
+import { Cloud, Laptop, LockKeyhole, ShieldCheck, Webhook } from "lucide-react";
+import { AgentMark } from "../ui/AgentMark";
 import { Tag } from "../ui/Tag";
 
 export function AgentKinds() {
   return (
     <section className="lp-section lp-section--alt" id="lp-kinds">
       <div className="lp-wrap">
-        <div className="lp-kicker">两种 Agent，同一个房间</div>
-        <h2 className="lp-h2">云端的、电脑端的，都能进来一起干活。</h2>
+        <div className="lp-section-head">
+          <h2 className="lp-h2">云端的、电脑端的，都能进来一起干活。</h2>
+          <div className="lp-kicker">两种 Agent，同一个房间</div>
+        </div>
         <p className="lp-lead">
           按 Agent 运行的位置选择接入方式。无论哪种，进入房间都需要你批准，也都能随时暂停或移出。
         </p>
+
+        <div className="lp-access-map" aria-label="协作架构示意">
+          <div className="lp-access-node">
+            <ShieldCheck size={16} strokeWidth={1.9} aria-hidden="true" />
+            <strong>房主批准</strong>
+            <span>入房与授权都由人决定</span>
+          </div>
+          <i aria-hidden="true" />
+          <div className="lp-access-node lp-access-node--sealed">
+            <LockKeyhole size={16} strokeWidth={1.9} aria-hidden="true" />
+            <strong>XMTP 密文房间</strong>
+            <span>服务器只转发密文</span>
+          </div>
+          <i aria-hidden="true" />
+          <div className="lp-access-node">
+            <Cloud size={16} strokeWidth={1.9} aria-hidden="true" />
+            <strong>两类 Agent 席位</strong>
+            <span>云端直连与本机协同并行</span>
+          </div>
+        </div>
 
         <div className="lp-two">
           <div className="lp-kind">
@@ -44,11 +67,11 @@ export function AgentKinds() {
             </div>
             <div className="lp-chips">
               <span className="lp-chip">
-                <span className="lp-chip__av lp-chip__av--cloud">G</span>
+                <span className="lp-chip__av"><AgentMark name="Grok Bot" actor="cloud" /></span>
                 Grok Bot
               </span>
               <span className="lp-chip">
-                <span className="lp-chip__av lp-chip__av--cloud">M</span>
+                <span className="lp-chip__av"><AgentMark name="Muse" actor="cloud" /></span>
                 Muse
               </span>
             </div>
@@ -86,32 +109,55 @@ export function AgentKinds() {
             </div>
             <div className="lp-chips">
               <span className="lp-chip">
-                <span className="lp-chip__av lp-chip__av--local">CC</span>
+                <span className="lp-chip__av"><AgentMark name="Claude Code" actor="local" /></span>
                 Claude Code
               </span>
               <span className="lp-chip">
-                <span className="lp-chip__av lp-chip__av--local">Cx</span>
+                <span className="lp-chip__av"><AgentMark name="Codex" actor="local" /></span>
                 Codex
               </span>
               <span className="lp-chip">
-                <span className="lp-chip__av lp-chip__av--local">OC</span>
+                <span className="lp-chip__av"><AgentMark name="OpenClaw" actor="local" /></span>
                 OpenClaw
               </span>
               <span className="lp-chip">
-                <span className="lp-chip__av lp-chip__av--local">x</span>
+                <span className="lp-chip__av"><AgentMark name="xAI" actor="local" /></span>
                 xAI
               </span>
               <span className="lp-chip">
-                <span className="lp-chip__av lp-chip__av--local">Ol</span>
+                <span className="lp-chip__av"><AgentMark name="Ollama" actor="local" /></span>
                 Ollama
               </span>
               <span className="lp-chip">
-                <span className="lp-chip__av lp-chip__av--local">
+                <span className="lp-chip__av lp-chip__av--hook">
                   <Webhook size={12} strokeWidth={1.9} aria-hidden="true" />
                 </span>
                 Webhook
               </span>
             </div>
+          </div>
+        </div>
+
+        <div className="lp-compare" aria-label="接入方式对比">
+          <div className="lp-compare__row lp-compare__row--head">
+            <span>接入对比</span>
+            <span>云端直连</span>
+            <span>本机 CLI 协同</span>
+          </div>
+          <div className="lp-compare__row">
+            <span>运行位置</span>
+            <span>Agent 官方云端虚拟机</span>
+            <span>你的电脑本地终端</span>
+          </div>
+          <div className="lp-compare__row">
+            <span>适合场景</span>
+            <span>手机随时召唤 Grok Bot / Muse</span>
+            <span>代码、密钥与仓库不离开本机</span>
+          </div>
+          <div className="lp-compare__row">
+            <span>入房控制</span>
+            <span>一次性邀请 + 房主批准</span>
+            <span>本机配对 + 房主批准</span>
           </div>
         </div>
       </div>

@@ -308,7 +308,7 @@
 .wb-room-card__foot .ui-avatar-stack__overflow {
   min-width: 24px;
   height: 24px;
-  font-size: 10.5px;
+  font-size: 11px;
 }
 
 .wb-room-card__counts {
@@ -1162,4 +1162,201 @@
     flex-basis: 100%;
     font-size: 16px;
   }
+}
+
+/* ---- Ink & Ledger home refinement (terminal layer; intentionally last) ---- */
+.wb-rooms-page {
+  max-width: 1180px;
+  padding: 30px 34px 64px;
+}
+.wb-rooms-head {
+  align-items: flex-end;
+  margin-bottom: 22px;
+  padding-bottom: 20px;
+  border-bottom: 1.5px solid var(--text-1);
+}
+.wb-rooms-head h1 {
+  font-size: clamp(30px, 3vw, 42px);
+  line-height: 1.08;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+}
+.wb-rooms-head p {
+  margin-top: 7px;
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  letter-spacing: .035em;
+  text-transform: uppercase;
+}
+.wb-rooms-head__actions .ui-button { min-height: 38px; border-radius: var(--r-sm); }
+
+.wb-attention {
+  align-items: center;
+  margin-bottom: 20px;
+  padding: 10px 10px 10px 13px;
+  border-width: 1px 1px 1px 4px;
+  border-radius: var(--r-sm);
+  box-shadow: none;
+}
+.wb-attention .ui-avatar { --avatar-size: 32px; }
+.wb-attention .ui-button { border-radius: var(--r-xs); }
+
+.wb-rooms-alert {
+  border-radius: var(--r-sm);
+}
+
+.wb-rooms-toolbar {
+  display: grid;
+  grid-template-columns: minmax(230px, 340px) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 18px;
+  padding: 10px 0;
+  border-top: 1px solid var(--border-2);
+  border-bottom: 1px solid var(--border-1);
+}
+.wb-rooms-search { width: auto; }
+.wb-rooms-search__input {
+  height: 37px;
+  border-radius: var(--r-sm);
+  background: var(--paper-25);
+  font-size: 13.5px;
+}
+.wb-rooms-search__input:focus {
+  border-color: var(--text-1);
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+.wb-rooms-toolbar .ui-segmented {
+  padding: 2px;
+  border-radius: var(--r-sm);
+  background: transparent;
+}
+.wb-rooms-toolbar .ui-segmented label span {
+  height: 29px;
+  border-radius: var(--r-xs);
+  color: var(--text-2);
+}
+.wb-rooms-toolbar .ui-segmented input:checked + span {
+  color: var(--accent-fg);
+  background: var(--accent);
+  box-shadow: none;
+}
+.wb-rooms-toolbar__sort {
+  justify-self: end;
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: .045em;
+  text-transform: uppercase;
+}
+
+.wb-rooms-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.wb-room-card {
+  gap: 14px;
+  min-height: 190px;
+  padding: 17px 17px 14px;
+  border: 1px solid var(--border-2);
+  border-top: 2px solid var(--text-1);
+  border-radius: var(--r-sm);
+  background: var(--bg-surface);
+  box-shadow: none;
+  transition: border-color var(--dur-1), background var(--dur-1), box-shadow var(--dur-1);
+}
+.wb-room-card:hover {
+  border-color: var(--border-3);
+  border-top-color: var(--accent);
+  background: var(--paper-0);
+  box-shadow: 5px 5px 0 var(--bg-muted);
+  transform: none;
+}
+.wb-room-card__top { gap: 12px; }
+.wb-room-card__title {
+  font-size: 16.5px;
+  line-height: 23px;
+  font-weight: 680;
+  letter-spacing: -0.018em;
+}
+.wb-room-card__sub {
+  margin-top: 5px;
+  color: var(--text-3);
+  font-size: 12px;
+}
+.wb-room-card__sub svg { color: var(--accent); }
+.wb-room-card__badges { align-items: flex-start; }
+.wb-room-card__delete {
+  opacity: 1;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--r-xs);
+}
+.wb-room-card__last {
+  flex: 1;
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 20px;
+}
+.wb-room-card__foot {
+  align-items: center;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-1);
+}
+.wb-room-card__foot .ui-avatar { --avatar-size: 24px; }
+.wb-room-card__counts {
+  color: var(--text-2);
+  font-size: 12px;
+}
+.wb-room-card__time {
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+.wb-room-card__lock { color: var(--accent); }
+.wb-room-card--new {
+  align-items: flex-start;
+  justify-content: center;
+  border-style: dashed;
+  border-top-style: dashed;
+  color: var(--text-2);
+  background: transparent;
+  box-shadow: none;
+}
+.wb-room-card--new:hover {
+  color: var(--text-1);
+  background: var(--bg-surface);
+  border-color: var(--accent);
+  box-shadow: none;
+}
+.wb-room-card--new strong { color: var(--text-1); font-size: 15px; }
+.wb-room-card__plus {
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-xs);
+  color: var(--accent);
+  background: var(--bg-surface);
+}
+.wb-rooms-state {
+  border-radius: var(--r-sm);
+  border-color: var(--border-2);
+  background: var(--bg-surface);
+}
+
+@media (max-width: 1180px) {
+  .wb-rooms-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 767px) {
+  .wb-rooms-page { padding: calc(18px + var(--safe-top)) 16px 34px; }
+  .wb-rooms-head { align-items: flex-start; flex-direction: column; gap: 14px; padding-bottom: 16px; }
+  .wb-rooms-head h1 { font-size: 31px; line-height: 38px; }
+  .wb-rooms-head__actions { width: 100%; margin-left: 0; display: grid; grid-template-columns: 1fr 1fr; }
+  .wb-rooms-head__actions .ui-button { width: 100%; padding-inline: 8px; }
+  .wb-rooms-toolbar { grid-template-columns: minmax(0, 1fr); gap: 9px; }
+  .wb-rooms-toolbar .ui-segmented { width: 100%; overflow-x: auto; }
+  .wb-rooms-toolbar__sort { display: none; }
+  .wb-rooms-grid { grid-template-columns: minmax(0, 1fr); }
+  .wb-room-card { min-height: 0; }
 }
