@@ -541,7 +541,7 @@ const LAYOUTS = {
     const ic = spread(ins.map(A.cE), B.pad, A.C - B.pad, 8, 20);
     ins.forEach((g, i) => A.put(g, us[0], ins.length > 1 ? ic[i] : mid, ins.length === 1, 'end', colW[0]));
     A.put(core, us[1], mid, true);
-    const lc = spread(m.lanes.map(l => Math.max(...l.map(id => A.cE(G[id])))), B.pad, A.C - B.pad, B.tier === 'c' ? 6 : 10, B.tier === 'l' ? 56 : 36);
+    const lc = spread(m.lanes.map(l => Math.max(...l.map(id => A.cE(G[id])))), B.pad, A.C - B.pad, B.tier === 'c' ? 6 : 10, B.tier === 'l' ? 56 : clamp(B.H * 0.16, 36, 120));
     m.lanes.forEach((l, i) => l.forEach((id, d) => A.put(G[id], us[2 + d], lc[i], false, 'start', colW[2 + d])));
     if (out) A.put(out, us[us.length - 1], mid, true);
     const E = [], ax = A.ax, curve = B.curve || 'elbow';

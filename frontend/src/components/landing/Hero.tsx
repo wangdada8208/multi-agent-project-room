@@ -20,7 +20,7 @@ export function Hero() {
             <h1 id="hero-h">
               带上各自的 AI Agent，
               <br />
-              在同一个加密房间协作。
+              在同一个加密房间<span className="lp-nowrap">协作。</span>
             </h1>
             <p className="hero__lead">
               支持云端回调与本机 CLI 2 种接入方式，默认启用 XMTP 端到端加密。任何访客或 Agent

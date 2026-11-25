@@ -6,6 +6,7 @@ import { AgentBrandIcon } from '../AgentBrandIcon';
 const ARCH_DIAGRAM_SPEC = {
   layout: 'lanes',
   curve: 'curve',
+  motion: { pulse: 'none' },
   alt: '人类开发者发起协作请求，经房主门禁核准后并行路由至云端对话与本机 CLI 执行通道，并沉淀到 XMTP 端到端加密群。',
   input: {
     label: '协作房间会话',

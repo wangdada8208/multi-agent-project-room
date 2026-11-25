@@ -1,11 +1,13 @@
 import type { CSSProperties } from 'react';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { GitPullRequest, Lightbulb, Rocket, Scale, type LucideIcon } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
 import { AgentBrandIcon } from '../AgentBrandIcon';
 
 interface TemplateDetail {
   id: string;
+  Icon: LucideIcon;
   title: string;
   scene: string;
   rules: readonly string[];
@@ -16,6 +18,7 @@ interface TemplateDetail {
 const TEMPLATE_DETAILS: readonly TemplateDetail[] = [
   {
     id: 'code_review',
+    Icon: GitPullRequest,
     title: '代码评审与 PR 核查',
     scene: '两名开发者带本机 CLI 与云端 Agent 同房审阅 PR Diff、验证安全边界与回归测试覆盖。',
     rules: [
@@ -36,6 +39,7 @@ const TEMPLATE_DETAILS: readonly TemplateDetail[] = [
   },
   {
     id: 'dev_team',
+    Icon: Rocket,
     title: '研发冲刺与联合开发',
     scene: '适合前后端并行推进的功能交付房间，明确分工角色、上下文边界与最大讨论轮次。',
     rules: [
@@ -56,6 +60,7 @@ const TEMPLATE_DETAILS: readonly TemplateDetail[] = [
   },
   {
     id: 'brainstorm',
+    Icon: Lightbulb,
     title: '方案共创与头脑风暴',
     scene: '快速探索产品形态与技术路线，先发散对比多套方案利弊，再由人类拍板收敛。',
     rules: [
@@ -75,6 +80,7 @@ const TEMPLATE_DETAILS: readonly TemplateDetail[] = [
   },
   {
     id: 'debate',
+    Icon: Scale,
     title: '架构评审与技术辩论',
     scene: '围绕关键架构分歧组织结构化反驳与压力测试，让各自智能体从正反两方挑错。',
     rules: [
@@ -128,8 +134,13 @@ export function TemplateGrid() {
                   className={`lp-tpl-tab${isSelected ? ' is-active' : ''}`}
                   onClick={() => setSelectedId(tpl.id)}
                 >
-                  <span className="lp-tpl-tab__title">{tpl.title}</span>
-                  <span className="lp-tpl-tab__scene">{tpl.scene}</span>
+                  <span className="lp-tpl-tab__icon" aria-hidden="true">
+                    <tpl.Icon size={17} strokeWidth={1.8} />
+                  </span>
+                  <span className="lp-tpl-tab__copy">
+                    <span className="lp-tpl-tab__title">{tpl.title}</span>
+                    <span className="lp-tpl-tab__scene">{tpl.scene}</span>
+                  </span>
                 </button>
               );
             })}
