@@ -299,7 +299,7 @@
   .lp-step + .lp-step { padding-left: 0; border-left: 0; border-top: 1px solid var(--border-1); }
   .lp-compare { overflow: hidden; }
   .lp-compare__row { grid-template-columns: .82fr 1fr 1fr; }
-  .lp-compare__row span { padding: 9px 8px; font-size: 11.5px; line-height: 17px; overflow-wrap: anywhere; }
+  .lp-compare__row span { padding: 10px 8px; font-size: 12px; line-height: 18px; overflow-wrap: anywhere; }
   .lp-four { grid-template-columns: minmax(0,1fr); }
   .lp-four__item, .lp-four__item:nth-child(3) { padding: 18px 0; border-left: 0; }
   .lp-four__item + .lp-four__item { border-top: 1px solid var(--border-1); }
