@@ -1095,3 +1095,35 @@
 .lp-close-word {
   font-size: clamp(120px, 22vw, 216px);
 }
+
+
+@media (max-width: 639px) {
+  .lp-stage-room {
+    flex: 0 1 auto;
+  }
+
+  .lp-stage-bar {
+    flex-wrap: nowrap;
+  }
+
+  .lp-stage-row--gate {
+    flex-wrap: nowrap;
+    align-items: center;
+  }
+
+  .lp-stage-approve {
+    width: auto;
+    flex: none;
+    padding-inline: 12px;
+  }
+
+  .lp-stage-composer {
+    display: none;
+  }
+}
+
+@media (max-width: 639px) {
+  .lp-stage-gate-sub {
+    display: none;
+  }
+}
