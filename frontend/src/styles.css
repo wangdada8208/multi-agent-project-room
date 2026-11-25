@@ -84,7 +84,7 @@ a:hover {
   font-weight: var(--fw-medium);
   line-height: 1.25;
   cursor: pointer;
-  transition: background-color var(--dur-1), border-color var(--dur-1), color var(--dur-1);
+  transition: background-color var(--dur-1) var(--ease-standard), border-color var(--dur-1) var(--ease-standard), color var(--dur-1) var(--ease-standard);
   white-space: nowrap;
   text-decoration: none;
 }
@@ -160,7 +160,7 @@ a:hover {
   background: transparent;
   cursor: pointer;
   color: var(--text-2);
-  transition: background-color var(--dur-1), color var(--dur-1);
+  transition: background-color var(--dur-1) var(--ease-standard), color var(--dur-1) var(--ease-standard);
   flex-shrink: 0;
 }
 
@@ -189,7 +189,7 @@ a:hover {
   background: var(--bg-surface);
   color: var(--text-1);
   outline: none;
-  transition: border-color var(--dur-1), box-shadow var(--dur-1);
+  transition: border-color var(--dur-1) var(--ease-standard), box-shadow var(--dur-1) var(--ease-standard);
 }
 
 .input:hover:not(:disabled):not(:focus) {
@@ -276,7 +276,7 @@ a:hover {
   background: var(--bg-surface);
   color: var(--text-2);
   cursor: pointer;
-  transition: background var(--dur-1), border-color var(--dur-1), color var(--dur-1);
+  transition: background-color var(--dur-1) var(--ease-standard), border-color var(--dur-1) var(--ease-standard), color var(--dur-1) var(--ease-standard);
 }
 
 .copy-btn:hover {
@@ -645,7 +645,7 @@ a:hover {
   background: var(--bg-surface);
   cursor: pointer;
   color: var(--text-1);
-  transition: border-color var(--dur-1), background-color var(--dur-1);
+  transition: border-color var(--dur-1) var(--ease-standard), background-color var(--dur-1) var(--ease-standard);
 }
 
 .file-row:hover {

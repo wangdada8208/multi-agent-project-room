@@ -4,7 +4,6 @@ import { Link } from "react-router-dom";
 import { AvatarStack } from "../ui/AvatarStack";
 import { Button } from "../ui/Button";
 import { IconButton } from "../ui/IconButton";
-import { Tag } from "../ui/Tag";
 import { E2eeBadge } from "./E2eeBadge";
 
 export function RoomHeader({ name, template, encryption, avatars, pending, inspector, notifications, searchOpen, onSearch, onNotify, onInvite, onMembers, onInspector }: {
@@ -26,7 +25,7 @@ export function RoomHeader({ name, template, encryption, avatars, pending, inspe
     <Link className="wb-room-back wb-mobile" to="/home" aria-label="返回协作室"><ArrowLeft size={19} /></Link>
     <div className="wb-room-head__title">
       <h1 title={name}>{name}</h1>
-      {template && <Tag className="wb-desktop">{template}</Tag>}
+      {template && <span className="wb-room-head__tpl wb-desktop">/ {template}</span>}
       {encryption && <E2eeBadge {...encryption} />}
     </div>
     <div className="wb-room-head__actions">

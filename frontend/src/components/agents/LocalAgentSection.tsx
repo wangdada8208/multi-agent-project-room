@@ -46,7 +46,10 @@ export function LocalAgentSection({ roomId, hubOrigin, ownerXmtpAddress, onJoine
   }
 
   return <section className="wb-local">
-    <div className="wb-agents-section-head"><h2>电脑端 Agent 与模型接口</h2><Tag>需要电脑</Tag></div>
+    <div className="wb-agents-section-head">
+      <h2>电脑端 Agent 与模型接口</h2>
+      <span className="wb-section-note">需在工作电脑配对一次</span>
+    </div>
     {paired || (!local.probe && !local.pendingPreset && !local.isMobile) ? <HelperStatusStrip
       version={paired?.version} device={local.helpers.find((helper) => helper.id === local.helperPick)?.device_name ?? paired?.owner_display_name ?? undefined}
       onManage={onManage} onRescan={() => void local.handleManualRescan()} rescanning={local.rescanning} />

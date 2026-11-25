@@ -33,11 +33,11 @@
 .app-rail__brand > span { display: grid; place-items: center; flex: none; width: 32px; height: 32px; border-radius: var(--r-md); background: var(--accent); color: var(--accent-fg); }
 .app-rail__brand small { display: block; color: var(--text-3); font-size: 11.5px; font-weight: 400; }
 .app-rail__nav, .app-rail__rooms { display: flex; flex-direction: column; gap: 2px; }
-.app-rail nav a { display: flex; align-items: center; gap: 10px; min-height: 36px; padding: 0 10px; border-radius: var(--r-md); color: var(--text-2); font-size: 13.5px; }
-.app-rail nav a:hover, .app-account summary:hover { background: var(--bg-hover); }
+.app-rail nav a { display: flex; align-items: center; gap: 10px; min-height: 36px; padding: 0 10px; border-radius: var(--r-md); color: var(--text-2); font-size: 13.5px; transition: background-color var(--dur-1) var(--ease-standard), color var(--dur-1) var(--ease-standard), box-shadow var(--dur-1) var(--ease-standard); }
+.app-rail nav a:hover, .app-account summary:hover { background: var(--bg-hover); color: var(--text-1); }
 .app-rail nav a[aria-current="page"] { background: var(--bg-muted); color: var(--text-1); font-weight: 600; }
 .app-rail__nav a .workbench-count { margin-left: auto; }
-.workbench-count { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 4px; border-radius: var(--r-full); background: var(--warn-bg); color: var(--warn); font-size: 11px; font-weight: 600; }
+.workbench-count { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: var(--r-xs); background: var(--warn-bg); color: var(--warn); font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .app-rail__rooms { flex: 1; min-height: 0; overflow: auto; }
 .app-rail__rooms h2 { color: var(--text-3); padding: 0 10px 4px; font-size: 12px; font-weight: 600; }
 .app-rail__rooms a > span { display: grid; place-items: center; flex: none; width: 22px; height: 22px; border: 1px solid var(--border-1); border-radius: var(--r-sm); background: var(--bg-surface); }
@@ -70,7 +70,7 @@
 .app-rail { padding: 12px 10px; gap: 2px; }
 .app-rail__brand { padding: 4px 6px 12px; font-size: 14px; }
 .app-rail__brand > span { width: 26px; height: 26px; }
-.app-rail__nav > a[aria-current="page"] { background: var(--bg-surface); box-shadow: var(--sh-1), 0 0 0 1px var(--border-1); }
+.app-rail__nav > a[aria-current="page"] { background: var(--bg-surface); box-shadow: inset 3px 0 0 var(--accent), var(--sh-1), 0 0 0 1px var(--border-1); }
 .app-rail__rooms h2 { display: flex; align-items: center; justify-content: space-between; padding: 14px 10px 4px; }
 .app-rail__rooms h2 a { padding: 0 4px; min-height: 26px; }
 .app-rail__pending-dot { width: 7px; height: 7px; flex: none; margin-left: auto; border-radius: var(--r-full); background: var(--presence-pending); }
@@ -80,7 +80,7 @@
 .app-account:not(.app-account--mobile) summary > .ui-avatar { --avatar-size: 28px; }
 .app-mobile-tabs > a { position: relative; }
 .app-mobile-tabs > a > .workbench-count { position: absolute; top: 3px; left: calc(50% + 9px); }
-.workbench-count { background: var(--presence-pending); color: var(--gray-950); }
+.workbench-count { background: var(--warn-bg); border: 1px solid var(--warn-border); color: var(--warn); }
 @media (min-width: 768px) and (max-width: 1023px) {
   .app-rail__rooms h2, .app-rail .app-account summary > span:nth-child(2) { display: none; }
 }

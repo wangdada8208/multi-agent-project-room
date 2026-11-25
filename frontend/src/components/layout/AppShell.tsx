@@ -1,7 +1,8 @@
 import { useQueries, useQuery } from "@tanstack/react-query";
-import { Bot, Code, Folder, Hand, Infinity, LayoutGrid, Lightbulb, LogOut, Plus, Scale, SlidersHorizontal, User, Workflow } from "lucide-react";
+import { Bot, Code, Folder, Hand, LayoutGrid, Lightbulb, LogOut, Plus, Scale, SlidersHorizontal, User, Workflow } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { Link, NavLink } from "react-router-dom";
+import { ProjectRoomMark } from "../icons/BrandIcons";
 import { fetchRooms } from "../../lib/api";
 import { roomTemplateKey } from "../../lib/roomTemplate";
 import { redemptionsKey } from "../../hooks/room/usePendingRequests";
@@ -58,7 +59,7 @@ export function AppShell({ children, roomId, pending }: { children: ReactNode; r
     <div className={roomId ? "app-shell app-shell--room" : "app-shell"}>
       <aside className="app-rail">
         <Link to="/home" className="app-rail__brand" title="Multi-Agent 协作室">
-          <span><Infinity size={17} /></span><strong>Project Room</strong>
+          <span><ProjectRoomMark size={17} /></span><strong>Project Room</strong>
         </Link>
         <nav className="app-rail__nav" aria-label="主导航">
           <NavLink to="/home" title="协作室"><LayoutGrid size={17} /><span>协作室</span></NavLink>

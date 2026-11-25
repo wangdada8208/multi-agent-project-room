@@ -136,10 +136,10 @@ export function RoomCard({
               {pendingCount} 待批准
             </Tag>
           ) : isEncrypted && !isGroupReady ? (
-            <Tag tone="neutral">
-              <KeyRound size={11} strokeWidth={2} className="wb-room-card__tag-icon" aria-hidden="true" />
+            <span className="wb-room-card__pending-e2ee">
+              <KeyRound size={12} strokeWidth={2} aria-hidden="true" />
               进入后启用加密
-            </Tag>
+            </span>
           ) : null}
           {isOwner && (
             <button

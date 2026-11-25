@@ -1,48 +1,50 @@
-import { Anchor, Lock, Pause, ShieldCheck } from "lucide-react";
+import securityVaultUrl from "../../assets/visuals/security-vault.png";
 
 const SAFETY_ITEMS = [
   {
-    icon: Lock,
-    title: "端到端加密",
-    desc: "聊天正文只在房间成员的设备上解密。服务器只转发密文，不保存正文。",
+    title: "端到端加密保护",
+    desc: "聊天正文只在房间成员和已批准席位的设备上解密。服务器只转发密文，不保存明文对话。",
   },
   {
-    icon: ShieldCheck,
-    title: "房主审批入房",
-    desc: "协作者和 Agent 都要通过一次性邀请提交申请，房主批准后才能进入加密群。",
+    title: "入房必经房主批准",
+    desc: "协作者和外部 Agent 都要通过一次性邀请提交申请，房主点头批准后才能进入加密群。",
   },
   {
-    icon: Pause,
-    title: "席位随时可控",
-    desc: "暂停、恢复、移出一键完成。移出时先退出加密群，再删除席位记录。",
+    title: "席位随时暂停或移出",
+    desc: "暂停、恢复与移出一键生效。移出席位时先将其退出加密群，再清理席位记录。",
   },
   {
-    icon: Anchor,
-    title: "活动可追溯",
-    desc: "入房、审批、任务结论都写入活动记录，并定期做完整性校验。",
+    title: "活动记录可追溯",
+    desc: "入房审批、席位变动与任务结论按序写入活动账本，并定期执行完整性校验。",
   },
 ];
 
 export function SafetyGrid() {
   return (
-    <section className="lp-section" id="lp-safe">
-      <div className="lp-wrap">
-        <div className="lp-kicker">安全是默认值</div>
-        <h2 className="lp-h2">你不点头，谁也进不来。</h2>
-        <p className="lp-lead">
-          加密、审批、席位控制和活动记录都是默认开启的，不需要你懂加密协议。
-        </p>
+    <section className="lp-section lp-section--surface" id="lp-safe">
+      <div className="lp-wrap lp-safety">
+        <div className="lp-safety__media">
+          <img
+            src={securityVaultUrl}
+            alt="精密深海钢制锁控机构与磨砂光学玻璃隔断，体现代码与密钥的物理边界"
+            className="lp-safety__img"
+          />
+        </div>
 
-        <div className="lp-four">
-          {SAFETY_ITEMS.map(({ icon: Icon, title, desc }) => (
-            <div key={title} className="lp-four__item">
-              <span className="lp-four__ico" aria-hidden="true">
-                <Icon size={17} strokeWidth={1.85} />
-              </span>
-              <h4>{title}</h4>
-              <p>{desc}</p>
-            </div>
-          ))}
+        <div className="lp-safety__body">
+          <h2>你不点头，谁也进不来</h2>
+          <p className="lp-section__sub">
+            端到端加密、入房审批、席位控制和活动校验都是默认开启的，不必理解加密协议也能安全协作。
+          </p>
+
+          <dl className="lp-safety__list">
+            {SAFETY_ITEMS.map((item) => (
+              <div key={item.title} className="lp-safety__row">
+                <dt>{item.title}</dt>
+                <dd>{item.desc}</dd>
+              </div>
+            ))}
+          </dl>
         </div>
       </div>
     </section>

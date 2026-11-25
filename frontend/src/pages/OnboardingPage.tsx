@@ -1,8 +1,8 @@
 import { useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ArrowRight, Cloud, Infinity as InfinityIcon, LayoutGrid, Link2 } from "lucide-react";
+import { ArrowRight, Cloud, LayoutGrid, Link2 } from "lucide-react";
+import { ProjectRoomMark } from "../components/icons/BrandIcons";
 import { Button } from "../components/ui/Button";
-import { Tag } from "../components/ui/Tag";
 import { useAuthStore } from "../stores/authStore";
 import "../components/rooms/Rooms.css";
 
@@ -93,13 +93,15 @@ export function OnboardingView({ embedded = false, onStartTemplate }: Onboarding
 
       <div className="wb-onb-progress" aria-label="开始步骤">
         <span className="wb-onb-progress__step wb-onb-progress__step--active">
-          <i>1</i>开第一个房间
+          开第一个房间
         </span>
+        <span aria-hidden="true">/</span>
         <span className="wb-onb-progress__step">
-          <i>2</i>接入一个 Agent
+          接入一个 Agent
         </span>
+        <span aria-hidden="true">/</span>
         <span className="wb-onb-progress__step">
-          <i>3</i>邀请协作者
+          邀请协作者
         </span>
       </div>
 
@@ -110,11 +112,8 @@ export function OnboardingView({ embedded = false, onStartTemplate }: Onboarding
           </span>
           <h3>用模板开第一个房间</h3>
           <p>选一个协作场景，预览分工和规则，一键建房。房间默认端到端加密。</p>
-          <span className="wb-onb-choice__tags">
-            <Tag tone="neutral">代码评审</Tag>
-            <Tag tone="neutral">头脑风暴</Tag>
-            <Tag tone="neutral">技术辩论</Tag>
-            <Tag tone="neutral">开发团队</Tag>
+          <span className="wb-onb-choice__meta">
+            代码评审 · 头脑风暴 · 技术辩论 · 开发团队
           </span>
           <span className="wb-onb-choice__go">
             选择模板
@@ -128,10 +127,8 @@ export function OnboardingView({ embedded = false, onStartTemplate }: Onboarding
           </span>
           <h3>先接入一个云端 Agent</h3>
           <p>把 Grok Bot 或 Muse 带进来。手机上就能完成，不需要电脑。我们会顺手帮你建一个房间。</p>
-          <span className="wb-onb-choice__tags">
-            <Tag tone="cloud">Grok Bot</Tag>
-            <Tag tone="cloud">Muse</Tag>
-            <Tag tone="neutral">手机可用</Tag>
+          <span className="wb-onb-choice__meta">
+            Grok Bot · Muse · 手机可用
           </span>
           <span className="wb-onb-choice__go">
             开始接入
@@ -172,7 +169,7 @@ export function OnboardingPage() {
       <header className="wb-onb-shell__top">
         <Link to="/home" className="wb-onb-shell__brand">
           <span className="wb-onb-shell__mark" aria-hidden="true">
-            <InfinityIcon size={16} strokeWidth={2} />
+            <ProjectRoomMark size={16} />
           </span>
           <span>Project Room</span>
         </Link>

@@ -1,6 +1,7 @@
-import { Cpu, Terminal, Webhook } from "lucide-react";
+import { Laptop } from "lucide-react";
 import type { ReactNode } from "react";
 import type { AgentPresetItem } from "../../lib/agentPresets";
+import { AgentBrandIcon, OpenClawIcon } from "../icons/BrandIcons";
 
 export function LocalAgentCard({ item, title, subtitle, children }: {
   item?: Exclude<AgentPresetItem, { mode: "cloud-agent" }>;
@@ -8,10 +9,16 @@ export function LocalAgentCard({ item, title, subtitle, children }: {
   subtitle?: string;
   children: ReactNode;
 }) {
-  const Icon = !item || item.mode === "local-cli" ? Terminal : item.id === "webhook" ? Webhook : Cpu;
+  const icon = item ? (
+    <AgentBrandIcon id={item.id} size={18} />
+  ) : title === "OpenClaw" ? (
+    <OpenClawIcon size={18} />
+  ) : (
+    <Laptop size={17} />
+  );
   return <article className="wb-local-card agents-preset-card">
     <header>
-      <span className="wb-local-card__icon"><Icon size={17} /></span>
+      <span className="wb-local-card__icon" aria-hidden="true">{icon}</span>
       <div><strong>{item?.title ?? title}</strong><small>{item?.subtitle ?? subtitle}</small></div>
     </header>
     {children}

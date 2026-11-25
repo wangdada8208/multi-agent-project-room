@@ -3,6 +3,7 @@
   align-items: center;
   justify-content: center;
   font-family: var(--font-sans);
+  font-variant-numeric: tabular-nums;
 }
 .ui-button {
   gap: var(--s-2);
@@ -13,18 +14,20 @@
   font-size: var(--fs-body);
   font-weight: var(--fw-semibold);
   cursor: pointer;
-  transition: background var(--dur-1) var(--ease-standard);
+  transition: background-color var(--dur-1) var(--ease-standard), border-color var(--dur-1) var(--ease-standard), color var(--dur-1) var(--ease-standard), transform var(--dur-1) var(--ease-standard);
 }
 .ui-button--sm { min-height: var(--s-8); padding-inline: var(--s-2); font-size: var(--fs-sm); }
-.ui-button--lg { min-height: var(--s-12); padding-inline: var(--s-4); }
-.ui-button--primary { color: var(--accent-fg); background: var(--accent); }
+.ui-button--lg { min-height: var(--s-12); padding-inline: var(--s-5); font-size: 15px; }
+.ui-button--primary { color: var(--accent-fg); background: var(--accent); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16); }
 .ui-button--primary:hover:not(:disabled) { background: var(--accent-hover); }
 .ui-button--secondary { color: var(--text-1); background: var(--bg-surface); border-color: var(--border-2); }
 .ui-button--ghost { color: var(--text-2); }
-.ui-button--secondary:hover:not(:disabled), .ui-button--ghost:hover:not(:disabled) { background: var(--bg-hover); }
+.ui-button--secondary:hover:not(:disabled), .ui-button--ghost:hover:not(:disabled) { background: var(--bg-hover); border-color: var(--border-3); color: var(--text-1); }
+.ui-button--ghost:hover:not(:disabled) { border-color: transparent; }
 .ui-button--danger { color: var(--danger); background: var(--danger-bg); border-color: var(--danger-border); }
 .ui-button--danger:hover:not(:disabled) { background: var(--danger-border); }
-.ui-button:disabled { opacity: 0.55; cursor: default; }
+.ui-button:active:not(:disabled) { transform: translateY(1px); }
+.ui-button:disabled { opacity: 0.52; cursor: default; }
 .ui-button:focus-visible, .ui-switch input:focus-visible + span, .ui-segmented input:focus-visible + span {
   outline: none;
   box-shadow: var(--focus-ring);
@@ -43,20 +46,22 @@
 @keyframes ui-spin { to { transform: rotate(1turn); } }
 @media (prefers-reduced-motion: reduce) { .ui-spinner { animation-iteration-count: 1; } }
 
+/* 工作区状态格（锐利建筑小方块，仅用于房间与数据表语义状态） */
 .ui-tag {
-  padding-inline: var(--s-2);
+  padding: 1px var(--s-2);
   border: 1px solid var(--border-1);
-  border-radius: var(--r-full);
+  border-radius: var(--r-xs);
   color: var(--text-2);
   background: var(--bg-subtle);
   font-size: var(--fs-caption);
+  font-weight: var(--fw-medium);
   line-height: var(--lh-caption);
 }
 .ui-tag--cloud { color: var(--actor-cloud); background: var(--actor-cloud-bg); border-color: var(--actor-cloud-border); }
 .ui-tag--local { color: var(--actor-local); background: var(--actor-local-bg); border-color: var(--actor-local-border); }
 .ui-tag--ok { color: var(--ok); background: var(--ok-bg); border-color: var(--ok-border); }
 .ui-tag--warn { color: var(--warn); background: var(--warn-bg); border-color: var(--warn-border); }
-.ui-tag--owner { color: var(--text-inverse); background: var(--bg-inverse); }
+.ui-tag--owner { color: var(--text-1); background: var(--bg-subtle); border-color: var(--border-2); }
 
 .ui-avatar {
   --avatar-size: var(--s-8);
@@ -108,6 +113,7 @@
   background: var(--bg-muted);
   color: var(--text-2);
   font-size: var(--fs-caption);
+  font-variant-numeric: tabular-nums;
 }
 .ui-switch { display: inline-flex; align-items: center; gap: var(--s-2); cursor: pointer; }
 .ui-switch input, .ui-segmented input { position: absolute; width: 1px; height: 1px; opacity: 0; }
@@ -116,7 +122,7 @@
   padding: var(--s-1);
   border-radius: var(--r-full);
   background: var(--bg-muted);
-  transition: background var(--dur-2) var(--ease-standard);
+  transition: background-color var(--dur-2) var(--ease-standard);
 }
 .ui-switch__track::before {
   content: "";
@@ -130,9 +136,27 @@
 }
 .ui-switch input:checked + span { background: var(--accent); }
 .ui-switch input:checked + span::before { transform: translateX(var(--s-3)); background: var(--accent-fg); }
-.ui-segmented { display: inline-flex; gap: var(--s-1); padding: var(--s-1); border-radius: var(--r-lg); background: var(--bg-subtle); }
-.ui-segmented label span { display: block; cursor: pointer; padding: var(--s-1) var(--s-2); border-radius: var(--r-md); color: var(--text-2); }
-.ui-segmented input:checked + span { color: var(--text-1); background: var(--bg-surface); box-shadow: var(--sh-1); }
+.ui-segmented {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--border-1);
+  background: var(--bg-subtle);
+}
+.ui-segmented label span {
+  display: block;
+  cursor: pointer;
+  padding: var(--s-1) var(--s-3);
+  border-radius: var(--r-sm);
+  color: var(--text-2);
+  transition: background-color var(--dur-1) var(--ease-standard), color var(--dur-1) var(--ease-standard);
+}
+.ui-segmented input:checked + span {
+  color: var(--text-1);
+  background: var(--bg-surface);
+  box-shadow: var(--sh-1);
+}
 .ui-switch input:disabled + span, .ui-segmented input:disabled + span { opacity: 0.55; cursor: default; }
 
 .ui-popover { display: inline-block; }

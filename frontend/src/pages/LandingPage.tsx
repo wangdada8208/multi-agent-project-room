@@ -19,13 +19,13 @@ export function LandingPage() {
       <TemplateGrid />
 
       <section className="lp-final">
-        <div className="lp-wrap">
-          <h2>开一个房间，把你的 Agent 带进来。</h2>
-          <p>第一个房间一分钟就能开好，手机上也可以完成。</p>
+        <div className="lp-wrap lp-final__inner">
+          <h2>开一间密室，把你的 Agent 带进来</h2>
+          <p>第一个端到端加密房间一分钟内即可就绪，手机与电脑均可操作。</p>
           <div className="lp-cta">
-            <Link to={enterHref} className="ui-button ui-button--primary ui-button--lg">
+            <Link to={enterHref} className="ui-button ui-button--primary ui-button--lg lp-cta__primary">
               <span>进入协作室</span>
-              <ArrowRight size={16} strokeWidth={2} aria-hidden="true" />
+              <ArrowRight size={17} strokeWidth={2} aria-hidden="true" />
             </Link>
           </div>
         </div>

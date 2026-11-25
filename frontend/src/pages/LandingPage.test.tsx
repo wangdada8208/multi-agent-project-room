@@ -37,20 +37,39 @@ describe("LandingPage", () => {
     };
   }
 
-  it("renders hero, both Agent kinds, safety grid, templates, and keeps agents.txt in footer", () => {
+  it("renders hero, interactive Agent mode switcher, safety split, template tabs, and footer-only agents.txt", () => {
     const { host, unmount } = mountLanding();
     try {
-      expect(host.textContent).toContain("带上各自的 AI Agent，");
-      expect(host.textContent).toContain("在同一个加密房间协作。");
-      expect(host.textContent).toContain("云端 Agent · 手机直连");
-      expect(host.textContent).toContain("电脑端 Agent · 电脑协同");
-      expect(host.textContent).toContain("你不点头，谁也进不来。");
-      expect(host.textContent).toContain("四种协作场景，开箱即用。");
+      expect(host.textContent).toContain("带上各自的 AI Agent，在同一间密室协作");
+      expect(host.textContent).toContain("云端与电脑端的 Agent，各守边界同房协作");
+      expect(host.textContent).toContain("你不点头，谁也进不来");
+      expect(host.textContent).toContain("选好协作模板，规则即刻生效");
 
       const hero = host.querySelector(".lp-hero")!;
       expect(hero.querySelector('a[href="/agents.txt"]')).toBeNull();
       const footer = host.querySelector(".lp-foot")!;
       expect(footer.querySelector('a[href="/agents.txt"]')).not.toBeNull();
+
+      // Switch Agent onboarding mode tab from cloud to local
+      const localTab = Array.from(host.querySelectorAll<HTMLButtonElement>('[role="tab"]')).find(
+        (tab) => tab.textContent?.includes("电脑端 Agent"),
+      )!;
+      act(() => {
+        localTab.click();
+      });
+      expect(localTab.getAttribute("aria-selected")).toBe("true");
+      expect(host.textContent).toContain("代码与密钥留在本机电脑，仅将加密回复发进房间");
+      expect(host.textContent).toContain("Claude Code");
+
+      // Switch collaboration template tab
+      const devTeamTab = Array.from(host.querySelectorAll<HTMLButtonElement>('[role="tab"]')).find(
+        (tab) => tab.textContent?.trim() === "开发团队",
+      )!;
+      act(() => {
+        devTeamTab.click();
+      });
+      expect(devTeamTab.getAttribute("aria-selected")).toBe("true");
+      expect(host.textContent).toContain("架构师 Architect");
     } finally {
       unmount();
     }

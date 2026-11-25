@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { ArrowUp, AtSign, Check, Lock, ShieldCheck } from "lucide-react";
+import { ClaudeCodeIcon, CodexIcon, GrokIcon, MuseIcon } from "../icons/BrandIcons";
 import { Avatar } from "../ui/Avatar";
 import { AvatarStack } from "../ui/AvatarStack";
 import { Button } from "../ui/Button";
-import { Tag } from "../ui/Tag";
 
 const HEADER_AVATARS = [
   { id: "me", actor: "me" as const, name: "王达", size: "sm" as const },
@@ -18,10 +18,10 @@ export function ScenePreview() {
   return (
     <div className="lp-window" aria-label="协作房间场景预览">
       <div className="lp-window__bar">
-        <span className="lp-window__title">发布前评审 · v2.4</span>
-        <Tag tone="neutral">代码评审</Tag>
-        <span className="lp-e2ee-pill">
-          <Lock size={12} strokeWidth={2.1} aria-hidden="true" />
+        <span className="lp-window__title">发布前评审 / v2.4</span>
+        <span className="lp-window__meta">代码评审</span>
+        <span className="lp-window__e2ee">
+          <Lock size={14} strokeWidth={2} aria-hidden="true" />
           端到端加密已保护
         </span>
         <span className="lp-window__spacer" />
@@ -31,9 +31,9 @@ export function ScenePreview() {
       <div className="lp-window__body">
         <div className="lp-window__msgs">
           <div className="lp-sys">
-            <ShieldCheck size={13} strokeWidth={2} aria-hidden="true" />
+            <ShieldCheck size={15} strokeWidth={1.9} aria-hidden="true" />
             <span>
-              <b>林溪</b> 的 Codex 已加入 · 房主已批准
+              <b>林溪</b> 的 Codex 已加入，房主已批准
             </span>
           </div>
 
@@ -42,7 +42,7 @@ export function ScenePreview() {
             <div>
               <div className="lp-msg__head">
                 <span className="lp-msg__name">王达</span>
-                <Tag tone="owner">房主</Tag>
+                <span className="lp-msg__role">房主</span>
                 <span className="lp-msg__time">10:04</span>
               </div>
               <div className="lp-msg__body">
@@ -53,11 +53,13 @@ export function ScenePreview() {
           </div>
 
           <div className="lp-msg">
-            <Avatar actor="local" name="Codex" size="sm" />
+            <span className="lp-agent-av lp-agent-av--local" aria-hidden="true">
+              <CodexIcon size={16} />
+            </span>
             <div>
               <div className="lp-msg__head">
                 <span className="lp-msg__name">Codex</span>
-                <Tag tone="local">电脑端 · 林溪的 MacBook</Tag>
+                <span className="lp-msg__origin lp-msg__origin--local">电脑端接入 / 林溪的 MacBook</span>
                 <span className="lp-msg__time">10:06</span>
               </div>
               <div className="lp-msg__body">
@@ -67,11 +69,13 @@ export function ScenePreview() {
           </div>
 
           <div className="lp-msg">
-            <Avatar actor="cloud" name="Grok Bot" size="sm" />
+            <span className="lp-agent-av lp-agent-av--cloud" aria-hidden="true">
+              <GrokIcon size={16} />
+            </span>
             <div>
               <div className="lp-msg__head">
                 <span className="lp-msg__name">Grok Bot</span>
-                <Tag tone="cloud">云端 Agent</Tag>
+                <span className="lp-msg__origin lp-msg__origin--cloud">云端接入</span>
                 <span className="lp-msg__time">10:07</span>
               </div>
               <div className="lp-msg__body">
@@ -85,23 +89,25 @@ export function ScenePreview() {
               className={museApproved ? "lp-banner lp-banner--approved" : "lp-banner"}
               role="status"
             >
-              <Avatar actor="cloud" name="Muse" size="sm" />
+              <span className="lp-agent-av lp-agent-av--cloud" aria-hidden="true">
+                <MuseIcon size={16} />
+              </span>
               <div className="lp-banner__txt">
                 {museApproved ? (
                   <>
                     <strong>Muse 已加入房间</strong>
-                    <small>可以在消息里 @Muse 了</small>
+                    <span>可以在消息里 @Muse 了</span>
                   </>
                 ) : (
                   <>
-                    <strong>Muse</strong> 请求加入房间
-                    <small>云端 Agent · 邀请链接</small>
+                    <strong>Muse 请求加入房间</strong>
+                    <span>云端 Agent 通过一次性邀请链接申请</span>
                   </>
                 )}
               </div>
               {museApproved ? (
                 <span className="lp-banner__ok" aria-label="已批准">
-                  <Check size={16} strokeWidth={2.2} />
+                  <Check size={17} strokeWidth={2.2} />
                 </span>
               ) : (
                 <Button
@@ -115,54 +121,68 @@ export function ScenePreview() {
             </div>
 
             <div className="lp-composer-box" aria-hidden="true">
-              <AtSign size={14} strokeWidth={1.9} />
+              <AtSign size={15} strokeWidth={1.9} />
               <span>发消息，输入 @ 召唤 Agent…</span>
               <span className="lp-composer-box__send">
-                <ArrowUp size={14} strokeWidth={2.2} />
+                <ArrowUp size={15} strokeWidth={2.2} />
               </span>
             </div>
           </div>
         </div>
 
         <aside className="lp-window__side" aria-label="房间成员示意">
-          <h6>人类成员</h6>
-          <div className="lp-mem">
-            <Avatar actor="me" name="王达" size="sm" />
-            <span className="lp-mem__name">王达</span>
-            <span className="lp-mem__faint">房主</span>
-          </div>
-          <div className="lp-mem">
-            <Avatar actor="human" name="林溪" size="sm" />
-            <span className="lp-mem__name">林溪</span>
-            <span className="lp-dot lp-dot--online" aria-label="在线" />
+          <div className="lp-side-group">
+            <h3>人类成员</h3>
+            <div className="lp-mem">
+              <Avatar actor="me" name="王达" size="sm" />
+              <span className="lp-mem__name">王达</span>
+              <span className="lp-mem__faint">房主</span>
+            </div>
+            <div className="lp-mem">
+              <Avatar actor="human" name="林溪" size="sm" />
+              <span className="lp-mem__name">林溪</span>
+              <span className="lp-dot lp-dot--online" aria-label="在线" />
+            </div>
           </div>
 
-          <h6>云端 Agent</h6>
-          <div className="lp-mem">
-            <Avatar actor="cloud" name="Grok Bot" size="sm" />
-            <span className="lp-mem__name">Grok Bot</span>
-            <span className="lp-dot lp-dot--online" aria-label="已入群" />
-          </div>
-          <div className="lp-mem" data-testid="preview-member-muse">
-            <Avatar actor="cloud" name="Muse" size="sm" />
-            <span className="lp-mem__name">Muse</span>
-            {museApproved ? (
+          <div className="lp-side-group">
+            <h3>云端 Agent</h3>
+            <div className="lp-mem">
+              <span className="lp-agent-av lp-agent-av--cloud lp-agent-av--sm" aria-hidden="true">
+                <GrokIcon size={14} />
+              </span>
+              <span className="lp-mem__name">Grok Bot</span>
               <span className="lp-dot lp-dot--online" aria-label="已入群" />
-            ) : (
-              <Tag tone="warn">待批准</Tag>
-            )}
+            </div>
+            <div className="lp-mem" data-testid="preview-member-muse">
+              <span className="lp-agent-av lp-agent-av--cloud lp-agent-av--sm" aria-hidden="true">
+                <MuseIcon size={14} />
+              </span>
+              <span className="lp-mem__name">Muse</span>
+              {museApproved ? (
+                <span className="lp-dot lp-dot--online" aria-label="已入群" />
+              ) : (
+                <span className="lp-mem__pending">待批准</span>
+              )}
+            </div>
           </div>
 
-          <h6>电脑端 Agent</h6>
-          <div className="lp-mem">
-            <Avatar actor="local" name="Codex" size="sm" />
-            <span className="lp-mem__name">Codex</span>
-            <span className="lp-dot lp-dot--online" aria-label="已入群" />
-          </div>
-          <div className="lp-mem">
-            <Avatar actor="local" name="Claude Code" size="sm" />
-            <span className="lp-mem__name">Claude Code</span>
-            <span className="lp-mem__faint">已暂停</span>
+          <div className="lp-side-group">
+            <h3>电脑端 Agent</h3>
+            <div className="lp-mem">
+              <span className="lp-agent-av lp-agent-av--local lp-agent-av--sm" aria-hidden="true">
+                <CodexIcon size={14} />
+              </span>
+              <span className="lp-mem__name">Codex</span>
+              <span className="lp-dot lp-dot--online" aria-label="已入群" />
+            </div>
+            <div className="lp-mem">
+              <span className="lp-agent-av lp-agent-av--local lp-agent-av--sm" aria-hidden="true">
+                <ClaudeCodeIcon size={14} />
+              </span>
+              <span className="lp-mem__name">Claude Code</span>
+              <span className="lp-mem__faint">已暂停</span>
+            </div>
           </div>
         </aside>
       </div>

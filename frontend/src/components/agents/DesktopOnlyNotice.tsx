@@ -2,7 +2,6 @@ import { Laptop, Share2 } from "lucide-react";
 import { useState } from "react";
 import { CopyButton } from "../CopyButton";
 import { Button } from "../ui/Button";
-import { Tag } from "../ui/Tag";
 
 export function DesktopOnlyNotice({ roomId }: { roomId: string }) {
   const [message, setMessage] = useState("");
@@ -22,7 +21,7 @@ export function DesktopOnlyNotice({ roomId }: { roomId: string }) {
     <div>
       <h2>在电脑上继续接入</h2>
       <p>终端 Agent 与模型接口需要在电脑上配对一次。</p>
-      <div className="wb-desktop-notice__tags">{["Claude Code", "Codex", "Gemini CLI", "OpenClaw", "xAI API", "Ollama", "Webhook"].map((name) => <Tag key={name}>{name}</Tag>)}</div>
+      <p className="wb-desktop-notice__list">支持接入：Claude Code · Codex · Gemini CLI · OpenClaw · xAI API · Ollama · Webhook</p>
       <div className="wb-actions">
         <CopyButton text={url.href} label="复制电脑端链接" />
         {typeof navigator.share === "function" && <Button variant="secondary" size="sm" onClick={() => void share()}><Share2 size={14} />分享到电脑</Button>}

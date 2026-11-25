@@ -54,9 +54,10 @@
   align-items: center;
   gap: 12px;
   padding: 12px 14px 12px 16px;
-  border-radius: 14px;
+  border-radius: var(--r-lg);
   background: var(--warn-bg);
   border: 1px solid var(--warn-border);
+  border-left: 3px solid var(--warn);
   margin-bottom: 20px;
   font-size: var(--fs-body);
   color: var(--text-1);
@@ -169,13 +170,13 @@
   box-shadow: var(--sh-1);
   cursor: pointer;
   text-align: left;
-  transition: border-color var(--dur-1), box-shadow var(--dur-2), transform var(--dur-2);
+  transition: border-color var(--dur-1) var(--ease-standard), box-shadow var(--dur-2) var(--ease-standard), transform var(--dur-2) var(--ease-standard);
   min-width: 0;
   color: var(--text-1);
 }
 
 .wb-room-card:hover {
-  border-color: var(--border-2);
+  border-color: var(--border-3);
   box-shadow: var(--sh-2);
   transform: translateY(-1px);
 }
@@ -239,6 +240,15 @@
 .wb-room-card__tag-icon {
   margin-right: 4px;
   flex: none;
+}
+
+.wb-room-card__pending-e2ee {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-3);
+  white-space: nowrap;
 }
 
 .wb-room-card__delete {
@@ -316,6 +326,7 @@
   align-items: center;
   gap: 8px;
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
 .wb-room-card__spacer {
@@ -324,6 +335,7 @@
 
 .wb-room-card__time {
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
 .wb-room-card__lock {
@@ -615,21 +627,19 @@
 
 /* ---- Template Rules Preview ---- */
 .wb-preview-box {
-  border: 1px solid var(--border-1);
-  border-radius: 14px;
-  background: var(--bg-canvas);
-  overflow: hidden;
+  border-top: 1px solid var(--border-2);
+  border-bottom: 1px solid var(--border-2);
+  background: transparent;
 }
 
 .wb-preview-box__head {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 12px 14px;
+  padding: 12px 0;
   border-bottom: 1px solid var(--border-1);
   font-size: var(--fs-sm);
   font-weight: var(--fw-semibold);
-  background: var(--bg-surface);
   color: var(--text-1);
 }
 
@@ -641,7 +651,7 @@
 }
 
 .wb-preview-box__section {
-  padding: 12px 14px;
+  padding: 12px 0;
 }
 
 .wb-preview-box__section + .wb-preview-box__section {
@@ -851,45 +861,23 @@
 .wb-onb-progress {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 20px;
+  align-items: center;
+  gap: 10px;
+  margin-top: 18px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border-1);
+  color: var(--text-3);
+  font-size: var(--fs-sm);
 }
 
 .wb-onb-progress__step {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 28px;
-  padding: 0 10px 0 6px;
-  border-radius: var(--r-full);
-  background: var(--bg-surface);
-  border: 1px solid var(--border-1);
-  font-size: 12.5px;
   color: var(--text-2);
   white-space: nowrap;
 }
 
-.wb-onb-progress__step i {
-  font-style: normal;
-  width: 18px;
-  height: 18px;
-  border-radius: var(--r-full);
-  background: var(--bg-muted);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 11px;
-  font-weight: var(--fw-semibold);
-}
-
 .wb-onb-progress__step--active {
-  color: var(--text-1);
-  border-color: var(--border-3);
-}
-
-.wb-onb-progress__step--active i {
-  background: var(--accent);
-  color: var(--accent-fg);
+  color: var(--accent);
+  font-weight: var(--fw-semibold);
 }
 
 .wb-onb-choices {
@@ -948,10 +936,9 @@
   color: var(--text-2);
 }
 
-.wb-onb-choice__tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+.wb-onb-choice__meta {
+  font-size: var(--fs-sm);
+  color: var(--text-3);
 }
 
 .wb-onb-choice__go {

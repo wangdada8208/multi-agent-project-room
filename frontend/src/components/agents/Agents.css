@@ -8,14 +8,16 @@
 .wb-create-room { display: grid; gap: 8px; padding: 16px; margin-bottom: 12px; border: 1px dashed var(--border-2); border-radius: var(--r-xl); background: var(--bg-surface); }
 .wb-create-room > div { display: flex; gap: 8px; flex-wrap: wrap; }
 .wb-create-room .input { flex: 1; min-width: 190px; }
-.wb-agents-section-head { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 0 0 12px; }
+.wb-agents-section-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 10px; margin: 0 0 12px; }
 .wb-agents-section-head h2 { font-size: 16px; font-weight: 650; letter-spacing: var(--tracking-tight); }
-.wb-agents-section-head > svg { color: var(--actor-cloud); }
+.wb-agents-section-head > svg { color: var(--actor-cloud); align-self: center; }
+.wb-section-note { font-size: 13px; color: var(--text-3); }
 .wb-cloud-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
-.wb-cloud-card.agents-preset-card { display: flex; flex-direction: row; align-items: center; justify-content: flex-start; width: 100%; min-width: 0; gap: 14px; padding: 16px 16px 16px 18px; border-radius: var(--r-xl); border: 1px solid var(--border-1); background: var(--bg-surface); box-shadow: var(--sh-1); text-align: left; cursor: pointer; color: var(--text-1); }
-.wb-cloud-card:hover { border-color: var(--border-2); box-shadow: var(--sh-2); }
-.wb-cloud-card[aria-expanded="true"] { border-color: var(--text-1); box-shadow: 0 0 0 1px var(--text-1), var(--sh-2); }
-.wb-cloud-card > .ui-avatar { --avatar-size: 44px; }
+.wb-cloud-card.agents-preset-card { display: flex; flex-direction: row; align-items: center; justify-content: flex-start; width: 100%; min-width: 0; gap: 14px; padding: 16px 16px 16px 18px; border-radius: var(--r-xl); border: 1px solid var(--border-1); background: var(--bg-surface); box-shadow: var(--sh-1); text-align: left; cursor: pointer; color: var(--text-1); transition: border-color var(--dur-1) var(--ease-standard), box-shadow var(--dur-2) var(--ease-standard); }
+.wb-cloud-card:hover { border-color: var(--border-3); box-shadow: var(--sh-2); }
+.wb-cloud-card[aria-expanded="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), var(--sh-2); }
+.wb-cloud-card__icon { width: 44px; height: 44px; border-radius: var(--r-md); display: grid; place-items: center; flex: none; color: var(--actor-cloud); background: var(--actor-cloud-bg); border: 1px solid var(--actor-cloud-border); }
+.wb-cloud-card__icon--sm { width: 34px; height: 34px; }
 .wb-cloud-card__copy { display: grid; flex: 1; min-width: 0; }
 .wb-cloud-card__copy strong { font-size: 15px; font-weight: 600; }
 .wb-cloud-card__copy small { font-size: 13px; line-height: 19px; color: var(--text-2); }
@@ -37,12 +39,12 @@
 .wb-connect-step > .copy-btn:hover { background: var(--accent-hover); }
 .wb-connect-step > .copy-btn.copied { background: var(--ok-bg); border-color: var(--ok-border); color: var(--ok); }
 .wb-invite-options { display: grid; gap: 10px; }
-.wb-invite-options .ui-switch { padding: 10px 12px; background: var(--bg-canvas); border: 1px solid var(--border-1); border-radius: 10px; }
-.wb-invite-options ul { padding-left: 18px; list-style: disc; font-size: 12.5px; line-height: 22px; color: var(--text-2); }
+.wb-invite-options .ui-switch { padding: 8px 0 10px; border-bottom: 1px solid var(--border-1); }
+.wb-invite-options ul { padding-left: 18px; list-style: disc; font-size: 12.5px; line-height: 22px; color: var(--text-2); font-variant-numeric: tabular-nums; }
 .wb-connect-more, .wb-local-install { font-size: 12.5px; color: var(--text-2); }
 .wb-connect-more p { margin-top: 6px; font-size: 12px; line-height: 18px; overflow-wrap: anywhere; }
 .wb-invite-summary, .wb-command-summary { display: none; }
-.wb-command.code-block, .wb-command { --command-ink: var(--gray-50); --command-bg: var(--gray-950); --command-muted: var(--gray-300); position: relative; padding: 0; margin: 0; border: 1px solid var(--border-2); border-radius: var(--r-lg); background: var(--command-bg); color: var(--command-ink); overflow: hidden; font-size: 12px; line-height: 19px; }
+.wb-command.code-block, .wb-command { --command-ink: var(--chamber-ink); --command-bg: var(--chamber-bg); --command-muted: var(--chamber-muted); position: relative; padding: 0; margin: 0; border: 1px solid var(--chamber-border); border-radius: var(--r-lg); background: var(--command-bg); color: var(--command-ink); overflow: hidden; font-size: 12px; line-height: 19px; }
 .wb-command header { display: flex; align-items: center; justify-content: space-between; min-height: 34px; padding: 0 6px 0 12px; border-bottom: 1px solid color-mix(in srgb, var(--command-ink) 13%, transparent); color: var(--command-muted); font: 12px/18px var(--font-sans); }
 .wb-command header > button:first-child { cursor: pointer; }
 .wb-command.code-block header .copy-btn { position: static; width: auto; padding: 0 8px; border: 0; min-height: 26px; border-radius: var(--r-sm); color: var(--command-ink); background: color-mix(in srgb, var(--command-ink) 13%, transparent); }
@@ -73,7 +75,7 @@
 .wb-local-card header > div { flex: 1; min-width: 0; }
 .wb-local-card header strong, .wb-local-card header small { display: block; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; }
 .wb-local-card header small, .wb-local-card p { font-size: 12px; color: var(--text-2); }
-.wb-local-card__icon { display: grid; place-items: center; flex: none; width: 34px; height: 34px; border-radius: var(--r-md); color: var(--actor-local); background: var(--actor-local-bg); }
+.wb-local-card__icon { display: grid; place-items: center; flex: none; width: 34px; height: 34px; border-radius: var(--r-md); color: var(--actor-local); background: var(--actor-local-bg); border: 1px solid var(--actor-local-border); }
 .wb-local-card .ui-button { max-width: 100%; white-space: normal; text-align: left; line-height: 18px; }
 .wb-local-card .ui-button svg { flex: none; }
 .wb-local-install { min-width: 0; max-width: 100%; }
@@ -90,7 +92,7 @@
 .wb-desktop-notice__icon { flex: none; display: grid; place-items: center; width: 40px; height: 40px; border-radius: var(--r-lg); color: var(--actor-local); background: var(--actor-local-bg); }
 .wb-desktop-notice h2 { font-size: 15px; font-weight: 600; }
 .wb-desktop-notice p { color: var(--text-2); font-size: 13.5px; line-height: 21px; }
-.wb-desktop-notice__tags { margin-block: 8px 12px; display: flex; flex-wrap: wrap; gap: 4px; }
+.wb-desktop-notice__list { margin-block: 8px 12px; font-size: 13px; color: var(--text-2); }
 .wb-desktop-notice .wb-actions > button { flex: 1; min-height: 40px; }
 .wb-desktop-notice .wb-actions > .copy-btn { justify-content: center; border-radius: var(--r-md); border: 1px solid var(--border-2); background: var(--bg-surface); color: var(--text-1); font-size: 13px; font-weight: 550; }
 .wb-desktop-notice .wb-actions > .copy-btn:hover { background: var(--bg-hover); }
