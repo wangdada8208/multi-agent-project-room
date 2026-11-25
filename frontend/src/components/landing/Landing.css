@@ -434,7 +434,7 @@
 }
 
 
-@media (min-width: 1024px) {
+@media (min-width: 640px) {
   .lp-hero .lp-hero__stage,
   .lp-hero .lp-stage-window {
     height: 100%;
@@ -1077,4 +1077,21 @@
 .lp-foot .closing__cta .btn--primary:hover,
 .lp-foot .closing__cta .ui-button--primary:hover {
   border-color: transparent;
+}
+
+
+@media (min-width: 640px) {
+  .lp-close-word {
+    display: block;
+  }
+}
+
+@media (max-width: 639px) {
+  .lp-close-word {
+    display: none;
+  }
+}
+
+.lp-close-word {
+  font-size: clamp(120px, 22vw, 216px);
 }

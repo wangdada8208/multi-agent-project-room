@@ -138,6 +138,7 @@ export function LandingPage() {
                 查看接入示例
               </Link>
             </div>
+            <div className="close__word lp-close-word" aria-hidden="true">协作空间</div>
           </div>
 
           <div className="closing__links">
