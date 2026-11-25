@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Lock } from 'lucide-react';
+import { ArrowUp, Lock } from 'lucide-react';
 import { AgentBrandIcon } from '../AgentBrandIcon';
 
 export function ScenePreview() {
@@ -85,6 +85,11 @@ export function ScenePreview() {
             </button>
           )}
         </div>
+      </div>
+
+      <div className="lp-stage-composer" aria-hidden="true">
+        <span>发消息，输入 @ 召唤 Agent…</span>
+        <span className="lp-stage-send"><ArrowUp size={14} strokeWidth={2} /></span>
       </div>
     </div>
   );

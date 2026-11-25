@@ -433,6 +433,51 @@
   }
 }
 
+
+@media (min-width: 1024px) {
+  .lp-hero .lp-hero__stage,
+  .lp-hero .lp-stage-window {
+    height: 100%;
+  }
+
+  .lp-hero .lp-stage-window {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .lp-hero .lp-stage-stream {
+    flex: 1 1 auto;
+  }
+
+  .lp-hero .lp-stage-row--gate {
+    margin-top: auto;
+  }
+}
+
+.lp-stage-composer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--line);
+  color: var(--p-muted);
+  font-size: 13px;
+  background: var(--p-bg);
+}
+
+.lp-stage-send {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--action);
+  color: var(--action-ink);
+  flex: none;
+}
+
 /* ── Screen 2: Architecture Diagram ── */
 
 .lp-arch {
