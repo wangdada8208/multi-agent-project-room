@@ -1,46 +1,52 @@
-import { Anchor, Lock, Pause, ShieldCheck } from "lucide-react";
+import type { CSSProperties } from 'react';
+import { Lock, ShieldCheck, Terminal, Users } from 'lucide-react';
 
-const SAFETY_ITEMS = [
+const SAFETY_GUARDS = [
   {
-    icon: Lock,
-    title: "端到端加密",
-    desc: "聊天正文只在房间成员的设备上解密。服务器只转发密文，不保存正文。",
+    Icon: ShieldCheck,
+    title: '房主核准入房',
+    desc: '通过邀请链接到达的人类访客或外部智能体默认处于待核准态，必须由房主当面点选「批准入房」后才进入会话成员列表。',
   },
   {
-    icon: ShieldCheck,
-    title: "房主审批入房",
-    desc: "协作者和 Agent 都要通过一次性邀请提交申请，房主批准后才能进入加密群。",
+    Icon: Lock,
+    title: '端到端密文转发',
+    desc: '房间开启 XMTP E2EE 后，对话正文仅在参与方终端与本地助记词加密库中解密，中心 Hub 与日志不落任何消息明文。',
   },
   {
-    icon: Pause,
-    title: "席位随时可控",
-    desc: "暂停、恢复、移出一键完成。移出时先退出加密群，再删除席位记录。",
+    Icon: Terminal,
+    title: '私有资料单次授权',
+    desc: '房间内协商建议属于不可信外部文本；任何本机私有文件读取与带副作用命令均须主人单次确认后才可执行。',
   },
   {
-    icon: Anchor,
-    title: "活动可追溯",
-    desc: "入房、审批、任务结论都写入活动记录，并定期做完整性校验。",
+    Icon: Users,
+    title: '一键暂停与即时撤销',
+    desc: '发现偏航可立即暂停指定 Agent 或将其移出房间，主人发出的取消指令直接联动终止后台队列，避免失控输出。',
   },
 ];
 
 export function SafetyGrid() {
   return (
-    <section className="lp-section" id="lp-safe">
-      <div className="lp-wrap">
-        <div className="lp-kicker">安全是默认值</div>
-        <h2 className="lp-h2">你不点头，谁也进不来。</h2>
-        <p className="lp-lead">
-          加密、审批、席位控制和活动记录都是默认开启的，不需要你懂加密协议。
+    <section
+      id="safety"
+      className="section ground-inverse lp-screen lp-safety"
+      style={{ '--h': 1 } as CSSProperties}
+    >
+      <div className="wrap">
+        <h2>你不点头，谁也进不来。</h2>
+        <p className="lead">
+          网络联通不等于授予信任。权限控制、密文边界与取消权全部收敛在房主一侧。
         </p>
 
-        <div className="lp-four">
-          {SAFETY_ITEMS.map(({ icon: Icon, title, desc }) => (
-            <div key={title} className="lp-four__item">
-              <span className="lp-four__ico" aria-hidden="true">
-                <Icon size={17} strokeWidth={1.85} />
+        <div className="lp-ledger">
+          {SAFETY_GUARDS.map(({ Icon, title, desc }) => (
+            <div key={title} className="lp-ledger__row">
+              <span className="lp-ledger__icon" aria-hidden="true">
+                <Icon size={20} strokeWidth={1.75} />
               </span>
-              <h4>{title}</h4>
-              <p>{desc}</p>
+              <div>
+                <h3>{title}</h3>
+                <p>{desc}</p>
+              </div>
             </div>
           ))}
         </div>

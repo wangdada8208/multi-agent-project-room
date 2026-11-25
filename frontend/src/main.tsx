@@ -5,6 +5,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { App } from "./App";
 import { initializeTheme } from "./lib/theme";
 import { ToastContainer } from "./components/ui/Toast";
+import "@fontsource-variable/host-grotesk";
+import "@fontsource-variable/jetbrains-mono";
 import "./styles.css";
 import "./styles/tokens.css";
 import "./styles/base.css";

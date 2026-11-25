@@ -1,63 +1,71 @@
 @import "tailwindcss";
 
 :root {
-  /* ---- 原始色板（暖中性灰，避免冷蓝紫科技感） ---- */
-  --gray-0: #ffffff;  --gray-25: #fcfcfb; --gray-50: #f7f7f5; --gray-100: #f1f1ee;
-  --gray-150: #e9e9e5; --gray-200: #dfdfda; --gray-300: #c8c8c2; --gray-400: #a0a099;
-  --gray-500: #7b7b74; --gray-600: #5d5d57; --gray-700: #44443f; --gray-800: #2b2b28;
-  --gray-900: #1b1b19; --gray-950: #121211;
+  /* ---- 原始色板（Limestone Sage & Mineral Forest Pine） ---- */
+  --gray-0: #ffffff;  --gray-25: #fafbfa; --gray-50: #f2f5f3; --gray-100: #ebefec;
+  --gray-150: #e0e7e3; --gray-200: #ced9d3; --gray-300: #b2c1ba; --gray-400: #7f948b;
+  --gray-500: #5a6f66; --gray-600: #465750; --gray-700: #2e3d37; --gray-800: #1c2b25;
+  --gray-900: #13211c; --gray-950: #0b1411;
 
   /* ---- 语义：表面 ---- */
-  --bg-canvas: #f7f7f5;        /* 应用底色 */
+  --bg-canvas: #f2f5f3;        /* 工作区底色 */
   --bg-surface: #ffffff;       /* 卡片 / 面板 */
   --bg-raised: #ffffff;        /* 弹层 */
-  --bg-subtle: #f2f2ef;        /* 次级填充、代码块 */
-  --bg-muted: #eaeae6;         /* 选中、按压 */
-  --bg-hover: rgba(24, 24, 18, 0.04);
-  --bg-press: rgba(24, 24, 18, 0.07);
-  --bg-rail: #f3f3f0;          /* 左侧房间切换栏 */
-  --bg-inverse: #161615;
-  --bg-overlay: rgba(18, 18, 14, 0.32);
-  --bg-me: #f4f4f0;            /* 我发出的消息底色 */
+  --bg-subtle: #ebefec;        /* 次级填充、代码块 */
+  --bg-muted: #e0e7e3;         /* 选中、按压 */
+  --bg-hover: rgba(19, 33, 28, 0.04);
+  --bg-press: rgba(19, 33, 28, 0.08);
+  --bg-rail: #111c18;          /* 左侧深林板岩导航栏 */
+  --bg-inverse: #111c18;
+  --bg-overlay: rgba(11, 20, 17, 0.36);
+  --bg-me: #e8f1ed;            /* 我发出的消息底色 */
 
-  /* ---- 语义：文字 ---- */
-  --text-1: #161615;   /* 主文字  对比度 17.9:1 */
-  --text-2: #57574f;   /* 次文字  对比度 7.2:1 */
-  --text-3: #85857c;   /* 辅助    对比度 3.9:1，仅用于 ≥12px 元信息 */
-  --text-inverse: #fafaf8;
-  --text-link: #1d5fd0;
+  /* ---- 侧栏专用高对比令牌（Operate 模式色区分离） ---- */
+  --rail-bg: #111c18;
+  --rail-surface: #182721;
+  --rail-ink: #eef3f0;
+  --rail-muted: #9eb3aa;
+  --rail-active: rgba(78, 195, 154, 0.16);
+  --rail-border: rgba(238, 243, 240, 0.10);
+
+  /* ---- 语义：文字（全面 >= 4.5:1 AA） ---- */
+  --text-1: #13211c;   /* 主文字  对比度 15.6:1 */
+  --text-2: #3c4f47;   /* 次文字  对比度 8.2:1 */
+  --text-3: #51665d;   /* 辅助    对比度 5.8:1 on #fff / 5.0:1 on #ebefec */
+  --text-inverse: #eef3f0;
+  --text-link: #155e4b;
 
   /* ---- 语义：描边 ---- */
-  --border-1: rgba(24, 24, 18, 0.08);
-  --border-2: rgba(24, 24, 18, 0.13);
-  --border-3: rgba(24, 24, 18, 0.22);
-  --focus-ring: 0 0 0 2px var(--bg-surface), 0 0 0 4px rgba(29, 95, 208, 0.45);
+  --border-1: rgba(19, 33, 28, 0.09);
+  --border-2: rgba(19, 33, 28, 0.15);
+  --border-3: rgba(19, 33, 28, 0.24);
+  --focus-ring: 0 0 0 2px var(--bg-surface), 0 0 0 4px rgba(21, 94, 75, 0.36);
 
-  /* ---- 语义：主操作（墨色，参考 Vercel / Linear 的克制主按钮） ---- */
-  --accent: #161615;
-  --accent-hover: #2b2b28;
+  /* ---- 语义：主操作（矿物森林绿，零荧光/零模板蓝紫） ---- */
+  --accent: #155e4b;
+  --accent-hover: #0e4a3b;
   --accent-fg: #ffffff;
 
   /* ---- 语义：状态 ---- */
-  --ok: #17784a;      --ok-bg: #e9f5ee;      --ok-border: #bfe0cc;
-  --warn: #9a5800;    --warn-bg: #fdf3e1;    --warn-border: #f0d6a6;
-  --danger: #be2a2a;  --danger-bg: #fcecea;  --danger-border: #f2c4c0;
-  --info: #1d5fd0;    --info-bg: #ecf2fd;    --info-border: #c6d7f6;
+  --ok: #157347;      --ok-bg: #e7f4ed;      --ok-border: #b6dec7;
+  --warn: #944d00;    --warn-bg: #fbf1e2;    --warn-border: #ebd1a8;
+  --danger: #b4232a;  --danger-bg: #fcebec;  --danger-border: #efc0c3;
+  --info: #155e4b;    --info-bg: #e5f1ec;    --info-border: #b6d6c9;
 
-  /* ---- 语义：参与者身份（形状 + 字形 + 颜色 三重编码） ---- */
-  --actor-me-bg: #161615;      --actor-me-fg: #ffffff;
-  --actor-human-bg: #efe8dd;   --actor-human-fg: #6a5236;
-  --actor-human2-bg: #e2ece4;  --actor-human2-fg: #2f6440;
-  --actor-cloud: #0a69ab;      --actor-cloud-bg: #e6f1fa;  --actor-cloud-border: #bcd9ef;
-  --actor-local: #5b40c0;      --actor-local-bg: #efecfb;  --actor-local-border: #d3cbf3;
-  --presence-online: #22a35a;  --presence-paused: #a0a099; --presence-pending: #d48a10;
+  /* ---- 语义：参与者身份（零紫/薰衣草：云端森绿、本机赤陶） ---- */
+  --actor-me-bg: #13211c;      --actor-me-fg: #ffffff;
+  --actor-human-bg: #ebe5dc;   --actor-human-fg: #5c462e;
+  --actor-human2-bg: #e1ede6;  --actor-human2-fg: #265738;
+  --actor-cloud: #155e4b;      --actor-cloud-bg: #e5f1ec;  --actor-cloud-border: #b6d6c9;
+  --actor-local: #9a4b12;      --actor-local-bg: #f9ede5;  --actor-local-border: #e6c4ad;
+  --presence-online: #1d9a54;  --presence-paused: #6e8279; --presence-pending: #c07408;
 
-  /* ---- 字体 ---- */
-  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Hiragino Sans GB", "Noto Sans CJK SC", "Noto Sans SC", "Microsoft YaHei", system-ui, sans-serif;
-  --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "PingFang SC", "Noto Sans CJK SC", "Microsoft YaHei", system-ui, sans-serif;
-  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Mono", "Noto Sans Mono CJK SC", Menlo, Consolas, monospace;
+  /* ---- 字体（Host Grotesk + JetBrains Mono + 中文清晰回退） ---- */
+  --font-sans: "Host Grotesk Variable", "PingFang SC", "Hiragino Sans GB", "Noto Sans CJK SC", "Noto Sans SC", "Microsoft YaHei", system-ui, sans-serif;
+  --font-display: "Host Grotesk Variable", "PingFang SC", "Noto Sans CJK SC", "Microsoft YaHei", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, "SF Mono", "Noto Sans Mono CJK SC", Menlo, Consolas, monospace;
 
-  /* 字号/行高（px）  */
+  /* 字号/行高（px，全站正文字号 >= 12px） */
   --fs-caption: 12px;  --lh-caption: 18px;
   --fs-sm: 13px;       --lh-sm: 20px;
   --fs-body: 14px;     --lh-body: 22px;
@@ -66,83 +74,88 @@
   --fs-h3: 18px;       --lh-h3: 26px;
   --fs-h2: 22px;       --lh-h2: 30px;
   --fs-h1: 28px;       --lh-h1: 36px;
-  --fs-display: 52px;  --lh-display: 62px;
-  --fw-regular: 400; --fw-medium: 500; --fw-semibold: 600; --fw-bold: 650;
-  --tracking-tight: -0.012em; --tracking-display: -0.028em;
+  --fs-display: 52px;  --lh-display: 60px;
+  --fw-regular: 400; --fw-medium: 500; --fw-semibold: 550; --fw-bold: 600;
+  --tracking-tight: -0.014em; --tracking-display: -0.03em;
 
   /* ---- 圆角 ---- */
-  --r-xs: 4px; --r-sm: 6px; --r-md: 8px; --r-lg: 12px; --r-xl: 16px; --r-2xl: 20px; --r-full: 999px;
+  --r-xs: 4px; --r-sm: 6px; --r-md: 8px; --r-lg: 10px; --r-xl: 12px; --r-2xl: 16px; --r-full: 999px;
 
   /* ---- 间距（4px 栅格） ---- */
   --s-1: 4px; --s-2: 8px; --s-3: 12px; --s-4: 16px; --s-5: 20px; --s-6: 24px;
   --s-8: 32px; --s-10: 40px; --s-12: 48px; --s-16: 64px; --s-20: 80px; --s-24: 96px;
 
-  /* ---- 阴影（低饱和、双层） ---- */
-  --sh-1: 0 1px 2px rgba(20, 20, 14, 0.05);
-  --sh-2: 0 1px 2px rgba(20, 20, 14, 0.04), 0 4px 12px rgba(20, 20, 14, 0.05);
-  --sh-3: 0 2px 6px rgba(20, 20, 14, 0.05), 0 12px 28px -6px rgba(20, 20, 14, 0.12);
-  --sh-pop: 0 0 0 1px var(--border-1), 0 16px 48px -10px rgba(20, 20, 14, 0.22);
+  /* ---- 克制线框阴影 ---- */
+  --sh-1: 0 1px 2px rgba(13, 25, 20, 0.04);
+  --sh-2: 0 1px 3px rgba(13, 25, 20, 0.05), 0 6px 16px -6px rgba(13, 25, 20, 0.06);
+  --sh-3: 0 2px 8px rgba(13, 25, 20, 0.06), 0 12px 28px -6px rgba(13, 25, 20, 0.10);
+  --sh-pop: 0 0 0 1px var(--border-2), 0 16px 40px -10px rgba(13, 25, 20, 0.18);
 
   /* ---- 动效 ---- */
-  --dur-1: 120ms;  /* hover / 颜色 */
-  --dur-2: 180ms;  /* 按压 / 开关 */
-  --dur-3: 240ms;  /* 面板 / 弹层 */
-  --dur-4: 360ms;  /* 抽屉 / 底部表单 */
-  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --dur-1: 120ms;
+  --dur-2: 180ms;
+  --dur-3: 240ms;
+  --dur-4: 340ms;
+  --ease-standard: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-exit: cubic-bezier(0.4, 0, 1, 1);
-  --ease-sheet: cubic-bezier(0.32, 0.72, 0, 1); /* iOS sheet */
+  --ease-sheet: cubic-bezier(0.32, 0.72, 0, 1);
 
   /* ---- 布局 ---- */
   --rail-w: 248px; --inspector-w: 340px; --header-h: 56px; --composer-max: 760px; --content-max: 1120px;
-  /* 断点（媒体查询无法读变量，此处为文档值）：sm 480 / md 768 / lg 1024 / xl 1280 / 2xl 1440 */
 
   /* ---- 层级 ---- */
   --z-sticky: 10; --z-header: 20; --z-drawer: 40; --z-overlay: 50; --z-modal: 60; --z-popover: 70; --z-toast: 80;
 
-  /* ---- 安全区（生产：env()；原型手机框内模拟） ---- */
+  /* ---- 安全区 ---- */
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 [data-theme="dark"] {
-  --bg-canvas: #0f0f0e; --bg-surface: #171716; --bg-raised: #1d1d1b; --bg-subtle: #1f1f1d;
-  --bg-muted: #2a2a27; --bg-hover: rgba(255, 255, 250, 0.05); --bg-press: rgba(255, 255, 250, 0.08);
-  --bg-rail: #131312; --bg-inverse: #f2f2ee; --bg-overlay: rgba(0, 0, 0, 0.55); --bg-me: #1e1e1c;
-  --text-1: #ededea; --text-2: #a9a9a1; --text-3: #7c7c74; --text-inverse: #121211; --text-link: #7aa7f5;
-  --border-1: rgba(255, 255, 250, 0.08); --border-2: rgba(255, 255, 250, 0.13); --border-3: rgba(255, 255, 250, 0.22);
-  --accent: #ededea; --accent-hover: #ffffff; --accent-fg: #121211;
+  --bg-canvas: #0b1411; --bg-surface: #111c18; --bg-raised: #172620; --bg-subtle: #16241e;
+  --bg-muted: #1f3029; --bg-hover: rgba(238, 243, 240, 0.05); --bg-press: rgba(238, 243, 240, 0.09);
+  --bg-rail: #08100d; --bg-inverse: #eef3f0; --bg-overlay: rgba(4, 9, 7, 0.62); --bg-me: #152b22;
+  --rail-bg: #08100d; --rail-surface: #111f1a; --rail-ink: #eef3f0; --rail-muted: #98aea4;
+  --rail-active: rgba(78, 195, 154, 0.16); --rail-border: rgba(238, 243, 240, 0.10);
+  --text-1: #eef3f0; --text-2: #a9c0b6; --text-3: #839b91; --text-inverse: #111c18; --text-link: #4ec39a;
+  --border-1: rgba(238, 243, 240, 0.09); --border-2: rgba(238, 243, 240, 0.15); --border-3: rgba(238, 243, 240, 0.24);
+  --accent: #4ec39a; --accent-hover: #67d1ac; --accent-fg: #0a1b14;
+  --focus-ring: 0 0 0 2px var(--bg-surface), 0 0 0 4px rgba(78, 195, 154, 0.42);
   --ok: #4cc27f; --ok-bg: rgba(76, 194, 127, 0.12); --ok-border: rgba(76, 194, 127, 0.3);
   --warn: #e9a640; --warn-bg: rgba(233, 166, 64, 0.12); --warn-border: rgba(233, 166, 64, 0.32);
   --danger: #f07171; --danger-bg: rgba(240, 113, 113, 0.12); --danger-border: rgba(240, 113, 113, 0.3);
-  --info: #7aa7f5; --info-bg: rgba(122, 167, 245, 0.12); --info-border: rgba(122, 167, 245, 0.3);
-  --actor-me-bg: #ededea; --actor-me-fg: #121211;
-  --actor-human-bg: #3a3127; --actor-human-fg: #e6cfaf; --actor-human2-bg: #24352a; --actor-human2-fg: #a8d8b6;
-  --actor-cloud: #6db8ee; --actor-cloud-bg: rgba(109, 184, 238, 0.13); --actor-cloud-border: rgba(109, 184, 238, 0.3);
-  --actor-local: #a998f4; --actor-local-bg: rgba(169, 152, 244, 0.13); --actor-local-border: rgba(169, 152, 244, 0.3);
-  --sh-1: 0 1px 2px rgba(0, 0, 0, 0.4); --sh-2: 0 1px 2px rgba(0,0,0,.4), 0 4px 12px rgba(0,0,0,.3);
-  --sh-3: 0 2px 6px rgba(0,0,0,.4), 0 12px 28px -6px rgba(0,0,0,.5);
-  --sh-pop: 0 0 0 1px var(--border-2), 0 16px 48px -10px rgba(0, 0, 0, 0.7);
+  --info: #4ec39a; --info-bg: rgba(78, 195, 154, 0.12); --info-border: rgba(78, 195, 154, 0.3);
+  --actor-me-bg: #eef3f0; --actor-me-fg: #111c18;
+  --actor-human-bg: #362e24; --actor-human-fg: #e5cfb1; --actor-human2-bg: #1e3328; --actor-human2-fg: #a2d8b4;
+  --actor-cloud: #68cfb0; --actor-cloud-bg: rgba(104, 207, 176, 0.13); --actor-cloud-border: rgba(104, 207, 176, 0.3);
+  --actor-local: #e89b58; --actor-local-bg: rgba(232, 155, 88, 0.13); --actor-local-border: rgba(232, 155, 88, 0.32);
+  --sh-1: 0 1px 2px rgba(0, 0, 0, 0.38); --sh-2: 0 1px 3px rgba(0,0,0,.42), 0 4px 12px rgba(0,0,0,.28);
+  --sh-3: 0 2px 8px rgba(0,0,0,.45), 0 12px 28px -6px rgba(0,0,0,.52);
+  --sh-pop: 0 0 0 1px var(--border-2), 0 16px 40px -10px rgba(0, 0, 0, 0.72);
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme]) {
-    --bg-canvas: #0f0f0e; --bg-surface: #171716; --bg-raised: #1d1d1b; --bg-subtle: #1f1f1d;
-    --bg-muted: #2a2a27; --bg-hover: rgba(255, 255, 250, 0.05); --bg-press: rgba(255, 255, 250, 0.08);
-    --bg-rail: #131312; --bg-inverse: #f2f2ee; --bg-overlay: rgba(0, 0, 0, 0.55); --bg-me: #1e1e1c;
-    --text-1: #ededea; --text-2: #a9a9a1; --text-3: #7c7c74; --text-inverse: #121211; --text-link: #7aa7f5;
-    --border-1: rgba(255, 255, 250, 0.08); --border-2: rgba(255, 255, 250, 0.13); --border-3: rgba(255, 255, 250, 0.22);
-    --accent: #ededea; --accent-hover: #ffffff; --accent-fg: #121211;
+    --bg-canvas: #0b1411; --bg-surface: #111c18; --bg-raised: #172620; --bg-subtle: #16241e;
+    --bg-muted: #1f3029; --bg-hover: rgba(238, 243, 240, 0.05); --bg-press: rgba(238, 243, 240, 0.09);
+    --bg-rail: #08100d; --bg-inverse: #eef3f0; --bg-overlay: rgba(4, 9, 7, 0.62); --bg-me: #152b22;
+    --rail-bg: #08100d; --rail-surface: #111f1a; --rail-ink: #eef3f0; --rail-muted: #98aea4;
+    --rail-active: rgba(78, 195, 154, 0.16); --rail-border: rgba(238, 243, 240, 0.10);
+    --text-1: #eef3f0; --text-2: #a9c0b6; --text-3: #839b91; --text-inverse: #111c18; --text-link: #4ec39a;
+    --border-1: rgba(238, 243, 240, 0.09); --border-2: rgba(238, 243, 240, 0.15); --border-3: rgba(238, 243, 240, 0.24);
+    --accent: #4ec39a; --accent-hover: #67d1ac; --accent-fg: #0a1b14;
+    --focus-ring: 0 0 0 2px var(--bg-surface), 0 0 0 4px rgba(78, 195, 154, 0.42);
     --ok: #4cc27f; --ok-bg: rgba(76, 194, 127, 0.12); --ok-border: rgba(76, 194, 127, 0.3);
     --warn: #e9a640; --warn-bg: rgba(233, 166, 64, 0.12); --warn-border: rgba(233, 166, 64, 0.32);
     --danger: #f07171; --danger-bg: rgba(240, 113, 113, 0.12); --danger-border: rgba(240, 113, 113, 0.3);
-    --info: #7aa7f5; --info-bg: rgba(122, 167, 245, 0.12); --info-border: rgba(122, 167, 245, 0.3);
-    --actor-me-bg: #ededea; --actor-me-fg: #121211;
-    --actor-human-bg: #3a3127; --actor-human-fg: #e6cfaf; --actor-human2-bg: #24352a; --actor-human2-fg: #a8d8b6;
-    --actor-cloud: #6db8ee; --actor-cloud-bg: rgba(109, 184, 238, 0.13); --actor-cloud-border: rgba(109, 184, 238, 0.3);
-    --actor-local: #a998f4; --actor-local-bg: rgba(169, 152, 244, 0.13); --actor-local-border: rgba(169, 152, 244, 0.3);
-    --sh-1: 0 1px 2px rgba(0, 0, 0, 0.4); --sh-2: 0 1px 2px rgba(0,0,0,.4), 0 4px 12px rgba(0,0,0,.3);
-    --sh-3: 0 2px 6px rgba(0,0,0,.4), 0 12px 28px -6px rgba(0,0,0,.5);
-    --sh-pop: 0 0 0 1px var(--border-2), 0 16px 48px -10px rgba(0, 0, 0, 0.7);
+    --info: #4ec39a; --info-bg: rgba(78, 195, 154, 0.12); --info-border: rgba(78, 195, 154, 0.3);
+    --actor-me-bg: #eef3f0; --actor-me-fg: #111c18;
+    --actor-human-bg: #362e24; --actor-human-fg: #e5cfb1; --actor-human2-bg: #1e3328; --actor-human2-fg: #a2d8b4;
+    --actor-cloud: #68cfb0; --actor-cloud-bg: rgba(104, 207, 176, 0.13); --actor-cloud-border: rgba(104, 207, 176, 0.3);
+    --actor-local: #e89b58; --actor-local-bg: rgba(232, 155, 88, 0.13); --actor-local-border: rgba(232, 155, 88, 0.32);
+    --sh-1: 0 1px 2px rgba(0, 0, 0, 0.38); --sh-2: 0 1px 3px rgba(0,0,0,.42), 0 4px 12px rgba(0,0,0,.28);
+    --sh-3: 0 2px 8px rgba(0,0,0,.45), 0 12px 28px -6px rgba(0,0,0,.52);
+    --sh-pop: 0 0 0 1px var(--border-2), 0 16px 40px -10px rgba(0, 0, 0, 0.72);
   }
 }
 
@@ -171,73 +184,66 @@
   --breakpoint-2xl: 90rem;
 }
 
-/* Palette used by the existing pages until their redesign lands. */
+/* 兼容既有页面使用的语义别名（统一映射到 Mineral Forest Pine & Sage） */
 :root {
-  /* Apple HIG Surface & Canvas Tokens */
-  --bg-page: #ffffff;
-  --legacy-bg-canvas: #f5f5f7;
-  --bg-card: #ffffff;
-  --legacy-bg-subtle: #f5f5f7;
-  --legacy-bg-hover: rgba(0, 0, 0, 0.04);
-  --bg-elevated: #fbfbfd;
+  --bg-page: var(--bg-surface);
+  --legacy-bg-canvas: var(--bg-canvas);
+  --bg-card: var(--bg-surface);
+  --legacy-bg-subtle: var(--bg-subtle);
+  --legacy-bg-hover: var(--bg-hover);
+  --bg-elevated: var(--bg-raised);
 
-  /* Apple HIG Ink & Text Hierarchy */
-  --text-primary: #1d1d1f;
-  --text-secondary: #6e6e73;
-  --text-muted: #86868b;
+  --text-primary: var(--text-1);
+  --text-secondary: var(--text-2);
+  --text-muted: var(--text-3);
 
-  /* System Accent (Apple Blue) */
-  --legacy-accent: #0071e3;
-  --legacy-accent-hover: #0077ed;
-  --accent-light: rgba(0, 113, 227, 0.08);
-  --accent-border: rgba(0, 113, 227, 0.22);
-  --legacy-focus-ring: 0 0 0 3px rgba(0, 113, 227, 0.18);
+  --legacy-accent: var(--accent);
+  --legacy-accent-hover: var(--accent-hover);
+  --accent-light: rgba(21, 94, 75, 0.10);
+  --accent-border: rgba(21, 94, 75, 0.24);
+  --legacy-focus-ring: var(--focus-ring);
 
-  /* Semantic Status Colors */
-  --success: #1d8348;
-  --success-bg: rgba(29, 131, 72, 0.08);
-  --success-border: rgba(29, 131, 72, 0.22);
+  --success: var(--ok);
+  --success-bg: var(--ok-bg);
+  --success-border: var(--ok-border);
 
-  --warning: #b25000;
-  --warning-bg: rgba(178, 80, 0, 0.08);
-  --warning-border: rgba(178, 80, 0, 0.22);
+  --warning: var(--warn);
+  --warning-bg: var(--warn-bg);
+  --warning-border: var(--warn-border);
 
-  --legacy-danger: #d70015;
-  --legacy-danger-bg: rgba(215, 0, 21, 0.07);
-  --legacy-danger-border: rgba(215, 0, 21, 0.20);
+  --legacy-danger: var(--danger);
+  --legacy-danger-bg: var(--danger-bg);
+  --legacy-danger-border: var(--danger-border);
 
-  /* Borders, Radii & Elevation */
-  --border: rgba(0, 0, 0, 0.08);
-  --border-strong: rgba(0, 0, 0, 0.14);
+  --border: var(--border-1);
+  --border-strong: var(--border-2);
 
-  --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius-lg: 18px;
-  --radius-pill: 980px;
+  --radius-sm: var(--r-sm);
+  --radius-md: var(--r-md);
+  --radius-lg: var(--r-lg);
+  --radius-pill: var(--r-full);
 
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.03);
-  --shadow-md: 0 6px 20px rgba(0, 0, 0, 0.05);
-  --shadow-lg: 0 20px 48px rgba(0, 0, 0, 0.10);
+  --shadow-sm: var(--sh-1);
+  --shadow-md: var(--sh-2);
+  --shadow-lg: var(--sh-3);
 
-  /* Typography */
-  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", sans-serif;
-  --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+  --font: var(--font-sans);
+  --mono: var(--font-mono);
 
-  /* Backward-compatible semantic aliases */
-  --bg: var(--legacy-bg-canvas);
-  --surface: var(--bg-card);
-  --surface-soft: var(--legacy-bg-subtle);
-  --text: var(--text-primary);
-  --legacy-text-2: var(--text-secondary);
-  --legacy-text-3: var(--text-muted);
+  --bg: var(--bg-canvas);
+  --surface: var(--bg-surface);
+  --surface-soft: var(--bg-subtle);
+  --text: var(--text-1);
+  --legacy-text-2: var(--text-2);
+  --legacy-text-3: var(--text-3);
   --accent-soft: var(--accent-light);
-  --green: var(--success);
-  --green-soft: var(--success-bg);
-  --green-border: var(--success-border);
-  --red: var(--legacy-danger);
-  --red-soft: var(--legacy-danger-bg);
-  --amber: var(--warning);
-  --amber-soft: var(--warning-bg);
-  --radius: var(--radius-lg);
-  --shadow: var(--shadow-md);
+  --green: var(--ok);
+  --green-soft: var(--ok-bg);
+  --green-border: var(--ok-border);
+  --red: var(--danger);
+  --red-soft: var(--danger-bg);
+  --amber: var(--warn);
+  --amber-soft: var(--warn-bg);
+  --radius: var(--r-lg);
+  --shadow: var(--sh-2);
 }

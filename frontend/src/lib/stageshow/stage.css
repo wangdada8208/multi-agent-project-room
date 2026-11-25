@@ -232,16 +232,11 @@
     --ss-shadow-window: 0 0 0 1px rgba(214, 232, 255, 0.55);
     --ss-shadow-float: 0 0 0 1px rgba(214, 232, 255, 0.7);
     --ss-shadow-card: 0 0 0 1px rgba(214, 232, 255, 0.35);
-    --ss-shadow-hero: 0 0 0 1px rgba(214, 232, 255, 0.55);
-    --ss-shadow-satellite: 0 0 0 1px rgba(214, 232, 255, 0.8);
-    --ss-shadow-ground: 0 0 0 1px rgba(214, 232, 255, 0.7);
+    --ss-shadow-hero: 0 0 0 1px rgba(19, 34, 41, 0.14);
+    --ss-shadow-satellite: 0 0 0 1px rgba(19, 34, 41, 0.18);
+    --ss-shadow-ground: 0 0 0 1px rgba(19, 34, 41, 0.15);
     background-color: var(--ss-well);
-    background-image:
-      linear-gradient(rgba(214, 232, 255, 0.08) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(214, 232, 255, 0.08) 1px, transparent 1px);
-    background-size: 16px 16px;
-    /* Shift the grid so window edges sit on its lines: a 24px gutter wants 8px */
-    background-position: var(--ss-grid-x, 0) var(--ss-grid-y, 0);
+    background-image: none;
   }
 
   /* Glass: frosted, translucent panels over a soft color field drawn from the

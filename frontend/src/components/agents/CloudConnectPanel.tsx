@@ -6,7 +6,7 @@ import type { CloudAgentPreset } from "../../lib/agentPresets";
 import type { Room } from "../../types/chat";
 import { CopyButton } from "../CopyButton";
 import { RequestActions } from "../room/PendingRequestBanner";
-import { Avatar } from "../ui/Avatar";
+import { AgentBrandIcon } from "../AgentBrandIcon";
 import { Button } from "../ui/Button";
 import { IconButton } from "../ui/IconButton";
 import { Switch } from "../ui/Switch";
@@ -30,7 +30,7 @@ export function CloudConnectPanel({ preset, roomId, roomName, rooms, roomsLoaded
   compact = false, defaultApproval = true }: CloudConnectPanelProps) {
   return <section className={`wb-cloud-connect${compact ? " wb-cloud-connect--compact" : ""}`} aria-label={`${preset.title} 云端接入`}>
     <header className="wb-connect-head">
-      <Avatar actor="cloud" name={preset.title} size="md" />
+      <AgentBrandIcon brand={preset.id} kind="cloud" size="md" label={preset.title} />
       <h3>{preset.title} 云端接入<small>{roomName ? `接入到「${roomName}」` : "生成一次性加密邀请"}</small></h3>
       <IconButton label="关闭云端接入" size="sm" onClick={onClose}><X size={16} /><span className="sr-only">关闭云端接入</span></IconButton>
     </header>

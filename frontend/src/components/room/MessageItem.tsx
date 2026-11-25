@@ -4,6 +4,7 @@ import type { MentionCandidate } from "../../lib/domain/mentions";
 import type { DisplayMessage } from "../../lib/domain/displayMessages";
 import { detectConflicts } from "../ChatMessage";
 import { CopyButton } from "../CopyButton";
+import { AgentBrandIcon } from "../AgentBrandIcon";
 import { Avatar } from "../ui/Avatar";
 import { IconButton } from "../ui/IconButton";
 import { Tag } from "../ui/Tag";
@@ -35,7 +36,11 @@ export function MessageItem({ message, replyTo, owner, candidates, onReply, onPr
       onPointerDown={(event) => {
         if (event.pointerType === "touch") hold.current = window.setTimeout(() => setMenu(true), 500);
       }} onPointerMove={finishHold} onPointerUp={finishHold} onPointerCancel={finishHold} onPointerLeave={finishHold}>
-      <Avatar actor={message.actor} name={name} />
+      {(message.actor === "cloud" || message.actor === "local") ? (
+        <AgentBrandIcon brand={name} kind={message.actor} size="md" label={name} />
+      ) : (
+        <Avatar actor={message.actor} name={name} />
+      )}
       <div className="wb-message__content">
         <header>
           <strong>{name}</strong>

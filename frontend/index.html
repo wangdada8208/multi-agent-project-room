@@ -1,10 +1,80 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-type="software" data-radius="soft" data-ground="sage" data-buttons="solid" data-motion>
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <title>Multi-Agent 协作空间</title>
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%231d1d1f'/%3E%3Cpath d='M16 7.5 24 12l-8 4.5L8 12 16 7.5Z' fill='none' stroke='%23ffffff' stroke-width='2' stroke-linejoin='round'/%3E%3Cpath d='M8 16.5 16 21l8-4.5M8 21l8 4.5 8-4.5' fill='none' stroke='%23ffffff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" />
+    <title>Multi-Agent 协作空间 — 人类与 AI Agent 端到端加密项目协作室</title>
+    <meta name="description" content="两名开发者带上各自常用的云端或本机 AI Agent，在同一个 XMTP 端到端加密房间协商方案；房主逐席核准接入，私有文件与密钥永不出机。" />
+    <meta name="site-kind" content="software" />
+    <meta name="page-type" content="software" />
+    <meta name="theme-color" content="#f7f8f7" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Multi-Agent 协作空间" />
+    <meta property="og:description" content="云端与电脑端 AI Agent 协同接入的端到端加密项目协作室。" />
+    <meta property="og:image" content="/share.jpg" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/favicon.svg" />
+
+    <link rel="stylesheet" href="/assets/system.css" data-landing-kit="1" />
+    <link rel="stylesheet" href="/assets/ui/cards.css" data-landing-kit="1" />
+    <link rel="stylesheet" href="/assets/motion/motion.css" data-landing-kit="1" />
+    <link rel="stylesheet" href="/assets/backgrounds/backgrounds.css" data-landing-kit="1" />
+    <link rel="stylesheet" href="/assets/layout/layout.css" data-landing-kit="1" />
+    <link rel="stylesheet" href="/assets/icons/icon.css" data-landing-kit="1" />
+    <link rel="stylesheet" href="/assets/diagrams/diagram.css" data-landing-kit="1" />
+    <link rel="stylesheet" href="/assets/moments/line-carries-colour/moment.css" data-landing-kit="1" />
+
+    <style data-landing-palette="1">
+      :root {
+        --p-bg: #f7f8f7;
+        --p-surface: #ebefec;
+        --p-ink: #13211c;
+        --p-muted: #465750;
+        --p-accent: #155e4b;
+        --p-accent-ink: #ffffff;
+        --p-action: #155e4b;
+        --p-action-ink: #ffffff;
+        --p-inv-bg: #111c18;
+        --p-inv-surface: #182721;
+        --p-inv-ink: #eef3f0;
+        --p-inv-muted: #a4b8b0;
+        --p-inv-accent: #4ec39a;
+        --p-inv-accent-ink: #0a1b14;
+        --p-inv-action: #4ec39a;
+        --p-inv-action-ink: #0a1b14;
+
+        --ground-bg: #d7e0dc;
+        --ground-surface: #e8eeeb;
+        --ground-ink: #13211c;
+        --ground-muted: #455952;
+        --ground-accent: #155e4b;
+
+        --font-display: "Host Grotesk Variable", "PingFang SC", "Hiragino Sans GB", "Noto Sans CJK SC", "Microsoft YaHei", system-ui, sans-serif;
+        --font-text: "Host Grotesk Variable", "PingFang SC", "Hiragino Sans GB", "Noto Sans CJK SC", "Microsoft YaHei", system-ui, sans-serif;
+        --font-mono: "JetBrains Mono Variable", ui-monospace, "SF Mono", "Noto Sans Mono CJK SC", Menlo, Consolas, monospace;
+
+        --r-sm: 6px;
+        --r-md: 8px;
+        --r-lg: 12px;
+      }
+    </style>
+
+    <script>
+      (() => {
+        const root = document.documentElement;
+        const isLanding = location.pathname === '/' || location.pathname === '';
+        root.dataset.surface = isLanding ? 'landing' : 'app';
+        if (isLanding) {
+          root.classList.add('mo-js', 'm-enter');
+          setTimeout(() => root.classList.remove('m-enter'), 2500);
+        } else {
+          document.querySelectorAll('link[data-landing-kit="1"]').forEach((link) => {
+            link.disabled = true;
+          });
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

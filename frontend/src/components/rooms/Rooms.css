@@ -163,19 +163,19 @@
   flex-direction: column;
   gap: 12px;
   padding: 18px 18px 14px;
-  border-radius: var(--r-xl);
+  border-radius: var(--r-lg);
   background: var(--bg-surface);
-  border: 1px solid var(--border-1);
-  box-shadow: var(--sh-1);
+  border: 1px solid var(--border-2);
+  box-shadow: none;
   cursor: pointer;
   text-align: left;
-  transition: border-color var(--dur-1), box-shadow var(--dur-2), transform var(--dur-2);
+  transition: border-color var(--dur-1) var(--ease-standard), box-shadow var(--dur-2) var(--ease-standard), transform var(--dur-2) var(--ease-standard);
   min-width: 0;
   color: var(--text-1);
 }
 
 .wb-room-card:hover {
-  border-color: var(--border-2);
+  border-color: var(--accent);
   box-shadow: var(--sh-2);
   transform: translateY(-1px);
 }
@@ -298,7 +298,7 @@
 
 .wb-room-card__foot .ui-avatar {
   --avatar-size: 24px;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .wb-room-card__foot .ui-avatar__mark {
@@ -308,7 +308,7 @@
 .wb-room-card__foot .ui-avatar-stack__overflow {
   min-width: 24px;
   height: 24px;
-  font-size: 10.5px;
+  font-size: 12px;
 }
 
 .wb-room-card__counts {
@@ -700,7 +700,7 @@
 
 .wb-preview-rule__scope code {
   font-family: var(--font-mono);
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--text-3);
   margin-left: 6px;
 }
@@ -878,7 +878,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: var(--fw-semibold);
 }
 

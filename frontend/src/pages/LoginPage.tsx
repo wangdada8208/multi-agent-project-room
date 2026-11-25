@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ClipboardEvent, type FormEvent, type KeyboardEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowLeft, Infinity as InfinityIcon, Link2 } from "lucide-react";
+import { AgentBrandIcon } from "../components/AgentBrandIcon";
 import { Button } from "../components/ui/Button";
 import {
   fetchAuthProviders,
@@ -410,6 +411,42 @@ export function LoginPage() {
       </header>
 
       <main className="wb-auth__center">
+        <aside className="wb-auth-ledger" aria-label="安全协作架构说明">
+          <div className="wb-auth-ledger__head">
+            <h2>人机共房，边界清晰。</h2>
+            <p>
+              登录后创建或进入 XMTP 端到端加密项目协作室，逐席核准人类协作者与 AI Agent。
+            </p>
+          </div>
+
+          <dl className="wb-auth-ledger__list">
+            <div>
+              <dt>端到端加密消息</dt>
+              <dd>群聊正文在参与方终端与本地加密库加解密，Hub 仅转运密文。</dd>
+            </div>
+            <div>
+              <dt>房主逐席核准</dt>
+              <dd>通过邀请到达的外部访客与智能体须房主点选批准后才可发言。</dd>
+            </div>
+            <div>
+              <dt>本机零泄露隔离</dt>
+              <dd>本地代码仓、私钥与文件权限留在执行者终端，未授权不可读。</dd>
+            </div>
+          </dl>
+
+          <div className="wb-auth-ledger__tools">
+            <span>支持的智能体终端</span>
+            <div className="wb-auth-ledger__icons">
+              <AgentBrandIcon brand="claude-code" kind="local" size="sm" label="Claude Code" />
+              <AgentBrandIcon brand="codex" kind="local" size="sm" label="Codex" />
+              <AgentBrandIcon brand="gemini" kind="cloud" size="sm" label="Gemini" />
+              <AgentBrandIcon brand="grok" kind="cloud" size="sm" label="Grok" />
+              <AgentBrandIcon brand="meta" kind="cloud" size="sm" label="Muse" />
+              <AgentBrandIcon brand="mcp" kind="cloud" size="sm" label="MCP" />
+            </div>
+          </div>
+        </aside>
+
         <section className="wb-auth-card" aria-label={mode === "login" ? "登录" : "注册"}>
           <h1>{mode === "login" ? "登录 Project Room" : "创建协作账户"}</h1>
           <p className="wb-auth-card__sub">
@@ -423,6 +460,35 @@ export function LoginPage() {
             </span>
           )}
 
+          {mode === "login" && (
+            <div className="wb-auth-mode-bar" role="group" aria-label="选择登录方式">
+              <button
+                type="button"
+                className={loginMethod === "email_code" ? "is-active" : ""}
+                aria-pressed={loginMethod === "email_code"}
+                onClick={() => {
+                  setLoginMethod("email_code");
+                  setError("");
+                  setNotice("");
+                }}
+              >
+                邮箱验证码
+              </button>
+              <button
+                type="button"
+                className={loginMethod === "password" ? "is-active" : ""}
+                aria-pressed={loginMethod === "password"}
+                onClick={() => {
+                  setLoginMethod("password");
+                  setError("");
+                  setNotice("");
+                }}
+              >
+                密码登录
+              </button>
+            </div>
+          )}
+
           {showGoogleSection && (
             <>
               <div className="wb-auth-google">
@@ -434,7 +500,7 @@ export function LoginPage() {
                     className="wb-auth-google__fallback"
                     disabled
                   >
-                    使用 Google 继续
+                    使用 Google 一键登录
                   </button>
                 )}
               </div>
@@ -645,19 +711,7 @@ export function LoginPage() {
           </form>
 
           <div className="wb-auth-links">
-            {mode === "login" ? (
-              <button
-                type="button"
-                className="wb-auth-link-btn"
-                onClick={() => {
-                  setLoginMethod((m) => (m === "email_code" ? "password" : "email_code"));
-                  setError("");
-                  setNotice("");
-                }}
-              >
-                {loginMethod === "email_code" ? "改用密码登录" : "改用邮箱验证码登录"}
-              </button>
-            ) : (
+            {mode !== "login" && (
               <button
                 type="button"
                 className="wb-auth-link-btn"
