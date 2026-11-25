@@ -161,7 +161,7 @@
 .lp-banner__txt { flex: 1; min-width: 0; color: var(--text-1); font-size: 12.5px; line-height: 18px; }
 .lp-banner__txt small { display: block; color: var(--text-2); font-size: 12px; }
 .lp-banner__ok { display: inline-flex; width: 28px; height: 28px; align-items: center; justify-content: center; color: var(--ok); }
-.lp-composer-box { height: 39px; display: flex; align-items: center; gap: 8px; padding: 0 5px 0 11px; border: 1px solid var(--border-2); border-radius: var(--r-sm); background: var(--bg-surface); color: var(--text-3); font-size: 12.5px; }
+.lp-composer-box { height: 38px; display: flex; align-items: center; gap: 8px; padding: 0 2px 0 1px; border-top: 1px solid var(--border-1); color: var(--text-3); font-size: 12.5px; }
 .lp-composer-box__send { display: inline-flex; width: 29px; height: 29px; align-items: center; justify-content: center; margin-left: auto; border-radius: var(--r-xs); background: var(--accent); color: var(--accent-fg); }
 .lp-window__side { display: flex; flex-direction: column; gap: 5px; padding: 14px 12px; border-left: 1px solid var(--border-2); background: var(--bg-canvas); font-size: 12px; }
 .lp-window__side .lp-side-label { margin: 10px 0 2px; color: var(--text-3); font-family: var(--font-mono); font-size: 12px; font-weight: 650; letter-spacing: .08em; text-transform: uppercase; }
