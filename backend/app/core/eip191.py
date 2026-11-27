@@ -27,6 +27,7 @@ from fastapi import HTTPException
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.timestamps import as_utc
 from app.models.xmtp_auth_nonce import NONCE_ACTIONS, XmtpAuthNonce
 
 ADDRESS_RE = re.compile(r"^0x[0-9a-fA-F]{40}$")
@@ -47,12 +48,6 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def _as_utc(dt: datetime) -> datetime:
-    if dt.tzinfo is None:
-        return dt.replace(tzinfo=timezone.utc)
-    return dt.astimezone(timezone.utc)
-
-
 def normalize_address(address: str) -> str:
     if not ADDRESS_RE.match(address or ""):
         raise HTTPException(status_code=422, detail="Invalid Ethereum/XMTP address")
@@ -63,7 +58,7 @@ def build_nonce_message(
     action: str, resource: str, address: str, nonce: str, expires_at: datetime
 ) -> str:
     """Canonical domain-separated text the wallet must sign verbatim."""
-    exp = _as_utc(expires_at).strftime("%Y-%m-%dT%H:%M:%SZ")
+    exp = as_utc(expires_at).strftime("%Y-%m-%dT%H:%M:%SZ")
     return (
         f"{DOMAIN}\n"
         f"action: {action}\n"
@@ -179,6 +174,6 @@ async def require_signed_nonce(
         await db.refresh(row)
         if row.consumed_at is not None:
             raise HTTPException(status_code=409, detail="Signature challenge already used")
-        if _as_utc(row.expires_at) <= _now():
+        if as_utc(row.expires_at) <= _now():
             raise HTTPException(status_code=410, detail="Signature challenge expired")
         raise HTTPException(status_code=409, detail="Signature challenge already used")

@@ -44,6 +44,7 @@ from app.core.eip191 import (
     require_signed_nonce,
 )
 from app.core.security import bearer_scheme, create_access_token, decode_access_token, get_current_user
+from app.core.timestamps import as_utc
 from app.helper.models import AgentSeat
 from app.models.room import Room
 from app.models.room_invite import RoomInvite
@@ -64,12 +65,6 @@ FORBIDDEN_SCOPES = frozenset({"data.export_all"})
 
 MAX_PENDING_REDEMPTIONS_PER_TOKEN = 64
 PENDING_REDEMPTION_TTL = timedelta(days=7)
-
-
-def _as_utc(dt: datetime) -> datetime:
-    if dt.tzinfo is None:
-        return dt.replace(tzinfo=timezone.utc)
-    return dt.astimezone(timezone.utc)
 
 
 def scope_is_forbidden(scope: str) -> bool:
@@ -159,7 +154,7 @@ def _invite_state(invite: RoomInvite, now: datetime) -> str:
     """'open' | 'revoked' | 'expired' | 'exhausted'."""
     if invite.revoked_at is not None:
         return "revoked"
-    if _as_utc(invite.expires_at) <= now:
+    if as_utc(invite.expires_at) <= now:
         return "expired"
     if (invite.use_count or 0) >= (invite.max_uses or 1):
         return "exhausted"
@@ -489,7 +484,7 @@ async def get_invite_info(
     now = datetime.now(timezone.utc)
     if invite.revoked_at is not None:
         raise HTTPException(status_code=410, detail="Invite token revoked")
-    if _as_utc(invite.expires_at) <= now:
+    if as_utc(invite.expires_at) <= now:
         raise HTTPException(status_code=410, detail="Invite token expired")
 
     max_uses = invite.max_uses or 1
@@ -545,7 +540,7 @@ async def accept_room_invite(
     invite = await _get_invite_or_404(db, token)
 
     now = datetime.now(timezone.utc)
-    if _as_utc(invite.expires_at) < now:
+    if as_utc(invite.expires_at) < now:
         raise HTTPException(status_code=410, detail="Invite token expired")
     if invite.revoked_at is not None:
         raise HTTPException(status_code=410, detail="Invite token revoked")
@@ -576,7 +571,7 @@ async def accept_room_invite(
             kind="human",
             status="pending",
             redeemer_user_id=current_user.id,
-            expires_at=min(_as_utc(invite.expires_at), now + PENDING_REDEMPTION_TTL),
+            expires_at=min(as_utc(invite.expires_at), now + PENDING_REDEMPTION_TTL),
         )
         db.add(redemption)
         try:
@@ -597,7 +592,7 @@ async def accept_room_invite(
             raise HTTPException(status_code=404, detail="Invite token not found")
         if fresh.revoked_at is not None:
             raise HTTPException(status_code=410, detail="Invite token revoked")
-        if _as_utc(fresh.expires_at) <= now:
+        if as_utc(fresh.expires_at) <= now:
             raise HTTPException(status_code=410, detail="Invite token expired")
         raise HTTPException(status_code=409, detail="Invite token already redeemed")
 
@@ -659,7 +654,7 @@ async def redeem_room_invite(
 
     invite = await _get_invite_or_404(db, token)
     now = datetime.now(timezone.utc)
-    expires_at_utc = _as_utc(invite.expires_at)
+    expires_at_utc = as_utc(invite.expires_at)
     room_id = invite.room_id
     proposed_scopes = list(invite.proposed_scopes or [])
     human_user = await _optional_human_user(credentials, db)
@@ -684,7 +679,7 @@ async def redeem_room_invite(
                 "room_id": room_id,
                 "xmtp_group_id": room.xmtp_group_id,
                 "proposed_scopes": proposed_scopes,
-                "redeemed_at": _as_utc(existing.decided_at or existing.created_at).isoformat(),
+                "redeemed_at": as_utc(existing.decided_at or existing.created_at).isoformat(),
                 "redemption_id": existing.id,
                 "status": "consumed",
             }
@@ -725,7 +720,7 @@ async def redeem_room_invite(
             "room_id": room_id,
             "xmtp_group_id": room.xmtp_group_id,
             "proposed_scopes": proposed_scopes,
-            "redeemed_at": _as_utc(human_prior.decided_at or human_prior.created_at).isoformat(),
+            "redeemed_at": as_utc(human_prior.decided_at or human_prior.created_at).isoformat(),
             "redemption_id": human_prior.id,
             "status": "consumed",
         }
@@ -733,7 +728,7 @@ async def redeem_room_invite(
     if invite.requires_approval:
         if invite.revoked_at is not None:
             raise HTTPException(status_code=410, detail="Invite token revoked")
-        if _as_utc(invite.expires_at) <= now:
+        if as_utc(invite.expires_at) <= now:
             raise HTTPException(status_code=410, detail="Invite token expired")
         if human_prior is not None and human_prior.status == "pending":
             # Attach the now-verified address to the pending request instead
@@ -778,7 +773,7 @@ async def redeem_room_invite(
             raise HTTPException(status_code=404, detail="Invite token not found")
         if fresh.revoked_at is not None:
             raise HTTPException(status_code=410, detail="Invite token revoked")
-        if _as_utc(fresh.expires_at) <= now:
+        if as_utc(fresh.expires_at) <= now:
             raise HTTPException(status_code=410, detail="Invite token expired")
         raise HTTPException(status_code=409, detail="Invite token already redeemed")
 
@@ -816,7 +811,7 @@ async def redeem_room_invite(
                 "room_id": room_id,
                 "xmtp_group_id": room.xmtp_group_id,
                 "proposed_scopes": proposed_scopes,
-                "redeemed_at": _as_utc(winner.decided_at or winner.created_at).isoformat(),
+                "redeemed_at": as_utc(winner.decided_at or winner.created_at).isoformat(),
                 "redemption_id": winner.id,
                 "status": "consumed",
             }
@@ -862,7 +857,7 @@ async def _deliver_or_raise(
     """Map an existing redemption to the agent-register response."""
     status = redemption.status
     if status == "pending":
-        if redemption.expires_at and _as_utc(redemption.expires_at) <= datetime.now(timezone.utc):
+        if redemption.expires_at and as_utc(redemption.expires_at) <= datetime.now(timezone.utc):
             redemption.status = "expired"
             await db.commit()
             raise HTTPException(status_code=410, detail="Redemption request expired")
@@ -918,7 +913,7 @@ async def _agent_register(
             kind="agent",
             status="pending",
             redeemer_address=address,
-            expires_at=min(_as_utc(invite.expires_at), now + PENDING_REDEMPTION_TTL),
+            expires_at=min(as_utc(invite.expires_at), now + PENDING_REDEMPTION_TTL),
         )
         db.add(redemption)
         try:
@@ -938,7 +933,7 @@ async def _agent_register(
             raise HTTPException(status_code=404, detail="Invite token not found")
         if fresh.revoked_at is not None:
             raise HTTPException(status_code=410, detail="Invite token revoked")
-        if _as_utc(fresh.expires_at) <= now:
+        if as_utc(fresh.expires_at) <= now:
             raise HTTPException(status_code=410, detail="Invite token expired")
         raise HTTPException(status_code=409, detail="Invite token exhausted")
 
@@ -1079,7 +1074,7 @@ async def approve_redemption(
         raise HTTPException(status_code=409, detail="Redemption already decided")
 
     now = datetime.now(timezone.utc)
-    if redemption.expires_at is not None and _as_utc(redemption.expires_at) <= now:
+    if redemption.expires_at is not None and as_utc(redemption.expires_at) <= now:
         await db.execute(
             update(RoomInviteRedemption)
             .where(
@@ -1179,7 +1174,7 @@ async def approve_redemption(
             fresh is not None
             and fresh.status == "pending"
             and fresh.expires_at is not None
-            and _as_utc(fresh.expires_at) <= now
+            and as_utc(fresh.expires_at) <= now
         ):
             await db.execute(
                 update(RoomInviteRedemption)

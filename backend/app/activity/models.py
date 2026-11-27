@@ -25,6 +25,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
+from app.core.timestamps import as_utc
 
 
 def _now() -> datetime:
@@ -66,13 +67,6 @@ class ActivityEvent(Base):
 
     def same_payload(self, other: "ActivityEvent") -> bool:
         """Idempotency check: same id must mean identical safe metadata."""
-        def _utc(dt: datetime | None) -> datetime | None:
-            if dt is None:
-                return None
-            if dt.tzinfo is None:
-                return dt.replace(tzinfo=timezone.utc)
-            return dt.astimezone(timezone.utc)
-
         return (
             self.room_id == other.room_id
             and self.actor_kind == other.actor_kind
@@ -82,7 +76,7 @@ class ActivityEvent(Base):
             and self.status == other.status
             and self.subject_id == other.subject_id
             and self.stream_seq == other.stream_seq
-            and _utc(self.created_at) == _utc(other.created_at)
+            and as_utc(self.created_at) == as_utc(other.created_at)
         )
 
 
