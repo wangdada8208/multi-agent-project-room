@@ -7,6 +7,7 @@ from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from conftest import test_session as sessions
 from app.chat.models import Message
 from app.models.room import Room
 from app.models.user import User
@@ -206,9 +207,14 @@ async def test_message_retention_with_task_and_reply_references(db: AsyncSession
     db.add_all([task, reply])
     await db.commit()
 
-    # Run cleanup — must not raise ForeignKeyViolationError!
-    deleted_count = await cleanup_expired_messages(db)
+    pending = User(id=str(uuid.uuid4()), username="pending", display_name="Pending")
+    db.add(pending)
+
+    deleted_count = await cleanup_expired_messages()
     assert deleted_count >= 1
+    async with sessions() as other:
+        assert await other.get(User, pending.id) is None
+    assert pending in db.new
 
     # Verify expired parent is deleted
     parent_check = await db.execute(select(Message).where(Message.id == expired_parent.id))
