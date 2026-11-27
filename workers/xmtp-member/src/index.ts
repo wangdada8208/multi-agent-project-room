@@ -5,7 +5,6 @@ import path from "node:path";
 import { Agent } from "@xmtp/agent-sdk";
 import { checkpointFromVerification, signLedgerCheckpoint } from "./activity.ts";
 import { AccountStore, resolveCredentialPath } from "./accounts.ts";
-import { buildBindingPayload } from "./binding.ts";
 import { loadCalendar } from "./calendar.ts";
 import {
   approveConsent,
@@ -145,7 +144,6 @@ export async function bindGroupToHub(
   hubToken: string,
   groupId: string
 ): Promise<void> {
-  const payload = buildBindingPayload({ xmtpGroupId: groupId });
   const url = `${hubBaseUrl.replace(/\/$/, "")}/api/v1/rooms/${hubRoomId}/xmtp-binding`;
 
   const resp = await fetch(url, {
@@ -154,7 +152,7 @@ export async function bindGroupToHub(
       "Content-Type": "application/json",
       Authorization: `Bearer ${hubToken}`,
     },
-    body: JSON.stringify(payload),
+    body: JSON.stringify({ xmtp_group_id: groupId }),
   });
 
   if (!resp.ok) {
