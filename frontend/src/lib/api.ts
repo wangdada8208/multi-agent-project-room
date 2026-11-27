@@ -96,15 +96,6 @@ export function newRequestId(): string {
   return `${random()}-${random()}-${random()}-${random()}`;
 }
 
-/** 调用方没带编号时补一个；带了就不动，保证同一次操作可追踪。 */
-export function withRequestId(init: RequestInit = {}): RequestInit {
-  const headers = new Headers(init.headers);
-  if (!headers.has(API_REQUEST_ID_HEADER)) {
-    headers.set(API_REQUEST_ID_HEADER, newRequestId());
-  }
-  return { ...init, headers };
-}
-
 export async function apiFetch(input: RequestInfo | URL, init: RequestInit = {}) {
   const token = useAuthStore.getState().token;
   const headers = new Headers(init.headers);

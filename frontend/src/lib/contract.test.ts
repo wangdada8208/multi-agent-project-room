@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { bindXmtpGroup, createRoomFromTemplate, searchMessages } from "./api";
+import { API_REQUEST_ID_HEADER, bindXmtpGroup, createRoomFromTemplate, searchMessages } from "./api";
 import {
   acceptRoomInvite, approveRedemption, createRoomInvite, denyRedemption, issueSignatureNonce,
   listRoomRedemptions, pauseRoomSeat, redeemRoomInvite, removeRoomSeat, resumeRoomSeat,
@@ -24,6 +24,7 @@ function expectRequest(path: string, method: string, body?: unknown) {
   const [url, options] = fetcher.mock.calls[0];
   expect(url).toBe(path);
   expect(options?.method ?? "GET").toBe(method);
+  expect(new Headers(options?.headers).get(API_REQUEST_ID_HEADER)).toMatch(/^[0-9a-f-]{8,}$/i);
   if (body === undefined) expect(options?.body).toBeUndefined();
   else expect(options?.body).toBe(JSON.stringify(body));
 }
