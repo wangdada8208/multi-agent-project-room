@@ -5,7 +5,7 @@ import {
   XMTP_SEARCH_MAX_ENTRIES,
 } from "./xmtpSearch";
 
-function entry(id: string, content: string, sender = "inbox-a", createdAt = "2026-11-20T10:00:00.000Z") {
+function entry(id: string, content: string, sender = "inbox-a", createdAt = new Date(Date.now() - 60 * 60 * 1000).toISOString()) {
   return { id, content, senderInboxId: sender, createdAt };
 }
 
@@ -13,9 +13,9 @@ describe("XmtpSearchIndex", () => {
   it("finds case-insensitive substring matches in chronological order", () => {
     const index = new XmtpSearchIndex();
     index.ingest([
-      entry("m2", "Hello MAPR World", "a", "2026-11-20T10:02:00Z"),
-      entry("m1", "nothing here", "a", "2026-11-20T10:01:00Z"),
-      entry("m3", "MAPR again", "a", "2026-11-20T09:59:00Z"),
+      entry("m2", "Hello MAPR World", "a", new Date(Date.now() - 58 * 60 * 1000).toISOString()),
+      entry("m1", "nothing here", "a", new Date(Date.now() - 59 * 60 * 1000).toISOString()),
+      entry("m3", "MAPR again", "a", new Date(Date.now() - 61 * 60 * 1000).toISOString()),
     ]);
     const results = index.search("mapr");
     expect(results.map((r) => r.id)).toEqual(["m3", "m2"]);
@@ -24,8 +24,8 @@ describe("XmtpSearchIndex", () => {
   it("filters by sender inbox id", () => {
     const index = new XmtpSearchIndex();
     index.ingest([
-      entry("a1", "same keyword", "inbox-alice", "2026-11-20T10:00:00Z"),
-      entry("b1", "same keyword", "inbox-bob", "2026-11-20T10:01:00Z"),
+      entry("a1", "same keyword", "inbox-alice"),
+      entry("b1", "same keyword", "inbox-bob", new Date(Date.now() - 59 * 60 * 1000).toISOString()),
     ]);
     const results = index.search("keyword", { senderInboxId: "inbox-bob" });
     expect(results.map((r) => r.id)).toEqual(["b1"]);
@@ -42,7 +42,7 @@ describe("XmtpSearchIndex", () => {
   it("evicts the oldest entries once the bound is exceeded", () => {
     const index = new XmtpSearchIndex({ maxEntries: 3 });
     for (let i = 0; i < 5; i++) {
-      index.upsert(entry(`m${i}`, `msg ${i}`, "a", `2026-11-20T10:0${i}:00Z`));
+      index.upsert(entry(`m${i}`, `msg ${i}`, "a", new Date(Date.now() - (10 - i) * 60 * 1000).toISOString()));
     }
     expect(index.size).toBe(3);
     const results = index.search("msg");
@@ -63,7 +63,7 @@ describe("XmtpSearchIndex", () => {
     index.ingest([
       entry("", "x"),
       entry("m1", ""),
-      { id: "m2", content: "ok", senderInboxId: "", createdAt: "2026-11-20T10:00:00Z" },
+      { id: "m2", content: "ok", senderInboxId: "", createdAt: new Date(Date.now() - 60 * 60 * 1000).toISOString() },
     ]);
     expect(index.size).toBe(0);
   });

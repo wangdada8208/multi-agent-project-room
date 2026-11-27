@@ -1,4 +1,5 @@
 import type { ActorKind } from "../../lib/domain/displayMessages";
+import { NamedBrandIcon } from "./BrandIcon";
 
 const actorLabel: Record<ActorKind, string> = { me: "我", human: "人类", cloud: "云端 Agent", local: "电脑端 Agent" };
 const presenceLabel = { online: "在线", paused: "已暂停", pending: "待入群" };
@@ -14,10 +15,12 @@ export interface AvatarProps {
 export function Avatar({ actor, name, size = "md", presence, src }: AvatarProps) {
   const label = [name, actorLabel[actor], presence ? presenceLabel[presence] : ""].filter(Boolean).join(" · ");
   const initial = Array.from(name.trim())[0]?.toUpperCase() ?? "?";
+  const isAgent = actor === "cloud" || actor === "local";
   return (
     <span role="img" aria-label={label} title={label} className={`ui-avatar ui-avatar--${actor} ui-avatar--${size}`}>
-      {src ? <img src={src} alt="" /> : <span aria-hidden="true">{initial}</span>}
-      {(actor === "cloud" || actor === "local") && <span className="ui-avatar__mark" aria-hidden="true">{actor === "cloud" ? "☁" : ">_"}</span>}
+      {src ? <img src={src} alt="" /> : isAgent ? (
+        <NamedBrandIcon name={name} fallback={actor === "cloud" ? "cloud" : "terminal"} size={size === "lg" ? 23 : size === "sm" ? 15 : 18} strokeWidth={1.75} />
+      ) : <span aria-hidden="true">{initial}</span>}
       {presence && <span className={`ui-avatar__presence ui-avatar__presence--${presence}`} aria-hidden="true" />}
     </span>
   );

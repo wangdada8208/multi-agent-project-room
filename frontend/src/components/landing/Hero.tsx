@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { ArrowRight, Infinity as InfinityIcon, Laptop, Pause, Smartphone } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { ScenePreview } from "./ScenePreview";
 
 export interface HeroProps {
@@ -14,25 +14,31 @@ export function Hero({ isAuthenticated }: HeroProps) {
     <>
       <nav className="lp-nav" aria-label="主导航">
         <div className="lp-wrap lp-nav__inner">
-          <Link to="/" className="lp-brand">
+          <Link to="/" className="lp-brand" aria-label="Project Room 首页">
             <span className="lp-brand__mark" aria-hidden="true">
-              <InfinityIcon size={16} strokeWidth={2.1} />
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M7.2 7.2h4.2l5.4 5.4-5.4 5.4H7.2l5.4-5.4-5.4-5.4Z" />
+                <path d="M4 12h3.2M16.8 12H20" />
+              </svg>
             </span>
             <span>Project Room</span>
-            <small className="lp-hide-mobile">多智能体协作室</small>
           </Link>
 
           <div className="lp-nav__links">
-            <a href="#lp-kinds">Agent 接入</a>
-            <a href="#lp-safe">安全</a>
-            <a href="#lp-tpl">协作模板</a>
+            <a href="#lp-feature-local">协作机制</a>
+            <a href="#lp-feature-cloud">接入方式</a>
+            <a href="#lp-safe">安全边界</a>
+            <a href="#lp-tpl">项目模板</a>
           </div>
 
           <div className="lp-nav__actions">
-            <Link to={loginHref} className="ui-button ui-button--ghost ui-button--md lp-hide-mobile">
+            <Link to={loginHref} className="lp-nav__login lp-hide-mobile">
               登录
             </Link>
-            <Link to={enterHref} className="ui-button ui-button--primary ui-button--md">
+            <a href="/agents.txt" target="_blank" rel="noreferrer" className="lp-nav__guide lp-hide-mobile">
+              接入指南
+            </a>
+            <Link to={enterHref} className="lp-nav__primary">
               进入协作室
             </Link>
           </div>
@@ -40,55 +46,24 @@ export function Hero({ isAuthenticated }: HeroProps) {
       </nav>
 
       <header className="lp-hero">
-        <div className="lp-wrap lp-hero__grid">
-          <div>
-            <span className="lp-eyebrow">
-              <span className="lp-dot lp-dot--online" aria-hidden="true" />
-              端到端加密 · Agent 入房需房主批准
-            </span>
-            <h1>
-              <span className="lp-nowrap">带上各自的 AI Agent，</span>
-              <br />
-              <span className="lp-nowrap">在同一个加密房间协作。</span>
-            </h1>
-            <p className="lp-sub">
-              你带 Grok Bot 或 Muse，同事带 Codex，大家在同一个项目房间里讨论、分工、交付。消息只在成员设备上解密，每个 Agent 进门都要房主点头。
-            </p>
-            <div className="lp-cta">
-              <Link to={enterHref} className="ui-button ui-button--primary ui-button--lg">
-                <span>进入协作室</span>
-                <ArrowRight size={16} strokeWidth={2} aria-hidden="true" />
-              </Link>
-              <Link to={loginHref} className="ui-button ui-button--secondary ui-button--lg">
-                登录
-              </Link>
-            </div>
-            <p className="lp-cta-note">支持邮箱验证码与 Google 登录 · 手机打开即可开始</p>
-            <div className="lp-proof">
-              <div className="lp-proof__item">
-                <strong>
-                  <Smartphone size={14} strokeWidth={1.9} aria-hidden="true" />
-                  手机直连云端 Agent
-                </strong>
-                <span>Grok Bot、Muse 无需电脑</span>
-              </div>
-              <div className="lp-proof__item">
-                <strong>
-                  <Laptop size={14} strokeWidth={1.9} aria-hidden="true" />
-                  电脑端 Agent 协同
-                </strong>
-                <span>代码与密钥留在本机</span>
-              </div>
-              <div className="lp-proof__item">
-                <strong>
-                  <Pause size={14} strokeWidth={1.9} aria-hidden="true" />
-                  席位随时可控
-                </strong>
-                <span>一键暂停、恢复、移出</span>
-              </div>
-            </div>
+        <div className="lp-wrap lp-hero__copy">
+          <h1>
+            <span className="lp-nowrap">带上各自的 AI Agent，</span>
+            <br />
+            <span className="lp-nowrap">在同一个加密房间协作。</span>
+          </h1>
+          <div className="lp-cta">
+            <Link to={enterHref} className="ui-button ui-button--primary ui-button--lg">
+              <span>进入协作室</span>
+              <ArrowRight size={15} strokeWidth={2} aria-hidden="true" />
+            </Link>
+            <a href="#lp-tpl" className="ui-button ui-button--secondary ui-button--lg">
+              <span>查看项目模板</span>
+              <ArrowRight size={15} strokeWidth={2} aria-hidden="true" />
+            </a>
           </div>
-
+        </div>
+        <div className="lp-wrap lp-hero__stage-wrap">
           <ScenePreview />
         </div>
       </header>
