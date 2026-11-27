@@ -2,44 +2,37 @@ import { describe, expect, it } from "vitest";
 import {
   extractXmtpMessageText,
   XmtpSearchIndex,
-  type XmtpSearchIndexOptions,
   XMTP_SEARCH_MAX_ENTRIES,
 } from "./xmtpSearch";
 
-function entry(id: string, content: string, sender = "inbox-a", createdAt = "2026-11-20T10:00:00.000Z") {
+function entry(id: string, content: string, sender = "inbox-a", createdAt = new Date(Date.now() - 60 * 60 * 1000).toISOString()) {
   return { id, content, senderInboxId: sender, createdAt };
-}
-
-const referenceTime = Date.parse("2026-11-20T12:00:00Z");
-
-function createIndex(options: XmtpSearchIndexOptions = {}) {
-  return new XmtpSearchIndex({ now: () => referenceTime, ...options });
 }
 
 describe("XmtpSearchIndex", () => {
   it("finds case-insensitive substring matches in chronological order", () => {
-    const index = createIndex();
+    const index = new XmtpSearchIndex();
     index.ingest([
-      entry("m2", "Hello MAPR World", "a", "2026-11-20T10:02:00Z"),
-      entry("m1", "nothing here", "a", "2026-11-20T10:01:00Z"),
-      entry("m3", "MAPR again", "a", "2026-11-20T09:59:00Z"),
+      entry("m2", "Hello MAPR World", "a", new Date(Date.now() - 58 * 60 * 1000).toISOString()),
+      entry("m1", "nothing here", "a", new Date(Date.now() - 59 * 60 * 1000).toISOString()),
+      entry("m3", "MAPR again", "a", new Date(Date.now() - 61 * 60 * 1000).toISOString()),
     ]);
     const results = index.search("mapr");
     expect(results.map((r) => r.id)).toEqual(["m3", "m2"]);
   });
 
   it("filters by sender inbox id", () => {
-    const index = createIndex();
+    const index = new XmtpSearchIndex();
     index.ingest([
-      entry("a1", "same keyword", "inbox-alice", "2026-11-20T10:00:00Z"),
-      entry("b1", "same keyword", "inbox-bob", "2026-11-20T10:01:00Z"),
+      entry("a1", "same keyword", "inbox-alice"),
+      entry("b1", "same keyword", "inbox-bob", new Date(Date.now() - 59 * 60 * 1000).toISOString()),
     ]);
     const results = index.search("keyword", { senderInboxId: "inbox-bob" });
     expect(results.map((r) => r.id)).toEqual(["b1"]);
   });
 
   it("deduplicates by message id on repeated ingest", () => {
-    const index = createIndex();
+    const index = new XmtpSearchIndex();
     index.upsert(entry("m1", "first"));
     index.upsert(entry("m1", "first"));
     index.ingest([entry("m1", "first"), entry("m2", "second")]);
@@ -47,9 +40,9 @@ describe("XmtpSearchIndex", () => {
   });
 
   it("evicts the oldest entries once the bound is exceeded", () => {
-    const index = createIndex({ maxEntries: 3 });
+    const index = new XmtpSearchIndex({ maxEntries: 3 });
     for (let i = 0; i < 5; i++) {
-      index.upsert(entry(`m${i}`, `msg ${i}`, "a", `2026-11-20T10:0${i}:00Z`));
+      index.upsert(entry(`m${i}`, `msg ${i}`, "a", new Date(Date.now() - (10 - i) * 60 * 1000).toISOString()));
     }
     expect(index.size).toBe(3);
     const results = index.search("msg");
@@ -57,7 +50,7 @@ describe("XmtpSearchIndex", () => {
   });
 
   it("drops entries older than the age bound", () => {
-    let now = referenceTime;
+    let now = Date.parse("2026-11-20T12:00:00Z");
     const index = new XmtpSearchIndex({ maxAgeMs: 60_000, now: () => now });
     index.upsert(entry("old", "old msg", "a", "2026-11-20T11:00:00Z"));
     index.upsert(entry("new", "new msg", "a", "2026-11-20T11:59:30Z"));
@@ -66,28 +59,33 @@ describe("XmtpSearchIndex", () => {
   });
 
   it("skips empty or malformed entries", () => {
-    const index = createIndex();
-    const malformed = [
+    const index = new XmtpSearchIndex();
+    index.ingest([
       entry("", "x"),
       entry("m1", ""),
-      { id: "m2", content: "ok", senderInboxId: "", createdAt: "2026-11-20T10:00:00Z" },
-    ];
-    for (const candidate of malformed) index.upsert(candidate);
-    expect(index.size).toBe(0);
-    index.ingest(malformed);
+      { id: "m2", content: "ok", senderInboxId: "", createdAt: new Date(Date.now() - 60 * 60 * 1000).toISOString() },
+    ]);
     expect(index.size).toBe(0);
   });
 
   it("returns empty for blank queries and respects limit", () => {
-    const index = createIndex();
+    const index = new XmtpSearchIndex();
     index.ingest([entry("m1", "hello"), entry("m2", "hello again")]);
     expect(index.search("   ")).toEqual([]);
     expect(index.search("hello", { limit: 1 }).map((r) => r.id)).toEqual(["m1"]);
   });
 
+  it("does not store a malformed single entry", () => {
+    const referenceTime = Date.parse("2026-11-20T12:00:00Z");
+    const index = new XmtpSearchIndex({ now: () => referenceTime });
+    index.upsert(entry("m1", "", "inbox-a", "2026-11-20T10:00:00Z"));
+    expect(index.size).toBe(0);
+  });
+
   it("caps memory at the documented bound", () => {
     expect(XMTP_SEARCH_MAX_ENTRIES).toBe(2000);
-    const index = createIndex();
+    const referenceTime = Date.parse("2026-11-20T12:00:00Z");
+    const index = new XmtpSearchIndex({ now: () => referenceTime });
     index.ingest(Array.from({ length: XMTP_SEARCH_MAX_ENTRIES + 50 }, (_, i) =>
       entry(`m${i}`, `n${i}`, "a", new Date(referenceTime - 10_000 + i).toISOString()),
     ));
