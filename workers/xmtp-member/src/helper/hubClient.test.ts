@@ -172,8 +172,10 @@ test("hubClient.reportActivity / reportCheckpoints：路径、鉴权与严格安
     signature: "0x" + "c".repeat(130),
   };
 
-  assert.deepEqual(await hub.reportActivity([ev]), { accepted: 1, duplicates: 0 });
-  assert.deepEqual(await hub.reportCheckpoints([cp]), { accepted: 1, duplicates: 0 });
+  const eventWithExtra = { ...ev, payload: "encrypted body", params_hash: "private digest" };
+  const checkpointWithExtra = { ...cp, content: "encrypted body" };
+  assert.deepEqual(await hub.reportActivity([eventWithExtra]), { accepted: 1, duplicates: 0 });
+  assert.deepEqual(await hub.reportCheckpoints([checkpointWithExtra]), { accepted: 1, duplicates: 0 });
   assert.equal(calls[0].url, `${HUB}/api/v1/helpers/me/activity`);
   assert.equal(calls[0].auth, `Bearer ${TOKEN}`);
   assert.deepEqual(calls[0].body, { events: [ev] });

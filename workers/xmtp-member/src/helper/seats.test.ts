@@ -116,6 +116,7 @@ test("seatEnv: HUB_TOKEN 是 agent_token，父进程秘密不下发，只放行�
   assert.equal(env.HUB_TOKEN, "agent-token-xyz");
   assert.equal(env.HUB_BASE_URL, "https://hub.example");
   assert.equal(env.HUB_ROOM_ID, "room-1");
+  assert.equal(env.MAPR_HELPER_SEAT_ID, seat.seatId);
   assert.equal(env.XMTP_WALLET_KEY, seat.xmtpWalletKey);
   assert.equal(env.XMTP_DB_ENCRYPTION_KEY, seat.xmtpDbEncryptionKey);
   assert.equal(env.XMTP_DB_DIRECTORY, "/db/seat-1");
@@ -135,7 +136,7 @@ test("seatEnv: HUB_TOKEN 是 agent_token，父进程秘密不下发，只放行�
     "PATH", "HOME", "LANG",
     "XMTP_SELF_NAME", "XMTP_ENV", "XMTP_WALLET_KEY", "XMTP_DB_ENCRYPTION_KEY", "XMTP_DB_DIRECTORY",
     "XMTP_LOOP_STATE_PATH", "XMTP_ALLOWED_SENDERS", "XMTP_ALLOW_GROUP_MEMBERS", "XMTP_MENTION_ONLY", "XMTP_GROUP_ID",
-    "HUB_BASE_URL", "HUB_ROOM_ID", "HUB_TOKEN", "OWNER_NOTES_PORT",
+    "HUB_BASE_URL", "HUB_ROOM_ID", "HUB_TOKEN", "MAPR_HELPER_SEAT_ID", "OWNER_NOTES_PORT",
     "MEMBER_AGENT_KIND", "MEMBER_AGENT_TIMEOUT_MS", "MEMBER_AGENT_BIN", "MEMBER_AGENT_SANDBOX_DIR",
     "MEMBER_AGENT_MODEL", "MEMBER_AGENT_BWRAP_RO", "MEMBER_AGENT_BWRAP_RW",
   ]);

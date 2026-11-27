@@ -563,7 +563,10 @@ async def merged_activity_feed(
 
     # Hub task audit events — payload JSON is never emitted.
     te_q = (
-        select(TaskEvent, A2ATask)
+        select(
+            TaskEvent.id, TaskEvent.event_type, TaskEvent.event_seq, TaskEvent.created_at,
+            A2ATask.id.label("task_id"), A2ATask.source_agent, A2ATask.status,
+        )
         .join(A2ATask, TaskEvent.task_id == A2ATask.id)
         .where(A2ATask.room_id == room_id)
     )
@@ -583,16 +586,16 @@ async def merged_activity_feed(
                 te_q.order_by(TaskEvent.created_at.desc(), TaskEvent.id).limit(limit)
             )
         ).all()
-        for event, task in te_rows:
+        for event in te_rows:
             items.append(
                 ActivityItem(
                     id=f"task_event:{event.id}",
                     source="task_event",
                     actor_kind="agent",
-                    actor_id=task.source_agent,
+                    actor_id=event.source_agent,
                     kind=event.event_type,
-                    status=task.status,
-                    subject_id=task.id,
+                    status=event.status,
+                    subject_id=event.task_id,
                     stream_seq=event.event_seq,
                     created_at=_iso(event.created_at),
                 )
@@ -601,8 +604,14 @@ async def merged_activity_feed(
     # Hub approvals — description is never emitted; title only for non-XMTP.
     include_approvals = not app and (kinds is None or "approval" in kinds)
     if include_approvals:
+        approval_fields = [
+            Approval.id, Approval.requestor_id, Approval.status, Approval.decided_by,
+            Approval.created_at, User.user_type,
+        ]
+        if plaintext_room:
+            approval_fields.append(Approval.title)
         ap_q = (
-            select(Approval, User.user_type)
+            select(*approval_fields)
             .outerjoin(User, Approval.requestor_id == User.id)
             .where(Approval.room_id == room_id)
         )
@@ -625,12 +634,12 @@ async def merged_activity_feed(
                 ap_q.order_by(Approval.created_at.desc(), Approval.id).limit(limit)
             )
         ).all()
-        for approval, requestor_type in ap_rows:
+        for approval in ap_rows:
             items.append(
                 ActivityItem(
                     id=f"approval:{approval.id}",
                     source="approval",
-                    actor_kind=requestor_type or "agent",
+                    actor_kind=approval.user_type or "agent",
                     actor_id=approval.requestor_id,
                     kind="approval",
                     status=approval.status,

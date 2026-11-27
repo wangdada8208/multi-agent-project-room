@@ -1,8 +1,14 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { verifyMessage } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { canonicalStringify } from "./canonical.ts";
 import { isAddress } from "./envelope.ts";
+import {
+  HubSafeActivityEventFields,
+  HubSignedCheckpointFields,
+  type HubSafeActivityEvent,
+  type HubSignedCheckpoint,
+} from "./hubContracts.generated.ts";
 import {
   verifyLedgerEntries,
   type LedgerAnchor,
@@ -15,19 +21,19 @@ import {
  * 签名账本检查点：Hub 只锚定链头（head_seq/head_hash），不接触正文。
  * 校验签名用 verifyLedgerCheckpoint；校验链本身用 verifyLedger。
  */
-export interface LedgerCheckpointPayload {
-  version: 1;
-  room_id: string;
-  stream_id: string;
-  head_seq: number;
-  head_hash: string;
-  entry_count: number;
-  created_at: string;
+export type SignedLedgerCheckpoint = HubSignedCheckpoint;
+export type LedgerCheckpointPayload = Omit<SignedLedgerCheckpoint, "signer" | "signature">;
+
+function projectFields<T>(record: T, fields: readonly (keyof T)[]) {
+  return Object.fromEntries(fields.map((key) => [key, record[key]]));
 }
 
-export interface SignedLedgerCheckpoint extends LedgerCheckpointPayload {
-  signer: string;
-  signature: string;
+export function projectHubActivityEvent(event: HubSafeActivityEvent) {
+  return projectFields(event, HubSafeActivityEventFields);
+}
+
+export function projectHubCheckpoint(checkpoint: SignedLedgerCheckpoint) {
+  return projectFields(checkpoint, HubSignedCheckpointFields);
 }
 
 const CHECKPOINT_PREFIX = "MAPR1-LEDGER-CHECKPOINT ";
@@ -129,21 +135,20 @@ export function checkpointFromVerification(
   };
 }
 
-export type ActivityActorKind = "human" | "agent" | "helper" | "system";
+export type ActivityActorKind = HubSafeActivityEvent["actor_kind"];
 
 /**
  * 可上报 Hub 的安全元数据事件：白名单字段，永远不含正文。
  * Hub 红线：不出现 payload/content/params/params_hash，也不出现邮件正文或收件人。
  */
-export interface SafeActivityEvent {
-  id: string;
-  room_id: string;
-  actor_kind: ActivityActorKind;
-  actor_id: string;
-  kind: string;
+type SafeActivityEvent = HubSafeActivityEvent & {
   subject_id: string | null;
   status: string;
-  created_at: string;
+};
+
+/** Existing Hub idempotency key, scoped to the seat's chained ledger entry. */
+export function activityEventId(seatId: string, seq: number, entryHash: string): string {
+  return createHash("sha256").update(`${seatId}:${seq}:${entryHash}`).digest("hex").slice(0, 36);
 }
 
 /** 输入里出现这些键一律拒绝——宁可报错也不让正文参数混进元数据管道。 */

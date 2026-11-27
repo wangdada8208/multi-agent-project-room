@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import { appendFile, mkdir } from "node:fs/promises";
 import path from "node:path";
 import { Agent } from "@xmtp/agent-sdk";
-import { checkpointFromVerification, signLedgerCheckpoint } from "./activity.ts";
+import { checkpointFromVerification, projectHubCheckpoint, signLedgerCheckpoint } from "./activity.ts";
 import { AccountStore, resolveCredentialPath } from "./accounts.ts";
 import { loadCalendar } from "./calendar.ts";
 import {
@@ -467,7 +467,7 @@ export async function startMember(): Promise<void> {
               "Content-Type": "application/json",
               Authorization: `Bearer ${currentHubToken}`,
             },
-            body: JSON.stringify({ checkpoints: [checkpoint] }),
+            body: JSON.stringify({ checkpoints: [projectHubCheckpoint(checkpoint)] }),
             signal: AbortSignal.timeout(10_000),
           }
         );
@@ -504,6 +504,7 @@ export async function startMember(): Promise<void> {
     credDir,
     ledgerFile: ledgerPath,
     ledgerCheckpointFile: checkpointPath,
+    activitySeatId: process.env.MAPR_HELPER_SEAT_ID,
     policy: runtimePolicy,
     onTriggersChanged: () => triggerEngine.refresh(),
     readLedger: () => readLedger(ledgerPath),

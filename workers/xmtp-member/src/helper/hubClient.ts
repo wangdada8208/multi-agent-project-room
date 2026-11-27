@@ -1,4 +1,5 @@
-import type { SignedLedgerCheckpoint } from "../activity.ts";
+import { projectHubActivityEvent, projectHubCheckpoint, type SignedLedgerCheckpoint } from "../activity.ts";
+import type { HubActivityIngestResult, HubSafeActivityEvent } from "../hubContracts.generated.ts";
 import type {
   CreateSeatRequest,
   HeartbeatResponse,
@@ -7,24 +8,6 @@ import type {
   SeatGrant,
   SeatStatus,
 } from "./types.ts";
-
-export interface HubSafeActivityEvent {
-  id: string;
-  room_id: string;
-  actor_kind: "human" | "agent" | "helper" | "system";
-  actor_id: string;
-  kind: string;
-  app?: string | null;
-  status?: string | null;
-  subject_id?: string | null;
-  stream_seq?: number | null;
-  created_at: string;
-}
-
-export interface HubActivityIngestResult {
-  accepted: number;
-  duplicates: number;
-}
 
 /**
  * 本机助手访问 Hub 的唯一出口。除 pair 外，全部带 `Authorization: Bearer <helperToken>`。
@@ -116,8 +99,12 @@ export function createHubClient(hubOrigin: string, helperToken: string | null, f
     deleteSeat: (seatId) => call<void>("DELETE", `/api/v1/helpers/me/seats/${encodeURIComponent(seatId)}`),
     heartbeat: (body) => call<HeartbeatResponse>("POST", "/api/v1/helpers/me/heartbeat", body),
     reportActivity: (events) =>
-      call<HubActivityIngestResult>("POST", "/api/v1/helpers/me/activity", { events }),
+      call<HubActivityIngestResult>("POST", "/api/v1/helpers/me/activity", {
+        events: events.map(projectHubActivityEvent),
+      }),
     reportCheckpoints: (checkpoints) =>
-      call<HubActivityIngestResult>("POST", "/api/v1/helpers/me/activity/checkpoints", { checkpoints }),
+      call<HubActivityIngestResult>("POST", "/api/v1/helpers/me/activity/checkpoints", {
+        checkpoints: checkpoints.map(projectHubCheckpoint),
+      }),
   };
 }

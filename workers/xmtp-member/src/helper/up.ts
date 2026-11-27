@@ -1,14 +1,15 @@
 import { spawn } from "node:child_process";
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { access, chmod, constants as fsConstants, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { buildSafeActivityEvent, isSignedLedgerCheckpoint, ledgerEntryStatus } from "../activity.ts";
+import { activityEventId, buildSafeActivityEvent, isSignedLedgerCheckpoint, ledgerEntryStatus } from "../activity.ts";
 import { isAllowedOpenAiBaseUrl, openAiCompatibleEngine, webhookEngine } from "../engines/httpEngines.ts";
 import type { EngineConfig } from "../engines/types.ts";
+import type { HubSafeActivityEvent } from "../hubContracts.generated.ts";
 import { readLedger } from "../ledger.ts";
 import { writeJsonSecure } from "../secureFile.ts";
-import { createHubClient, type HubClient, type HubSafeActivityEvent } from "./hubClient.ts";
+import { createHubClient, type HubClient } from "./hubClient.ts";
 import { defaultDetectDeps, detectLocalAgents, type DetectDeps } from "./knownAgents.ts";
 import {
   createSeatStore,
@@ -171,13 +172,9 @@ export async function syncSeatActivityToHub(
       if (fresh.length > 0) {
         const actorId = (rec.xmtpAddress || rec.seatId).slice(0, 128);
         const batch: HubSafeActivityEvent[] = fresh.map((entry) => {
-          const id = createHash("sha256")
-            .update(`${rec.seatId}:${entry.seq}:${entry.entry_hash}`)
-            .digest("hex")
-            .slice(0, 36);
           const parsedMs = Date.parse(entry.at);
           const safe = buildSafeActivityEvent({
-            id,
+            id: activityEventId(rec.seatId, entry.seq, entry.entry_hash),
             room_id: rec.roomId,
             actor_kind: "agent",
             actor_id: actorId,

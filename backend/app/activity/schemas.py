@@ -3,8 +3,8 @@
 Every inbound model is ``extra="forbid"``: any unexpected key — including
 body-carrying fields like ``payload``, ``content``, ``params``,
 ``params_hash``, ``digest``, ``body``, ``to``, ``subject``, ``text`` or
-``message`` — is rejected with 422 instead of being silently dropped. This
-mirrors ``FORBIDDEN_ACTIVITY_KEYS`` in workers/xmtp-member/src/activity.ts.
+``message`` — is rejected with 422. The worker's outbound allowlist is
+generated from these OpenAPI models.
 
 Checkpoint ``created_at`` stays a raw string: the EIP-191 message
 (``"MAPR1-LEDGER-CHECKPOINT " + canonicalJson(payload)``) covers the exact

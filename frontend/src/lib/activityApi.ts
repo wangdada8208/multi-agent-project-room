@@ -1,34 +1,7 @@
 import { apiFetch } from "./api";
+import type { ActivityItem, CheckpointView } from "../hubContracts.generated";
 import { localErrorMessage } from "./localHelper";
 import { OWNER_HEADER, ownerConsoleUrl } from "./ownerConsole";
-
-export interface ActivityItem {
-  id: string;
-  source: "activity" | "task_event" | "approval" | string;
-  actor_kind: string | null;
-  actor_id: string | null;
-  kind: string;
-  app?: string | null;
-  status?: string | null;
-  subject_id?: string | null;
-  stream_seq?: number | null;
-  reported_by?: string | null;
-  created_at?: string | null;
-  title?: string | null;
-}
-
-export interface CheckpointView {
-  id: string;
-  stream_id: string;
-  signer_address: string;
-  head_seq: number;
-  head_hash: string;
-  entry_count: number;
-  signature: string;
-  reported_by?: string | null;
-  checkpoint_at: string;
-  created_at: string;
-}
 
 export interface HubActivityFeed {
   room_id: string;
@@ -49,6 +22,8 @@ export interface LocalLedgerEntry {
   seq?: number;
   prev_hash?: string;
   entry_hash?: string;
+  activity_event_id?: string;
+  activity_status?: string;
 }
 
 export interface LedgerIntegrityIssue {
@@ -250,8 +225,7 @@ export interface MergedActivityResult {
 
 /**
  * 合并 Hub 安全元数据流（m2 + 任务 + 审批）与本机成员账本。
- * - 若同一条事件既已上行到 Hub（同 stream_seq+kind+subject_id 或 同 kind+subject_id+created_at）
- *   又出现在本机账本，保留一份（优先本机携带的 scope/reason 安全摘要，绝不出现邮件正文/参数）；
+ * - 本机账本用上传时的活动元数据 ID 匹配 Hub 事件，匹配时保留本机摘要。
  * - 汇总本地账本校验结果，任一链损坏/截断/缺口直接拉红报警。
  */
 export function mergeActivityFeeds(
@@ -260,7 +234,7 @@ export function mergeActivityFeeds(
   options: { appFilter?: string } = {},
 ): MergedActivityResult {
   const items: MergedActivityEntry[] = [];
-  const seenLocalKeys = new Set<string>();
+  const seenLocalEventIds = new Set<string>();
   const appFilter = options.appFilter?.trim().toLowerCase() || "";
 
   let checkedPorts = 0;
@@ -288,11 +262,8 @@ export function mergeActivityFeeds(
       const entry = res.data.entries[idx];
       const app = inferAppFromScope(entry.scope);
       if (appFilter && app !== appFilter) continue;
-      const status = LOCAL_STATUS_BY_KIND[entry.kind] ?? null;
-      const dedupKey = entry.seq != null
-        ? `seq:${entry.seq}:${entry.kind}:${entry.request_id ?? ""}`
-        : `at:${entry.at}:${entry.kind}:${entry.request_id ?? ""}`;
-      seenLocalKeys.add(dedupKey);
+      const status = entry.activity_status ?? LOCAL_STATUS_BY_KIND[entry.kind] ?? null;
+      if (entry.activity_event_id) seenLocalEventIds.add(`evt:${entry.activity_event_id}`);
       items.push({
         id: `local-${res.port}-${entry.seq ?? idx}-${entry.at}`,
         source: "local_ledger",
@@ -311,17 +282,7 @@ export function mergeActivityFeeds(
   }
 
   for (const hubItem of hubFeed?.items ?? []) {
-    if (hubItem.source === "activity") {
-      const seqKey = hubItem.stream_seq != null
-        ? `seq:${hubItem.stream_seq}:${hubItem.kind}:${hubItem.subject_id ?? ""}`
-        : null;
-      const atKey = hubItem.created_at
-        ? `at:${hubItem.created_at}:${hubItem.kind}:${hubItem.subject_id ?? ""}`
-        : null;
-      if ((seqKey && seenLocalKeys.has(seqKey)) || (atKey && seenLocalKeys.has(atKey))) {
-        continue;
-      }
-    }
+    if (hubItem.source === "activity" && seenLocalEventIds.has(hubItem.id)) continue;
     const resolvedApp = hubItem.app ?? (hubItem.source === "task_event" || hubItem.source === "approval" ? "hub" : null);
     if (appFilter && (resolvedApp ?? "").toLowerCase() !== appFilter) continue;
     items.push({

@@ -43,3 +43,31 @@ export interface SeatView {
   source: "helper" | "invite";
   paused_at: string | null;
 }
+
+export interface ActivityItem {
+  id: string;
+  source: string;
+  actor_kind: string | null;
+  actor_id: string | null;
+  kind: string;
+  app?: string | null;
+  status?: string | null;
+  subject_id?: string | null;
+  stream_seq?: number | null;
+  reported_by?: string | null;
+  created_at?: string | null;
+  title?: string | null;
+}
+
+export interface CheckpointView {
+  id: string;
+  stream_id: string;
+  signer_address: string;
+  head_seq: number;
+  head_hash: string;
+  entry_count: number;
+  signature: string;
+  reported_by?: string | null;
+  checkpoint_at: string;
+  created_at: string;
+}
