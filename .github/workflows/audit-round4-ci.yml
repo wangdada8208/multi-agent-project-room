@@ -97,6 +97,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r backend/requirements.txt
 
+      - name: Check generated Hub response contracts
+        run: python scripts/generate_hub_contracts.py --check
+
       - name: Wait for PostgreSQL and Redis
         run: |
           # Always pass -d so the readiness probe never falls back to the

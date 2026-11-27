@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.a2a import task_manager as tm
-from app.api.permissions import require_role
+from app.permissions.service import require_role
 from app.chat import service as chat_service
 from app.core.database import get_db
 from app.core.security import get_current_user

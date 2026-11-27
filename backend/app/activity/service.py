@@ -40,7 +40,7 @@ from app.activity.schemas import (
     SafeActivityEventIn,
     SignedCheckpointIn,
 )
-from app.api.permissions import require_role
+from app.permissions.service import require_role
 from app.approval.models import Approval
 from app.core.eip191 import normalize_address, recover_signer
 from app.core.timestamps import as_utc

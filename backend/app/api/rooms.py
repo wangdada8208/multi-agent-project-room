@@ -9,7 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.permissions import require_role
+from app.permissions.service import require_role
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models.room import Room
@@ -243,7 +243,6 @@ async def create_share_link(
     current_user: User = Depends(get_current_user),
 ) -> dict:
     """Generate a shareable read-only link for a room."""
-    from app.api.permissions import require_role
 
     await require_role(room_id, current_user, db, min_role="owner")
 
@@ -334,7 +333,6 @@ async def revoke_share_token(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict:
-    from app.api.permissions import require_role
     from app.models.room_share import RoomShareToken
 
     await require_role(room_id, current_user, db, min_role="owner")
@@ -356,7 +354,6 @@ async def revoke_all_share_tokens(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict:
-    from app.api.permissions import require_role
     from app.models.room_share import RoomShareToken
 
     await require_role(room_id, current_user, db, min_role="owner")
@@ -381,7 +378,6 @@ async def bind_xmtp_group(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict:
-    from app.api.permissions import require_role
 
     await require_role(room_id, current_user, db, min_role="owner")
 
