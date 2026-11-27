@@ -362,10 +362,10 @@
   gap: 4px;
   min-height: 22px;
   padding-inline: 8px;
-  border: 1px solid #c4dfd0;
+  border: 1px solid rgba(0,0,0,.10);
   border-radius: 9999px;
-  background: #eaf4ee;
-  color: #18794e;
+  background: #f3f3f2;
+  color: #6e6e6e;
   font-size: 10.5px;
   font-weight: 500;
   white-space: nowrap;
@@ -493,9 +493,9 @@
   height: 6px;
   flex: none;
   border-radius: 50%;
-  background: #d95f28;
+  background: #555555;
 }
-.lp-banner--approved::before { background: #18794e; }
+.lp-banner--approved::before { background: #6e6e6e; }
 
 .lp-banner__txt {
   flex: 1;
@@ -512,7 +512,7 @@
 }
 
 .lp-banner__ok {
-  color: #18794e;
+  color: #6e6e6e;
 }
 
 .lp-banner .ui-button {
@@ -576,8 +576,8 @@
 }
 
 .lp-dot--online {
-  background: #18794e;
-  box-shadow: 0 0 0 2px #eaf4ee;
+  background: #6e6e6e;
+  box-shadow: 0 0 0 2px #f3f3f2;
 }
 
 .lp-mem .ui-tag {
@@ -599,7 +599,7 @@
 
 .lp-member-note svg {
   margin-right: 4px;
-  color: #18794e;
+  color: #6e6e6e;
   vertical-align: -2px;
 }
 
@@ -635,7 +635,7 @@
 }
 
 .lp-cli-body p span {
-  color: #d95f28;
+  color: #555555;
 }
 
 .lp-cli-muted {
@@ -752,14 +752,14 @@
   align-items: center;
   gap: 5px;
   margin-top: 28px;
-  color: #d95f28;
+  color: #555555;
   font-size: 14px;
   font-weight: 500;
 }
 
 .lp-feature__copy a:hover {
   text-decoration: none;
-  color: #b94f20;
+  color: #555555;
 }
 
 .lp-feature-art {
@@ -867,7 +867,7 @@
 }
 
 .lp-agent-line svg:last-child {
-  color: #18794e;
+  color: #6e6e6e;
 }
 
 .lp-pair-note {
@@ -880,7 +880,7 @@
 
 .lp-pair-note svg {
   margin-right: 4px;
-  color: #18794e;
+  color: #6e6e6e;
   vertical-align: -2px;
 }
 
@@ -904,11 +904,11 @@
 }
 
 .lp-terminal-line span {
-  color: #d95f28;
+  color: #555555;
 }
 
 .lp-terminal-line--ok {
-  color: #18794e;
+  color: #6e6e6e;
 }
 
 .lp-terminal-actions {
@@ -1013,9 +1013,9 @@
   height: 6px;
   flex: none;
   border-radius: 50%;
-  background: #d95f28;
+  background: #555555;
 }
-.lp-approval--done::before { background: #18794e; }
+.lp-approval--done::before { background: #6e6e6e; }
 
 .lp-approval > div {
   flex: 1;
@@ -1031,7 +1031,7 @@
 }
 
 .lp-approval > svg {
-  color: #18794e;
+  color: #6e6e6e;
 }
 
 .lp-safety-row {
@@ -1090,7 +1090,7 @@
   justify-content: center;
   gap: 5px;
   margin-top: 12px;
-  color: #b91c1c;
+  color: #555555;
   font-size: 11px;
 }
 
@@ -1243,7 +1243,7 @@
   gap: 5px;
   margin-top: auto;
   padding-top: 24px;
-  color: #d95f28;
+  color: #555555;
   font-size: 13px;
   font-weight: 500;
 }
@@ -1480,3 +1480,10 @@
     flex-direction: column;
   }
 }
+
+/* final neutral color pass */
+.lp-dot,.lp-banner::before,.lp-approval::before{display:none!important}
+.lp-e2ee-pill{border:0!important;background:transparent!important;color:#6e6e6e!important;padding-inline:0!important;font-weight:400!important}
+.lp-product-window,.lp-mini-window,.lp-cli-window,.lp-product-main,.lp-product-chat,.lp-product-side{background:#fff!important}
+.lp-human-bubble,.lp-msg--human .lp-msg-body,.lp-msg--me .lp-msg-body{background:#f3f3f2!important}
+.lp a{color:#555555}.lp a:hover{color:#171717}

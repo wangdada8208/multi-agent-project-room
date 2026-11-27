@@ -1172,3 +1172,9 @@
     font-size: 16px;
   }
 }
+
+/* Cursor neutral rooms */
+.wb-rooms-page,.app-shell__main{background:#fff}.wb-attention{background:#f7f7f6;border:1px solid rgba(0,0,0,.08);border-radius:8px}.wb-attention::before{display:none}
+.wb-room-card{background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:8px;box-shadow:none}.wb-room-card:hover{border-color:rgba(0,0,0,.16)}
+.wb-room-card__pending-dot{display:none!important}.ui-tag--warn{background:#f2f2f1!important;color:#171717!important;border-color:rgba(0,0,0,.06)!important}
+.wb-room-card__lock{color:#9a9a9a!important}

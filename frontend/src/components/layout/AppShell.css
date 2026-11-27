@@ -92,3 +92,10 @@
 [data-theme="dark"] .app-shell { color-scheme: dark; }
 
 .app-rail { border-right: 1px solid rgba(20,20,19,.08); }
+
+/* Cursor web-agent rail */
+.app-shell{background:#fff}.app-rail{background:#f5f5f5;border-right:1px solid rgba(0,0,0,.07);width:236px}
+.app-rail__brand>span{background:#171717;color:#fff}.app-rail nav a[aria-current=page]{background:#eaeae9;color:#171717;font-weight:500}
+.app-rail__rooms h2{font-size:11px;color:#8e8e8e;font-weight:500;letter-spacing:.01em}
+.workbench-count{background:transparent!important;color:#6e6e6e!important;min-width:auto!important;height:auto!important;padding:0!important;border-radius:0!important;font-weight:500!important}
+.app-rail__pending-dot{display:none!important}
