@@ -384,8 +384,8 @@ async def test_cursor_reset_during_send_is_not_overwritten(db, actors):
 
 async def test_current_db_transport_guard_blocks_xmtp_switch_during_save(db, actors, monkeypatch):
     from app.chat import service
-    async def switch_after_initial_guard(session):
-        await session.commit()
+    async def switch_after_initial_guard():
+        await db.commit()
         async with sessions() as other:
             await other.execute(update(Room).where(Room.id==actors.room.id).values(transport='xmtp'))
             await other.commit()

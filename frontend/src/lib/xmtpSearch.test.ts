@@ -75,13 +75,22 @@ describe("XmtpSearchIndex", () => {
     expect(index.search("hello", { limit: 1 }).map((r) => r.id)).toEqual(["m1"]);
   });
 
+  it("does not store a malformed single entry", () => {
+    const referenceTime = Date.parse("2026-11-20T12:00:00Z");
+    const index = new XmtpSearchIndex({ now: () => referenceTime });
+    index.upsert(entry("m1", "", "inbox-a", "2026-11-20T10:00:00Z"));
+    expect(index.size).toBe(0);
+  });
+
   it("caps memory at the documented bound", () => {
     expect(XMTP_SEARCH_MAX_ENTRIES).toBe(2000);
-    const index = new XmtpSearchIndex();
-    for (let i = 0; i < XMTP_SEARCH_MAX_ENTRIES + 50; i++) {
-      index.upsert(entry(`m${i}`, `n${i}`, "a", new Date(1_700_000_000_000 + i).toISOString()));
-    }
-    expect(index.size).toBeLessThanOrEqual(XMTP_SEARCH_MAX_ENTRIES);
+    const referenceTime = Date.parse("2026-11-20T12:00:00Z");
+    const index = new XmtpSearchIndex({ now: () => referenceTime });
+    index.ingest(Array.from({ length: XMTP_SEARCH_MAX_ENTRIES + 50 }, (_, i) =>
+      entry(`m${i}`, `n${i}`, "a", new Date(referenceTime - 10_000 + i).toISOString()),
+    ));
+    expect(index.size).toBe(XMTP_SEARCH_MAX_ENTRIES);
+    expect(index.search("n", { limit: 1 }).map((result) => result.id)).toEqual(["m50"]);
   });
 });
 

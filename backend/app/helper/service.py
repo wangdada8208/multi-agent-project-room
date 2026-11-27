@@ -32,6 +32,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.agent.identity import comparison_identity
 from app.api.permissions import require_role
 from app.core.security import create_access_token
+from app.core.timestamps import as_utc
 from app.helper.models import AgentSeat, HelperCode, HelperDevice
 from app.helper.schemas import (
     AgentSeatStatus,
@@ -72,12 +73,6 @@ _attempts: dict[tuple[str, str], deque] = defaultdict(deque)
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
-
-
-def _as_utc(dt: datetime) -> datetime:
-    if dt.tzinfo is None:
-        return dt.replace(tzinfo=timezone.utc)
-    return dt.astimezone(timezone.utc)
 
 
 def _digest(secret_text: str, salt: str) -> str:
@@ -242,7 +237,7 @@ def _seat_view(seat: AgentSeat, owner_user_id: str, agent_display_name: str) -> 
         xmtp_address=seat.xmtp_address,
         group_status="removed" if seat.removed_at is not None else seat.group_status,
         source=seat.source,
-        paused_at=_as_utc(seat.paused_at).isoformat() if seat.paused_at else None,
+        paused_at=as_utc(seat.paused_at).isoformat() if seat.paused_at else None,
     )
 
 
@@ -303,8 +298,8 @@ async def list_helpers(db: AsyncSession, owner: User) -> list[HelperDeviceView]:
         id=h.id,
         device_name=h.device_name,
         platform=h.platform,
-        created_at=_as_utc(h.created_at).isoformat(),
-        last_seen_at=_as_utc(h.last_seen_at).isoformat() if h.last_seen_at else None,
+        created_at=as_utc(h.created_at).isoformat(),
+        last_seen_at=as_utc(h.last_seen_at).isoformat() if h.last_seen_at else None,
         revoked=h.revoked_at is not None) for h in rows]
 
 
@@ -385,7 +380,7 @@ async def list_seat_peers(db: AsyncSession, user: User, room_id: str) -> list[Se
     return [SeatPeer(agent_display_name=display_name, kind=seat.kind,
                      trust_tier=trust_tier(seat.kind), xmtp_address=seat.xmtp_address,
                      source=seat.source,
-                     paused_at=_as_utc(seat.paused_at).isoformat() if seat.paused_at else None)
+                     paused_at=as_utc(seat.paused_at).isoformat() if seat.paused_at else None)
             for seat, display_name in rows]
 
 
@@ -469,8 +464,8 @@ async def get_agent_seat_status(db: AsyncSession, user: User, seat_id: str) -> A
         room_id=seat.room_id,
         source=seat.source,
         group_status="removed" if seat.removed_at is not None else seat.group_status,
-        paused_at=_as_utc(seat.paused_at).isoformat() if seat.paused_at else None,
-        removed_at=_as_utc(seat.removed_at).isoformat() if seat.removed_at else None,
+        paused_at=as_utc(seat.paused_at).isoformat() if seat.paused_at else None,
+        removed_at=as_utc(seat.removed_at).isoformat() if seat.removed_at else None,
     )
 
 
@@ -532,7 +527,7 @@ async def authenticate_helper(db: AsyncSession, bearer: str, *, allow_revoked: b
     if owner is None or not owner.is_active:
         _reject_helper()
     now = _now()
-    if helper.last_seen_at is None or _as_utc(helper.last_seen_at) <= now - timedelta(seconds=_LAST_SEEN_UPDATE_SECONDS):
+    if helper.last_seen_at is None or as_utc(helper.last_seen_at) <= now - timedelta(seconds=_LAST_SEEN_UPDATE_SECONDS):
         helper.last_seen_at = now
         await db.commit()
     return helper

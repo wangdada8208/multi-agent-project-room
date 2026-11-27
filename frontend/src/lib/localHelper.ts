@@ -281,10 +281,6 @@ export function powershellInstallCommand(code: string, hubOrigin?: string): stri
 
 // ── Hub（需要人类登录态，走 apiFetch 统一带令牌与请求编号） ──
 
-function hubFetch(input: string, init?: RequestInit): Promise<Response> {
-  return apiFetch(input, init);
-}
-
 export class HubHttpError extends Error {
   status: number;
 
@@ -309,7 +305,7 @@ async function readHubJson(res: Response, fallback: string): Promise<unknown> {
 
 /** POST /api/v1/helpers/pairing-codes：发一次性配对码（10 分钟，10 个上限）。 */
 export async function createPairingCode(): Promise<{ code: string; expires_at: string; install_command: string }> {
-  const res = await hubFetch("/api/v1/helpers/pairing-codes", { method: "POST" });
+  const res = await apiFetch("/api/v1/helpers/pairing-codes", { method: "POST" });
   return (await readHubJson(res, "生成配对码失败，请重试")) as {
     code: string;
     expires_at: string;
@@ -319,14 +315,14 @@ export async function createPairingCode(): Promise<{ code: string; expires_at: s
 
 /** GET /api/v1/helpers：我的本机助手设备列表（含已吊销）。 */
 export async function listMyHelpers(): Promise<HelperDevice[]> {
-  const res = await hubFetch("/api/v1/helpers");
+  const res = await apiFetch("/api/v1/helpers");
   const body = await readHubJson(res, "读取设备列表失败");
   return Array.isArray(body) ? (body as HelperDevice[]) : [];
 }
 
 /** DELETE /api/v1/helpers/{helper_id}：吊销一台本机助手（它的全部席位同时移出）。 */
 export async function revokeHelper(helperId: string): Promise<void> {
-  const res = await hubFetch(`/api/v1/helpers/${encodeURIComponent(helperId)}`, { method: "DELETE" });
+  const res = await apiFetch(`/api/v1/helpers/${encodeURIComponent(helperId)}`, { method: "DELETE" });
   if (!res.ok) {
     await readHubJson(res, "吊销失败，请重试");
   }
@@ -340,7 +336,7 @@ export async function createJoinTicket(
   helperId: string,
   input: { room_id: string; agent_key: string; owner_xmtp_address: string },
 ): Promise<{ ticket: string; expires_at: string }> {
-  const res = await hubFetch(`/api/v1/helpers/${encodeURIComponent(helperId)}/join-tickets`, {
+  const res = await apiFetch(`/api/v1/helpers/${encodeURIComponent(helperId)}/join-tickets`, {
     method: "POST",
     body: JSON.stringify(input),
   });
@@ -349,14 +345,14 @@ export async function createJoinTicket(
 
 /** GET /api/v1/rooms/{room_id}/seats：房间内全部席位（房间成员可读）。 */
 export async function listRoomSeats(roomId: string): Promise<HubSeatView[]> {
-  const res = await hubFetch(`/api/v1/rooms/${encodeURIComponent(roomId)}/seats`);
+  const res = await apiFetch(`/api/v1/rooms/${encodeURIComponent(roomId)}/seats`);
   const body = await readHubJson(res, "读取席位状态失败");
   return Array.isArray(body) ? (body as HubSeatView[]) : [];
 }
 
 /** POST /api/v1/rooms/{room_id}/seats/{seat_id}/group-added：上报席位已加入加密群（幂等）。 */
 export async function markSeatGroupAdded(roomId: string, seatId: string): Promise<void> {
-  const res = await hubFetch(
+  const res = await apiFetch(
     `/api/v1/rooms/${encodeURIComponent(roomId)}/seats/${encodeURIComponent(seatId)}/group-added`,
     { method: "POST" },
   );
@@ -367,7 +363,7 @@ export async function markSeatGroupAdded(roomId: string, seatId: string): Promis
 
 /** DELETE /api/v1/rooms/{room_id}/seats/{seat_id}：把席位移出房间（席位主人或房主）。 */
 export async function removeRoomSeat(roomId: string, seatId: string): Promise<void> {
-  const res = await hubFetch(
+  const res = await apiFetch(
     `/api/v1/rooms/${encodeURIComponent(roomId)}/seats/${encodeURIComponent(seatId)}`,
     { method: "DELETE" },
   );
@@ -378,7 +374,7 @@ export async function removeRoomSeat(roomId: string, seatId: string): Promise<vo
 
 /** POST .../seats/{seat_id}/pause：暂停席位（停本机进程，不删席位；房主或席位主人，204）。 */
 export async function pauseRoomSeat(roomId: string, seatId: string): Promise<void> {
-  const res = await hubFetch(
+  const res = await apiFetch(
     `/api/v1/rooms/${encodeURIComponent(roomId)}/seats/${encodeURIComponent(seatId)}/pause`,
     { method: "POST" },
   );
@@ -389,7 +385,7 @@ export async function pauseRoomSeat(roomId: string, seatId: string): Promise<voi
 
 /** POST .../seats/{seat_id}/resume：恢复被显式暂停的席位（204）。 */
 export async function resumeRoomSeat(roomId: string, seatId: string): Promise<void> {
-  const res = await hubFetch(
+  const res = await apiFetch(
     `/api/v1/rooms/${encodeURIComponent(roomId)}/seats/${encodeURIComponent(seatId)}/resume`,
     { method: "POST" },
   );
@@ -416,7 +412,7 @@ export async function createRoomInvite(
   roomId: string,
   options: CreateInviteOptions = {},
 ): Promise<RoomInviteView> {
-  const res = await hubFetch(`/api/v1/rooms/${encodeURIComponent(roomId)}/invites`, {
+  const res = await apiFetch(`/api/v1/rooms/${encodeURIComponent(roomId)}/invites`, {
     method: "POST",
     body: JSON.stringify({
       proposed_scopes: options.proposed_scopes ?? [],
@@ -432,7 +428,7 @@ export async function createRoomInvite(
 
 /** DELETE /api/v1/rooms/{room_id}/invites/{token}：软吊销邀请（pending 核销级联 revoked）。 */
 export async function revokeRoomInvite(roomId: string, token: string): Promise<void> {
-  const res = await hubFetch(
+  const res = await apiFetch(
     `/api/v1/rooms/${encodeURIComponent(roomId)}/invites/${encodeURIComponent(token)}`,
     { method: "DELETE" },
   );
@@ -443,7 +439,7 @@ export async function revokeRoomInvite(roomId: string, token: string): Promise<v
 
 /** GET /api/v1/rooms/{room_id}/invites：房主读取房间内邀请记录（含已核销地址）。 */
 export async function listRoomInvites(roomId: string): Promise<RoomInviteView[]> {
-  const res = await hubFetch(`/api/v1/rooms/${encodeURIComponent(roomId)}/invites`);
+  const res = await apiFetch(`/api/v1/rooms/${encodeURIComponent(roomId)}/invites`);
   const body = (await readHubJson(res, "读取房间邀请记录失败")) as { invites?: RoomInviteView[] };
   return body.invites ?? [];
 }
@@ -452,7 +448,7 @@ export async function listRoomInvites(roomId: string): Promise<RoomInviteView[]>
 export async function acceptRoomInvite(
   token: string,
 ): Promise<{ room_id: string; role: string }> {
-  const res = await hubFetch(`/api/v1/invites/${encodeURIComponent(token)}/accept`, {
+  const res = await apiFetch(`/api/v1/invites/${encodeURIComponent(token)}/accept`, {
     method: "POST",
   });
   return (await readHubJson(res, "接受房间入群邀请失败")) as {
@@ -484,7 +480,7 @@ export async function issueSignatureNonce(input: {
   resource: string;
   address: string;
 }): Promise<SignatureNonce> {
-  const res = await hubFetch("/api/v1/invites/nonce", {
+  const res = await apiFetch("/api/v1/invites/nonce", {
     method: "POST",
     body: JSON.stringify(input),
   });
@@ -505,7 +501,7 @@ export async function redeemRoomInvite(
   token: string,
   input: { xmtp_address: string; nonce: string; signature: string },
 ): Promise<RedeemInviteResult> {
-  const res = await hubFetch(`/api/v1/invites/${encodeURIComponent(token)}/redeem`, {
+  const res = await apiFetch(`/api/v1/invites/${encodeURIComponent(token)}/redeem`, {
     method: "POST",
     body: JSON.stringify(input),
   });
@@ -517,7 +513,7 @@ export async function bindMyXmtpAddress(
   roomId: string,
   input: { xmtp_address: string; nonce: string; signature: string },
 ): Promise<{ ok: boolean; xmtp_address: string }> {
-  const res = await hubFetch(
+  const res = await apiFetch(
     `/api/v1/rooms/${encodeURIComponent(roomId)}/members/me/xmtp-address`,
     {
       method: "PUT",
@@ -536,7 +532,7 @@ export async function listRoomRedemptions(
   status?: RedemptionStatus,
 ): Promise<RedemptionView[]> {
   const suffix = status ? `?status=${encodeURIComponent(status)}` : "";
-  const res = await hubFetch(
+  const res = await apiFetch(
     `/api/v1/rooms/${encodeURIComponent(roomId)}/redemptions${suffix}`,
   );
   const body = (await readHubJson(res, "读取入群申请失败")) as {
@@ -551,7 +547,7 @@ export async function approveRedemption(
   redemptionId: string,
   options: { approved_scopes?: string[]; display_name?: string } = {},
 ): Promise<RedemptionView> {
-  const res = await hubFetch(
+  const res = await apiFetch(
     `/api/v1/rooms/${encodeURIComponent(roomId)}/redemptions/${encodeURIComponent(redemptionId)}/approve`,
     {
       method: "POST",
@@ -570,7 +566,7 @@ export async function denyRedemption(
   redemptionId: string,
   reason?: string,
 ): Promise<RedemptionView> {
-  const res = await hubFetch(
+  const res = await apiFetch(
     `/api/v1/rooms/${encodeURIComponent(roomId)}/redemptions/${encodeURIComponent(redemptionId)}/deny`,
     {
       method: "POST",

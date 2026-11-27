@@ -10,19 +10,17 @@ import hashlib
 import hmac
 import html
 import logging
-import os
 import re
 import secrets
 import smtplib
-import sys
 import time
 import unicodedata
 from typing import Any, Literal
-import urllib.parse
 
 from fastapi import HTTPException
 import httpx
 
+from app.auth import redis_settings
 from app.config import Settings
 
 logger = logging.getLogger(__name__)
@@ -94,28 +92,6 @@ _redis_sync_client: Any = None
 _redis_open_until: float = 0.0
 
 
-def _is_test_environment() -> bool:
-    if os.environ.get("MAPR_TESTING") or os.environ.get("MAPR_TEST_REDIS_URL") or os.environ.get("MAPR_TEST_DATABASE_URL"):
-        return True
-    if os.environ.get("PYTEST_CURRENT_TEST") is not None:
-        return True
-    return "pytest" in sys.modules
-
-
-def _effective_redis_url(settings: Settings) -> str:
-    test_url = os.environ.get("MAPR_TEST_REDIS_URL")
-    if test_url:
-        return test_url
-    base_url = settings.redis_url
-    if _is_test_environment() and not os.environ.get("MAPR_REDIS_URL"):
-        test_db = os.environ.get("MAPR_TEST_REDIS_DB", "15")
-        parsed = urllib.parse.urlsplit(base_url)
-        return urllib.parse.urlunsplit(
-            (parsed.scheme, parsed.netloc, f"/{test_db}", parsed.query, parsed.fragment)
-        )
-    return base_url
-
-
 def _trip_redis_breaker() -> None:
     global _redis_async_client, _redis_async_loop, _redis_sync_client, _redis_open_until
     _redis_async_client = None
@@ -137,7 +113,7 @@ async def _get_redis_async(settings: Settings) -> Any:
             import redis.asyncio as redis_asyncio
 
             client = redis_asyncio.Redis.from_url(
-                _effective_redis_url(settings),
+                redis_settings.effective_redis_url(settings),
                 socket_timeout=_REDIS_TIMEOUT_SECONDS,
                 socket_connect_timeout=_REDIS_TIMEOUT_SECONDS,
                 decode_responses=True,
@@ -162,14 +138,14 @@ def reset_email_otp_state() -> None:
     _redis_sync_client = None
     _redis_open_until = 0.0
 
-    if not _is_test_environment() and not os.environ.get("MAPR_ALLOW_REDIS_FLUSH"):
+    if not redis_settings.can_reset_redis():
         return
     try:
         import redis
         from app.config import get_settings
 
         client = redis.Redis.from_url(
-            _effective_redis_url(get_settings()),
+            redis_settings.effective_redis_url(get_settings()),
             socket_timeout=_REDIS_TIMEOUT_SECONDS,
             socket_connect_timeout=_REDIS_TIMEOUT_SECONDS,
             decode_responses=True,

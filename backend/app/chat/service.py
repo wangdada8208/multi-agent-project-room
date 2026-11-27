@@ -29,13 +29,12 @@ def retention_cutoff() -> datetime:
     return datetime.now(timezone.utc) - timedelta(days=settings.message_retention_days)
 
 
-async def cleanup_expired_messages(db: AsyncSession | None = None) -> int:
+async def cleanup_expired_messages() -> int:
     """Delete messages older than the configured retention period with safe FK nullification.
 
     Runs on its own session: a rollback here must never discard the caller's
     uncommitted work, and its commit must never flush the caller's transaction
-    early. The session parameter is accepted for call-site compatibility and
-    deliberately unused.
+    early.
     """
     from app.core.database import async_session
 
@@ -67,7 +66,7 @@ async def cleanup_expired_messages(db: AsyncSession | None = None) -> int:
             result = await db.execute(stmt)
             await db.commit()
             return result.rowcount or 0
-    except Exception as err:
+    except Exception:
         logger.warning("Failed to cleanup expired messages; details suppressed")
         return 0
 
@@ -88,7 +87,7 @@ async def save_message(
     if room is not None and room.transport == "xmtp":
         raise PlaintextStorageForbidden(room_id)
 
-    await cleanup_expired_messages(db)
+    await cleanup_expired_messages()
 
     if client_message_id is not None:
         import re
@@ -154,7 +153,7 @@ async def list_messages(
     Page 1 returns the newest retained messages, ordered oldest → newest for
     chat display. Older pages walk backward through history.
     """
-    await cleanup_expired_messages(db)
+    await cleanup_expired_messages()
 
     stmt = (
         select(Message)
@@ -203,10 +202,3 @@ async def get_or_create_room(
     await db.commit()
     await db.refresh(room)
     return room
-
-
-async def delete_room_messages(db: AsyncSession, room_id: str) -> None:
-    """Delete all messages in a room."""
-    stmt = delete(Message).where(Message.room_id == room_id)
-    await db.execute(stmt)
-    await db.commit()

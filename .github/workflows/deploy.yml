@@ -143,12 +143,12 @@ jobs:
           sys.path.insert(0, "backend/tests"); sys.path.insert(0, "backend")
           import app.main  # noqa: register all models
           import conftest as C
-          from app.auth import rate_limit
+          from app.auth import rate_limit, redis_settings
           assert C.engine.dialect.name == "postgresql", f"tests would run on {C.engine.dialect.name}, not PostgreSQL"
           client = rate_limit._get_redis_sync()
           assert client is not None, "Redis is unreachable: rate-limit tests would silently skip"
           assert client.ping() is True
-          url = rate_limit._get_effective_redis_url()
+          url = redis_settings.effective_redis_url()
           assert url.rstrip("/").endswith("/15"), f"tests must use the dedicated Redis DB, got {url}"
           print("OK: PostgreSQL dialect =", C.engine.dialect.name, "| Redis DB =", url)
           PY

@@ -50,21 +50,24 @@ export class XmtpSearchIndex {
   }
 
   upsert(entry: XmtpSearchEntry): void {
-    if (!entry?.id || !entry.senderInboxId || typeof entry.content !== "string" || !entry.content) {
-      return;
+    if (this.insert(entry)) {
+      this.prune();
     }
-    this.entries.set(entry.id, entry);
-    this.prune();
   }
 
   ingest(batch: Iterable<XmtpSearchEntry>): void {
     for (const entry of batch) {
-      if (!entry?.id || !entry.senderInboxId || typeof entry.content !== "string" || !entry.content) {
-        continue;
-      }
-      this.entries.set(entry.id, entry);
+      this.insert(entry);
     }
     this.prune();
+  }
+
+  private insert(entry: XmtpSearchEntry): boolean {
+    if (!entry?.id || !entry.senderInboxId || typeof entry.content !== "string" || !entry.content) {
+      return false;
+    }
+    this.entries.set(entry.id, entry);
+    return true;
   }
 
   search(

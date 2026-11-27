@@ -202,10 +202,11 @@ async def test_helper_event_ingest_and_idempotent_duplicates(
     assert resp.status_code == 200, resp.text
     assert resp.json() == {"accepted": 5, "duplicates": 0}
 
-    # Re-posting the identical batch is a pure no-op.
+    # Treat different offsets for the same instant as the same event.
+    replay = [{**event, "created_at": "2026-11-20T09:00:00+08:00"} for event in events]
     again = await client.post(
         f"{BASE}/me/activity", headers=_helper_headers(paired_helper),
-        json={"events": events},
+        json={"events": replay},
     )
     assert again.status_code == 200 and again.json() == {"accepted": 0, "duplicates": 5}
     count = await db.scalar(select(func.count()).select_from(ActivityEvent))

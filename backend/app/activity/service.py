@@ -43,6 +43,7 @@ from app.activity.schemas import (
 from app.api.permissions import require_role
 from app.approval.models import Approval
 from app.core.eip191 import normalize_address, recover_signer
+from app.core.timestamps import as_utc
 from app.helper.models import AgentSeat, HelperDevice
 from app.models.room import Room
 from app.models.room_permission import RoomPermission
@@ -55,16 +56,8 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def _as_utc(dt: Optional[datetime]) -> Optional[datetime]:
-    if dt is None:
-        return None
-    if dt.tzinfo is None:
-        return dt.replace(tzinfo=timezone.utc)
-    return dt.astimezone(timezone.utc)
-
-
 def _iso(dt: Optional[datetime]) -> Optional[str]:
-    dt = _as_utc(dt)
+    dt = as_utc(dt)
     return dt.isoformat() if dt is not None else None
 
 
@@ -279,7 +272,7 @@ def _event_from_wire(ev: SafeActivityEventIn, reported_by: str | None) -> Activi
         subject_id=ev.subject_id,
         stream_seq=ev.stream_seq,
         reported_by=reported_by,
-        created_at=_as_utc(ev.created_at),
+        created_at=as_utc(ev.created_at),
     )
 
 
@@ -504,10 +497,6 @@ def _split_filter(value: Optional[str]) -> Optional[set[str]]:
     return parts or None
 
 
-def _norm_dt(value: Optional[datetime]) -> Optional[datetime]:
-    return _as_utc(value)
-
-
 async def merged_activity_feed(
     db: AsyncSession,
     user: User,
@@ -532,8 +521,8 @@ async def merged_activity_feed(
     await require_role(room_id, user, db, min_role="viewer")
     room = await _active_room(db, room_id)
     plaintext_room = room.transport != "xmtp"
-    since = _norm_dt(since)
-    until = _norm_dt(until)
+    since = as_utc(since)
+    until = as_utc(until)
 
     items: list[ActivityItem] = []
 

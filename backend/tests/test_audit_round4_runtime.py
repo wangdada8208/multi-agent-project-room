@@ -22,14 +22,13 @@ import redis
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.exc import OperationalError, ProgrammingError
 
-from app.auth import rate_limit
+from app.auth import rate_limit, redis_settings
 from app.auth.rate_limit import (
     _attempts,
     _blocked_until,
     _flush_redis_state,
-    _get_effective_redis_url,
-    _is_test_environment,
 )
+from app.config import Settings
 from app.core import database
 from app.core.database import check_database_readiness
 from app.core.observability import (
@@ -53,7 +52,7 @@ class TestRedisIsolation:
 
     def test_attempts_clear_does_not_flush_redis(self):
         """_attempts.clear() must only clear in-memory state, NOT flush Redis."""
-        client = redis.Redis.from_url(_get_effective_redis_url(), decode_responses=True)
+        client = redis.Redis.from_url(redis_settings.effective_redis_url(), decode_responses=True)
         test_key = "mapr:ratelimit:attempts:login:ip:192.0.2.1"
         client.set(test_key, "1")
 
@@ -68,7 +67,7 @@ class TestRedisIsolation:
 
     def test_redis_flush_preserves_other_namespaces_and_hubs(self):
         """_flush_redis_state() must only delete keys matching _KEY_PREFIX, never other data."""
-        client = redis.Redis.from_url(_get_effective_redis_url(), decode_responses=True)
+        client = redis.Redis.from_url(redis_settings.effective_redis_url(), decode_responses=True)
         other_keys = [
             "other_hub:ratelimit:ip:10.0.0.1",
             "prod:ratelimit:user_alpha",
@@ -97,18 +96,34 @@ class TestRedisIsolation:
 
     def test_redis_test_environment_uses_dedicated_database(self):
         """Test environment must automatically target test database (e.g. DB 15)."""
-        assert _is_test_environment() is True
-        effective_url = _get_effective_redis_url()
+        assert redis_settings.is_test_environment() is True
+        effective_url = redis_settings.effective_redis_url()
         # Verify it does not target default DB 0 in test mode
         assert not effective_url.endswith("/0")
         assert "/15" in effective_url or "test" in effective_url
 
+    def test_redis_url_precedence_and_test_database_routing(self, monkeypatch):
+        base_url = "redis://cache.example:6380/3?protocol=3"
+        settings = Settings(redis_url=base_url, environment="development")
+        monkeypatch.setenv("MAPR_TESTING", "1")
+        monkeypatch.setenv("MAPR_TEST_REDIS_DB", "12")
+        monkeypatch.delenv("MAPR_TEST_REDIS_URL", raising=False)
+        monkeypatch.delenv("MAPR_REDIS_URL", raising=False)
+        assert redis_settings.effective_redis_url(settings) == "redis://cache.example:6380/12?protocol=3"
+
+        monkeypatch.setenv("MAPR_REDIS_URL", base_url)
+        assert redis_settings.effective_redis_url(settings) == base_url
+
+        override = "redis://redis-test.example:6379/15"
+        monkeypatch.setenv("MAPR_TEST_REDIS_URL", override)
+        assert redis_settings.effective_redis_url(settings) == override
+
     def test_redis_flush_refuses_outside_test_environment(self, monkeypatch):
         """In a production environment, _flush_redis_state must refuse to scan/delete."""
-        monkeypatch.setattr(rate_limit, "_is_test_environment", lambda: False)
+        monkeypatch.setattr(redis_settings, "is_test_environment", lambda: False)
         monkeypatch.delenv("MAPR_ALLOW_REDIS_FLUSH", raising=False)
 
-        client = redis.Redis.from_url(_get_effective_redis_url(), decode_responses=True)
+        client = redis.Redis.from_url(redis_settings.effective_redis_url(), decode_responses=True)
         target_key = f"{rate_limit._KEY_PREFIX}attempts:production_user"
         client.set(target_key, "prod_data")
 
