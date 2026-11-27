@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   extractXmtpMessageText,
   XmtpSearchIndex,
+  type XmtpSearchIndexOptions,
   XMTP_SEARCH_MAX_ENTRIES,
 } from "./xmtpSearch";
 
@@ -9,9 +10,15 @@ function entry(id: string, content: string, sender = "inbox-a", createdAt = "202
   return { id, content, senderInboxId: sender, createdAt };
 }
 
+const referenceTime = Date.parse("2026-11-20T12:00:00Z");
+
+function createIndex(options: XmtpSearchIndexOptions = {}) {
+  return new XmtpSearchIndex({ now: () => referenceTime, ...options });
+}
+
 describe("XmtpSearchIndex", () => {
   it("finds case-insensitive substring matches in chronological order", () => {
-    const index = new XmtpSearchIndex();
+    const index = createIndex();
     index.ingest([
       entry("m2", "Hello MAPR World", "a", "2026-11-20T10:02:00Z"),
       entry("m1", "nothing here", "a", "2026-11-20T10:01:00Z"),
@@ -22,7 +29,7 @@ describe("XmtpSearchIndex", () => {
   });
 
   it("filters by sender inbox id", () => {
-    const index = new XmtpSearchIndex();
+    const index = createIndex();
     index.ingest([
       entry("a1", "same keyword", "inbox-alice", "2026-11-20T10:00:00Z"),
       entry("b1", "same keyword", "inbox-bob", "2026-11-20T10:01:00Z"),
@@ -32,7 +39,7 @@ describe("XmtpSearchIndex", () => {
   });
 
   it("deduplicates by message id on repeated ingest", () => {
-    const index = new XmtpSearchIndex();
+    const index = createIndex();
     index.upsert(entry("m1", "first"));
     index.upsert(entry("m1", "first"));
     index.ingest([entry("m1", "first"), entry("m2", "second")]);
@@ -40,7 +47,7 @@ describe("XmtpSearchIndex", () => {
   });
 
   it("evicts the oldest entries once the bound is exceeded", () => {
-    const index = new XmtpSearchIndex({ maxEntries: 3 });
+    const index = createIndex({ maxEntries: 3 });
     for (let i = 0; i < 5; i++) {
       index.upsert(entry(`m${i}`, `msg ${i}`, "a", `2026-11-20T10:0${i}:00Z`));
     }
@@ -50,7 +57,7 @@ describe("XmtpSearchIndex", () => {
   });
 
   it("drops entries older than the age bound", () => {
-    let now = Date.parse("2026-11-20T12:00:00Z");
+    let now = referenceTime;
     const index = new XmtpSearchIndex({ maxAgeMs: 60_000, now: () => now });
     index.upsert(entry("old", "old msg", "a", "2026-11-20T11:00:00Z"));
     index.upsert(entry("new", "new msg", "a", "2026-11-20T11:59:30Z"));
@@ -59,17 +66,20 @@ describe("XmtpSearchIndex", () => {
   });
 
   it("skips empty or malformed entries", () => {
-    const index = new XmtpSearchIndex();
-    index.ingest([
+    const index = createIndex();
+    const malformed = [
       entry("", "x"),
       entry("m1", ""),
       { id: "m2", content: "ok", senderInboxId: "", createdAt: "2026-11-20T10:00:00Z" },
-    ]);
+    ];
+    for (const candidate of malformed) index.upsert(candidate);
+    expect(index.size).toBe(0);
+    index.ingest(malformed);
     expect(index.size).toBe(0);
   });
 
   it("returns empty for blank queries and respects limit", () => {
-    const index = new XmtpSearchIndex();
+    const index = createIndex();
     index.ingest([entry("m1", "hello"), entry("m2", "hello again")]);
     expect(index.search("   ")).toEqual([]);
     expect(index.search("hello", { limit: 1 }).map((r) => r.id)).toEqual(["m1"]);
@@ -77,11 +87,12 @@ describe("XmtpSearchIndex", () => {
 
   it("caps memory at the documented bound", () => {
     expect(XMTP_SEARCH_MAX_ENTRIES).toBe(2000);
-    const index = new XmtpSearchIndex();
-    for (let i = 0; i < XMTP_SEARCH_MAX_ENTRIES + 50; i++) {
-      index.upsert(entry(`m${i}`, `n${i}`, "a", new Date(1_700_000_000_000 + i).toISOString()));
-    }
-    expect(index.size).toBeLessThanOrEqual(XMTP_SEARCH_MAX_ENTRIES);
+    const index = createIndex();
+    index.ingest(Array.from({ length: XMTP_SEARCH_MAX_ENTRIES + 50 }, (_, i) =>
+      entry(`m${i}`, `n${i}`, "a", new Date(referenceTime - 10_000 + i).toISOString()),
+    ));
+    expect(index.size).toBe(XMTP_SEARCH_MAX_ENTRIES);
+    expect(index.search("n", { limit: 1 }).map((result) => result.id)).toEqual(["m50"]);
   });
 });
 
