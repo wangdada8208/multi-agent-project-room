@@ -65,7 +65,7 @@ export function HomePage() {
     [rooms, user?.id],
   );
 
-  // §8.4: 看板每 30 秒轮询待批准申请，页面隐藏时暂停；与 AppShell 共享 queryKey 自动去重
+  // §8.4: 看板每 30 秒轮询待审批申请，页面隐藏时暂停；与 AppShell 共享 queryKey 自动去重
   const pendingQueries = useQueries({
     queries: ownedRooms.map((room) => ({
       queryKey: [...redemptionsKey(room.id), "pending"],
@@ -187,10 +187,10 @@ export function HomePage() {
       <div className="wb-rooms-page">
         <header className="wb-rooms-head">
           <div className="wb-rooms-head__copy">
-            <h1>协作室</h1>
+            <h1>房间</h1>
             <p>
               {rooms.length} 个房间
-              {totalPending > 0 ? ` · ${totalPending} 件事等你处理` : ""}
+              {totalPending > 0 ? ` · ${totalPending} 条待审批` : ""}
             </p>
           </div>
           <div className="wb-rooms-head__actions">
@@ -216,7 +216,7 @@ export function HomePage() {
         {roomsQuery.isLoading && (
           <div className="wb-rooms-state">
             <span className="ui-spinner" aria-hidden="true" />
-            <p>正在加载协作室…</p>
+            <p>正在加载房间…</p>
           </div>
         )}
 
@@ -235,7 +235,7 @@ export function HomePage() {
 
         {!roomsQuery.isLoading && !roomsQuery.isError && rooms.length === 0 && !showFirstTimeOnboarding && (
           <div className="wb-rooms-state">
-            <p>还没有协作房间，从模板快速建一个吧。</p>
+            <p>还没有房间。先从模板建一个吧。</p>
             <div className="wb-rooms-state__actions">
               <Button variant="primary" onClick={() => setDrawerOpen(true)}>
                 <Plus size={15} strokeWidth={2} />
@@ -268,7 +268,7 @@ export function HomePage() {
                 options={[
                   { value: "all", label: "全部" },
                   { value: "mine", label: "我创建的" },
-                  { value: "pending", label: totalPending > 0 ? `待处理 (${totalPending})` : "待处理" },
+                  { value: "pending", label: totalPending > 0 ? `待审批 (${totalPending})` : "待审批" },
                 ]}
               />
               <span className="wb-rooms-toolbar__sort">按最近动态排序</span>
@@ -276,7 +276,7 @@ export function HomePage() {
 
             {filteredRooms.length === 0 ? (
               <div className="wb-rooms-state">
-                <p>没有匹配的协作室。</p>
+                <p>没有匹配的房间。</p>
                 <Button
                   variant="ghost"
                   size="sm"
@@ -315,8 +315,8 @@ export function HomePage() {
                   <span className="wb-room-card__plus" aria-hidden="true">
                     <Plus size={18} strokeWidth={2} />
                   </span>
-                  <strong>新建协作室</strong>
-                  <span>从模板开始，或创建空白房间</span>
+                  <strong>新建房间</strong>
+                  <span>选个模板，或建空白房间</span>
                 </button>
               </div>
             )}

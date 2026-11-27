@@ -36,7 +36,7 @@ export function InviteTab({ permissions }: { permissions: PermissionsPanelProps 
 
   return <div className="wb-tab-content">
     <section className="wb-panel-card">
-      <h3><Link2 size={16} />邀请协作者</h3>
+      <h3><Link2 size={16} />邀请成员</h3>
       {isOwner && isEncrypted ? <PermissionsPanel {...permissions} section="invite" />
         : <p>由房主生成入房邀请。你可以把房间地址发给已获授权的成员。</p>}
       <CopyButton text={`${window.location.origin}/rooms/${encodeURIComponent(roomId)}`} label="复制房间地址" />

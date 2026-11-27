@@ -33,25 +33,25 @@ function safeActivitySummary(room: Room, activity?: HubActivityFeed | null): { t
       return { text: `${actor} · ${latest.title}`, at: latest.created_at ?? room.created_at };
     }
     if (latest.source === "approval") {
-      return { text: `${actor} 发起了一项动作审批，等你确认。`, at: latest.created_at ?? room.created_at };
+      return { text: `${actor} 发起了一项审批，等你确认。`, at: latest.created_at ?? room.created_at };
     }
     if (latest.source === "task_event") {
-      return { text: `${actor} 更新了协作任务状态。`, at: latest.created_at ?? room.created_at };
+      return { text: `${actor} 更新了任务状态。`, at: latest.created_at ?? room.created_at };
     }
     if (latest.kind) {
-      return { text: `${actor} 记录了协作动态（${latest.kind}）。`, at: latest.created_at ?? room.created_at };
+      return { text: "刚刚有新消息", at: latest.created_at ?? room.created_at };
     }
   }
   if (room.transport === "xmtp" && !room.xmtp_group_id) {
     return {
-      text: "还没有消息。进入房间时，你的浏览器会自动创建加密群，然后就可以接入 Agent 了。",
+      text: "还没有消息。进入房间后就能接入 Agent。",
       at: room.created_at,
     };
   }
   if (room.description?.trim()) {
     return { text: room.description.trim(), at: room.created_at };
   }
-  return { text: "加密对话已就绪 · 点击进入协作。", at: room.created_at };
+  return { text: "加密对话已就绪，点击进入。", at: room.created_at };
 }
 
 export function RoomCard({
@@ -133,7 +133,7 @@ export function RoomCard({
           {pendingCount > 0 ? (
             <Tag tone="warn">
               <span className="wb-room-card__pending-dot" aria-hidden="true" />
-              {pendingCount} 待批准
+              {pendingCount} 待审批
             </Tag>
           ) : isEncrypted && !isGroupReady ? (
             <Tag tone="neutral">
@@ -187,7 +187,7 @@ export function RoomCard({
             size={13}
             strokeWidth={2}
             className="wb-room-card__lock"
-            aria-label="端到端加密已保护"
+            aria-label="已端到端加密"
           />
         )}
       </div>

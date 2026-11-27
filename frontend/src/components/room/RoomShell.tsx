@@ -16,7 +16,7 @@ export function RoomShell({ roomId, pendingCount, header, banner, search, messag
     <div className="wb-room">
       {header}
       <div className="wb-room-body">
-        <section className="wb-chat" aria-label="协作对话">
+        <section className="wb-chat" aria-label="对话">
           {banner}
           {search}
           {messages}

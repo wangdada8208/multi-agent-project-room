@@ -240,3 +240,24 @@
 .wb-seat--pending { padding-block: 10px; }
 .wb-tab-content > details { color: var(--text-2); font-size: 12px; }
 .wb-tab-content > details[open] > summary { margin-bottom: 8px; }
+
+/* Cursor web-agent neutral refinement */
+.wb-room-head{min-height:48px;background:#fff;border-bottom-color:rgba(0,0,0,.07)}
+.wb-encryption__badge{border:0;background:transparent;color:#6e6e6e;padding:2px 4px;font-weight:400}
+.wb-encryption__badge svg{color:#8a8a8a}.wb-privacy svg{color:#8a8a8a}
+.wb-stream__inner{max-width:740px}.wb-pending{max-width:740px;border-radius:8px;background:#f7f7f6;border-color:rgba(0,0,0,.08)}
+.wb-pending::before{display:none}.wb-pending>svg{color:#6e6e6e}
+.wb-message{border-radius:8px}.wb-message--me{background:#f3f3f2;border:1px solid rgba(0,0,0,.05)}
+.wb-message:not(.wb-message--me){background:#fff!important;border:0}
+.wb-message:not(.wb-message--me):hover{background:#fff!important}
+.wb-code{background:#f7f7f6;border:1px solid rgba(0,0,0,.08);border-radius:8px}
+.wb-composer{border-radius:12px;background:#fff;border-color:rgba(0,0,0,.12);box-shadow:none}
+.wb-composer__bar svg{color:#8a8a8a}.wb-composer__bar .wb-send svg{color:#fff}
+.wb-inspector{width:280px;background:#fafafa;border-left-color:rgba(0,0,0,.07)}
+.wb-inspector__tabs{background:transparent;padding:0;margin:0;border-bottom:1px solid rgba(0,0,0,.07);border-radius:0}
+.wb-inspector__tabs button{border-radius:0;height:38px}.wb-inspector__tabs button[aria-pressed=true]{background:transparent;box-shadow:none;border-bottom:1px solid #171717}
+.wb-seat{background:transparent;border:0;border-radius:0;border-bottom:1px solid rgba(0,0,0,.06);padding:10px 4px}
+.wb-seat+.wb-seat{margin-top:0}.wb-seat--pending{background:transparent;border-bottom-color:rgba(0,0,0,.06)}
+.wb-presence,.workbench-count{background:transparent!important;color:#6e6e6e!important;width:auto!important;height:auto!important;min-width:auto!important;padding:0!important;font-weight:500!important}
+.wb-presence{display:none!important}.wb-composer{background:#fff!important;border-radius:12px!important}
+.wb-checklist li svg{color:#6e6e6e}

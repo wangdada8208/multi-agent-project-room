@@ -60,7 +60,7 @@ export function LocalAgentSection({ roomId, hubOrigin, ownerXmtpAddress, onJoine
       <Button variant="ghost" size="sm" onClick={local.clearPreset}>关闭提示</Button>
     </div>}
     {paired?.hub_origin && paired.hub_origin !== hubOrigin && <p className="wb-error" role="alert">本机助手当前配对的服务器为 {paired.hub_origin}，与当前站点不一致。</p>}
-    {local.helpers.length > 1 && <label className="wb-target">执行席位的电脑
+    {local.helpers.length > 1 && <label className="wb-target">执行任务的电脑
       <select value={local.helperPick} onChange={(event) => local.setHelperPick(event.target.value)}>
         {local.helpers.map((helper) => <option key={helper.id} value={helper.id}>{helper.device_name}</option>)}
       </select>
@@ -71,7 +71,7 @@ export function LocalAgentSection({ roomId, hubOrigin, ownerXmtpAddress, onJoine
     </section>}
     {(local.joinError || local.listError) && <p className="wb-error" role="alert">{local.joinError || local.listError}</p>}
     {local.joinedSeat && <div className="wb-notice" role="status">
-      席位已启动。进入房间后，房主设备会将席位加入加密群。
+      Agent 已启动。进入房间后，房主设备会把它加入加密群。
       <Link to={`/rooms/${encodeURIComponent(local.joinedSeat.roomId)}`}>进入房间 <ArrowRight size={14} /></Link>
     </div>}
     <div className="wb-local-grid">
@@ -110,7 +110,7 @@ export function LocalAgentSection({ roomId, hubOrigin, ownerXmtpAddress, onJoine
       </div>)}
     </section>}
     {local.activeSeatsForDisplay.length > 0 && <section className="wb-local-detail">
-      <h3>本机运行中的房间席位</h3>
+      <h3>这台电脑上的 Agent</h3>
       {local.activeSeatsForDisplay.map((seat) => <article className="wb-seat" key={seat.seatId}>
         <Laptop size={17} />
         <div className="wb-seat__info"><strong>{local.agents.find((agent) => agent.key === seat.agentKey)?.displayName ?? seat.agentKey}</strong>
@@ -118,7 +118,7 @@ export function LocalAgentSection({ roomId, hubOrigin, ownerXmtpAddress, onJoine
         </div>
         <Link to={`/rooms/${encodeURIComponent(seat.roomId)}`}>进入房间</Link>
         {confirmSeat === seat.seatId ? <ConfirmInline confirmLabel="移出" loading={leaving} onCancel={() => setConfirmSeat(undefined)} onConfirm={() => void leave(seat)}>
-          移出此席位。已入加密群的席位需要在房间内移出。
+          移除此 Agent。已进加密群的 Agent 需要在房间内移除。
         </ConfirmInline> : <Button variant="danger" size="sm" disabled={leaving} onClick={() => setConfirmSeat(seat.seatId)}>移出</Button>}
       </article>)}
     </section>}

@@ -99,7 +99,7 @@ export function SetupPage() {
         <div>
           <Link to="/home" className="ui-button ui-button--ghost ui-button--sm">
             <ArrowLeft size={14} strokeWidth={1.9} />
-            <span>返回协作室</span>
+            <span>返回房间</span>
           </Link>
         </div>
 
@@ -116,7 +116,7 @@ export function SetupPage() {
             <p>房间不存在或你没有访问权限。</p>
             <div className="wb-setup-actions">
               <Link to="/home" className="ui-button ui-button--primary ui-button--md">
-                回到协作室
+                回到房间
               </Link>
             </div>
           </div>
@@ -131,7 +131,7 @@ export function SetupPage() {
             <p>
               房间「{room.name}」
               {room.xmtp_group_id
-                ? "已经完成加密群绑定，可以直接进入协作。"
+                ? "已经完成加密群绑定，可以直接进入房间。"
                 : creatingVault
                   ? "尚未启用加密群。请设置至少 10 位的本机加密口令，系统会在当前浏览器本地创建加密群并绑定。"
                   : "尚未启用加密群。输入本机加密口令即可自动创建并绑定，完成后直接进入房间。"}
@@ -143,7 +143,7 @@ export function SetupPage() {
                   variant="primary"
                   onClick={() => navigate(`/rooms/${encodeURIComponent(room.id)}`)}
                 >
-                  <span>进入协作房间</span>
+                  <span>进入房间</span>
                   <ArrowRight size={15} strokeWidth={2} />
                 </Button>
               </div>

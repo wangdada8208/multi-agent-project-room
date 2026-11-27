@@ -12,7 +12,7 @@ import {
 import { listLocalSeats, type SeatViewLocal } from "../../lib/localHelper";
 
 const STATUS_LABEL: Record<string, string> = {
-  pending: "待批准",
+  pending: "待审批",
   approved: "已批准",
   executing: "执行中",
   awaiting_receipt: "回执待送达",
@@ -368,7 +368,7 @@ export function OwnerApprovalPanel({
 
       {!helperDown && sections.length === 0 && (
         <div className="panel-card" style={{ fontSize: 12.5, color: "#6e6e73" }}>
-          该房间在本机没有运行中的 Agent 席位，暂无本机审批请求。
+          这台电脑上没有运行中的 Agent，暂无审批请求。
         </div>
       )}
 
@@ -384,7 +384,7 @@ export function OwnerApprovalPanel({
             </span>
             {section.role === "observer" && (
               <span className="trust-badge" style={{ marginLeft: 0, border: "1px solid rgba(0,0,0,0.12)" }}>
-                只读席位
+                只读
               </span>
             )}
           </div>
@@ -411,7 +411,7 @@ export function OwnerApprovalPanel({
 
           {section.status === "ok" && section.consents.length === 0 && (
             <div className="panel-card" style={{ fontSize: 12.5, color: "#6e6e73" }}>
-              该 Agent 当前没有待处理的审批请求。
+              该 Agent 当前没有待审批的审批请求。
             </div>
           )}
 

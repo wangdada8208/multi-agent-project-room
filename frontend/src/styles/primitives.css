@@ -6,22 +6,23 @@
 }
 .ui-button {
   gap: var(--s-2);
-  min-height: var(--s-10);
-  padding-inline: var(--s-3);
+  min-height: 38px;
+  padding-inline: 18px;
   border: 1px solid transparent;
-  border-radius: var(--r-md);
+  border-radius: var(--r-full);
   font-size: var(--fs-body);
-  font-weight: var(--fw-semibold);
+  font-weight: var(--fw-medium);
   cursor: pointer;
   transition: background var(--dur-1) var(--ease-standard);
 }
-.ui-button--sm { min-height: var(--s-8); padding-inline: var(--s-2); font-size: var(--fs-sm); }
-.ui-button--lg { min-height: var(--s-12); padding-inline: var(--s-4); }
+.ui-button--sm { min-height: 30px; padding-inline: 12px; font-size: var(--fs-sm); }
+.ui-button--lg { min-height: 42px; padding-inline: 20px; }
 .ui-button--primary { color: var(--accent-fg); background: var(--accent); }
 .ui-button--primary:hover:not(:disabled) { background: var(--accent-hover); }
-.ui-button--secondary { color: var(--text-1); background: var(--bg-surface); border-color: var(--border-2); }
-.ui-button--ghost { color: var(--text-2); }
-.ui-button--secondary:hover:not(:disabled), .ui-button--ghost:hover:not(:disabled) { background: var(--bg-hover); }
+.ui-button--secondary { color: var(--text-1); background: var(--bg-button-secondary); border-color: transparent; }
+.ui-button--ghost { color: var(--text-2); background: transparent; }
+.ui-button--secondary:hover:not(:disabled) { background: var(--bg-muted); }
+.ui-button--ghost:hover:not(:disabled) { background: var(--bg-hover); }
 .ui-button--danger { color: var(--danger); background: var(--danger-bg); border-color: var(--danger-border); }
 .ui-button--danger:hover:not(:disabled) { background: var(--danger-border); }
 .ui-button:disabled { opacity: 0.55; cursor: default; }
@@ -29,7 +30,7 @@
   outline: none;
   box-shadow: var(--focus-ring);
 }
-.ui-icon-button { width: var(--s-10); padding-inline: 0; }
+.ui-icon-button { width: 38px; padding-inline: 0; }
 .ui-icon-button.ui-button--sm { width: var(--s-8); }
 .ui-icon-button.ui-button--lg { width: var(--s-12); }
 .ui-spinner {
@@ -68,8 +69,9 @@
   color: var(--actor-human-fg);
   background: var(--actor-human-bg);
   font-size: var(--fs-caption);
-  font-weight: var(--fw-semibold);
+  font-weight: var(--fw-medium);
 }
+.ui-avatar > svg { width: 58%; height: 58%; flex: none; }
 .ui-avatar--me { color: var(--actor-me-fg); background: var(--actor-me-bg); }
 .ui-avatar--cloud { color: var(--actor-cloud); background: var(--actor-cloud-bg); border-radius: var(--r-md); }
 .ui-avatar--local { color: var(--actor-local); background: var(--actor-local-bg); border-radius: var(--r-md); }

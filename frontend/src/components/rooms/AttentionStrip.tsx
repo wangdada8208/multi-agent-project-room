@@ -18,7 +18,7 @@ export function AttentionStrip({ items }: { items: readonly AttentionItem[] }) {
   const first = items[0];
   const isAgent = first.request.kind === "agent";
   const when = formatRelativeTime(first.request.created_at);
-  const extra = items.length > 1 ? ` · 另有 ${items.length - 1} 条待处理` : "";
+  const extra = items.length > 1 ? ` · 另有 ${items.length - 1} 条待审批` : "";
 
   return (
     <div className="wb-attention" role="status">
@@ -28,20 +28,20 @@ export function AttentionStrip({ items }: { items: readonly AttentionItem[] }) {
         size="md"
       />
       <div className="wb-attention__text">
-        <strong>{first.request.displayName}</strong> 正在等你批准加入「{first.room.name}」
+        <strong>{first.request.displayName}</strong> 申请加入「{first.room.name}」
         <small>
           {isAgent ? "云端 Agent" : "协作者"}
           {when ? ` · ${when}` : ""}
-          {" · 通过你的邀请链接提交"}
+          {" · 通过邀请链接"}
           {extra}
         </small>
       </div>
       <Button
-        variant="secondary"
+        variant="primary"
         size="sm"
         onClick={() => navigate(`/rooms/${encodeURIComponent(first.room.id)}?panel=members`)}
       >
-        去处理
+        去审批
         <ArrowRight size={14} strokeWidth={1.9} />
       </Button>
     </div>

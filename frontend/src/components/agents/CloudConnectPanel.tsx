@@ -35,15 +35,15 @@ export function CloudConnectPanel({ preset, roomId, roomName, rooms, roomsLoaded
       <IconButton label="关闭云端接入" size="sm" onClick={onClose}><X size={16} /><span className="sr-only">关闭云端接入</span></IconButton>
     </header>
     {rooms && onRoomChange && <label className="wb-connect-select">
-      目标协作房间
+      目标房间
       <select className="input" value={roomId} onChange={(event) => onRoomChange(event.target.value)}>
         <option value="">选择要加入的房间…</option>
         {rooms.map((room) => <option key={room.id} value={room.id}>{room.name}</option>)}
       </select>
     </label>}
     {roomId ? <CloudSteps key={`${roomId}:${preset.id}`} {...{ preset, roomId, hubOrigin, defaultApproval }} />
-      : <p className="wb-connect-empty">{roomsLoaded && !rooms?.length ? <>请先<a href="#agent-create-room">创建协作房间</a>，然后生成云端接入指令。</>
-        : roomsLoaded ? "请选择你管理的协作房间。" : "正在读取协作房间…"}</p>}
+      : <p className="wb-connect-empty">{roomsLoaded && !rooms?.length ? <>请先<a href="#agent-create-room">创建房间</a>，然后生成云端接入指令。</>
+        : roomsLoaded ? "请选择你管理的房间。" : "正在读取房间…"}</p>}
   </section>;
 }
 
@@ -113,7 +113,7 @@ function CloudSteps({ preset, roomId, hubOrigin, defaultApproval }: Parameters<t
       {decide.error && <p className="wb-error" role="alert">{decide.error.message}</p>}
       {seat && <div className="wb-connect-request wb-connect-request--approved" role="status">
         <strong>{seat.agent_display_name} 已入驻当前房间</strong>
-        {seat.group_status !== "added" && <p><LockKeyhole size={13} />已获得席位。打开房间后，房主设备会将它加入加密群。</p>}
+        {seat.group_status !== "added" && <p><LockKeyhole size={13} />已接入。打开房间后，房主设备会把它加入加密群。</p>}
         <Link className="ui-button ui-button--primary ui-button--sm" to={roomPath}>{seat.group_status === "added" ? "进入房间" : "进入房间自动拉入加密群"} <ArrowRight size={14} /></Link>
       </div>}
     </section>

@@ -57,14 +57,14 @@ export function AppShell({ children, roomId, pending }: { children: ReactNode; r
   return (
     <div className={roomId ? "app-shell app-shell--room" : "app-shell"}>
       <aside className="app-rail">
-        <Link to="/home" className="app-rail__brand" title="Multi-Agent 协作室">
+        <Link to="/home" className="app-rail__brand" title="Multi-Agent 房间">
           <span><Infinity size={17} /></span><strong>Project Room</strong>
         </Link>
         <nav className="app-rail__nav" aria-label="主导航">
-          <NavLink to="/home" title="协作室"><LayoutGrid size={17} /><span>协作室</span></NavLink>
+          <NavLink to="/home" title="房间"><LayoutGrid size={17} /><span>房间</span></NavLink>
           <NavLink to="/agents" title="接入 Agent"><Bot size={17} /><span>接入 Agent</span></NavLink>
-          <Link to={pendingRoom ? `/rooms/${encodeURIComponent(pendingRoom)}?panel=members` : "/home"} title="待处理">
-            <Hand size={17} /><span>待处理</span>{count > 0 && <b className="workbench-count">{count}</b>}
+          <Link to={pendingRoom ? `/rooms/${encodeURIComponent(pendingRoom)}?panel=members` : "/home"} title="待审批">
+            <Hand size={17} /><span>待审批</span>{count > 0 && <b className="workbench-count">{count}</b>}
           </Link>
         </nav>
         <nav className="app-rail__rooms" aria-label="我的房间">
@@ -73,7 +73,7 @@ export function AppShell({ children, roomId, pending }: { children: ReactNode; r
             const Icon = roomIcons.get(roomTemplateKey(room) ?? "") ?? Folder;
             return <NavLink key={room.id} to={`/rooms/${encodeURIComponent(room.id)}`} title={room.name}>
               <span><Icon size={13} /></span><strong>{room.name}</strong>
-              {Boolean(byRoom.get(room.id)) && <i className="app-rail__pending-dot" aria-label="有待批准申请" />}
+              {Boolean(byRoom.get(room.id)) && <i className="app-rail__pending-dot" aria-label="有待审批申请" />}
             </NavLink>;
           })}
         </nav>
@@ -81,7 +81,7 @@ export function AppShell({ children, roomId, pending }: { children: ReactNode; r
       </aside>
       <main className="app-shell__main">{children}</main>
       {!roomId && <nav className="app-mobile-tabs" aria-label="主导航">
-        <NavLink to="/home"><LayoutGrid size={20} />协作室{count > 0 && <span className="workbench-count">{count}</span>}</NavLink>
+        <NavLink to="/home"><LayoutGrid size={20} />房间{count > 0 && <span className="workbench-count">{count}</span>}</NavLink>
         <NavLink to="/agents"><Bot size={20} />接入 Agent</NavLink>
         {account(true)}
       </nav>}
