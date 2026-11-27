@@ -275,6 +275,9 @@ jobs:
           fi
           echo "OK: no whitespace errors."
 
+      - name: Check backend ORM model imports
+        run: python3 scripts/check_backend_model_imports.py
+
       - name: No committed secrets in the tracked tree
         run: |
           set -e
