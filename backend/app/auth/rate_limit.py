@@ -20,15 +20,14 @@ import inspect
 import ipaddress
 import logging
 import os
-import sys
 import time
-import urllib.parse
 import uuid
 from collections import OrderedDict
 from typing import Any
 
 from fastapi import HTTPException, Request
 
+from app.auth import redis_settings
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -125,30 +124,6 @@ return 0
 # ---------------------------------------------------------------------------
 
 
-def _is_test_environment() -> bool:
-    if os.environ.get("MAPR_TESTING") or os.environ.get("MAPR_TEST_REDIS_URL") or os.environ.get("MAPR_TEST_DATABASE_URL"):
-        return True
-    if os.environ.get("PYTEST_CURRENT_TEST") is not None:
-        return True
-    if "pytest" in sys.modules:
-        return True
-    return False
-
-
-def _get_effective_redis_url() -> str:
-    test_url = os.environ.get("MAPR_TEST_REDIS_URL")
-    if test_url:
-        return test_url
-    base_url = get_settings().redis_url
-    if _is_test_environment() and not os.environ.get("MAPR_REDIS_URL"):
-        test_db = os.environ.get("MAPR_TEST_REDIS_DB", "15")
-        parsed = urllib.parse.urlsplit(base_url)
-        return urllib.parse.urlunsplit(
-            (parsed.scheme, parsed.netloc, f"/{test_db}", parsed.query, parsed.fragment)
-        )
-    return base_url
-
-
 def _flush_redis_state() -> None:
     """Drop test-scoped Redis-backed limiter keys.
 
@@ -160,7 +135,7 @@ def _flush_redis_state() -> None:
         return
     try:
         # Refuse to flush in production unless explicitly forced
-        if not _is_test_environment() and not os.environ.get("MAPR_ALLOW_REDIS_FLUSH"):
+        if not redis_settings.can_reset_redis():
             return
         prefix = _KEY_PREFIX
         keys = []
@@ -273,7 +248,7 @@ def _get_redis_sync() -> Any:
             import redis
 
             client = redis.Redis.from_url(
-                _get_effective_redis_url(),
+                redis_settings.effective_redis_url(),
                 socket_timeout=_REDIS_TIMEOUT_SECONDS,
                 socket_connect_timeout=_REDIS_TIMEOUT_SECONDS,
                 decode_responses=True,
@@ -302,7 +277,7 @@ async def _get_redis_async() -> Any:
             import redis.asyncio as redis_asyncio
 
             client = redis_asyncio.Redis.from_url(
-                _get_effective_redis_url(),
+                redis_settings.effective_redis_url(),
                 socket_timeout=_REDIS_TIMEOUT_SECONDS,
                 socket_connect_timeout=_REDIS_TIMEOUT_SECONDS,
                 decode_responses=True,
