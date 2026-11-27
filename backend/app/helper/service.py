@@ -30,7 +30,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agent.identity import comparison_identity
-from app.api.permissions import require_role
+from app.permissions.service import require_role
 from app.core.security import create_access_token
 from app.core.timestamps import as_utc
 from app.helper.models import AgentSeat, HelperCode, HelperDevice

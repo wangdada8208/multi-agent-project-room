@@ -277,3 +277,11 @@ SQLite只支持本机开发，独立Core表不进入Base.metadata；PG启动不�
    - 迁移 `l20c20261120`（m1）引入 `agent_seats.paused_at/source`、`room_invites` 多用途/审批/软吊销、`room_invite_redemptions`、`room_permissions.xmtp_address`（EIP-191 单次 nonce 绑定）与 `rooms.settings_json`。
    - 迁移 `m30c20261120`（m2）引入只含安全元数据的 `activity_events` 与 EIP-191 签名 `activity_checkpoints`；`ledger.jsonl` 经哈希链与 `.state/ledger-checkpoint.json` 检测改写、重排及截断。
 4. **前端加密体验分离**：浏览器端草稿经 WebCrypto AES-GCM（按 `roomId + identityAddress` 隔离派生）加密存放，XMTP 消息搜索仅在客户端内存索引（≤2000 条 / ≤7 天），不触 Hub 搜索接口；详单见 `docs/现行能力对照与安全契约.md`。
+
+## 活动元数据与保留边界
+
+- Hub 的活动入口接收 OpenAPI 定义的事件元数据和签名链头。成员端按生成的字段集合序列化出站请求。Hub 拒绝额外字段，校验错误只回固定错误信息。XMTP 消息正文和密文由成员及 XMTP 持有。
+- 浏览器用同一席位的活动事件 ID 关联本机账本和 Hub 摘要。每个席位独立计数。历史成员进程缺少活动事件 ID 时，两端记录分别显示。
+- Hub 的房间活动查询保留事件类型、状态和必要 ID。任务查询和结果、事件载荷以及审批描述留在各自的访问边界。审批标题只在 Hub 明文房间的活动查询中公开。
+- 房主归档房间后，活动读取与上报失去访问资格。Hub 保留已存的元数据及链头，以维持审计和幂等判定。实际删除房间记录时，外键级联清除该房间的活动事件和检查点。
+- 本机账本保留在成员数据目录。暂停席位会停止进程并保留账本。Helper 收到移除席位或撤销设备通知时，会删除相应席位本机目录及其中的账本。独立成员的账本由持有数据的主人管理。

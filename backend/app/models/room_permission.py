@@ -24,14 +24,3 @@ class RoomPermission(Base):
     # owner remove the address from the XMTP group BEFORE deleting this row.
     xmtp_address: Mapped[Optional[str]] = mapped_column(String(42), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
-
-    def to_dict(self) -> dict:
-        return {
-            "id": self.id,
-            "room_id": self.room_id,
-            "user_id": self.user_id,
-            "role": self.role,
-            "invited_by": self.invited_by,
-            "xmtp_address": self.xmtp_address,
-            "created_at": self.created_at.isoformat(),
-        }

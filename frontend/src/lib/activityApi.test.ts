@@ -72,7 +72,7 @@ describe("activityApi", () => {
   it("mergeActivityFeeds deduplicates overlapping local/hub events, surfaces tamper issues, and preserves chronological order", () => {
     const hubFeed: HubActivityFeed = {
       room_id: "room-1",
-      count: 2,
+      count: 3,
       checkpoints: [
         {
           id: "cp-1",
@@ -88,10 +88,21 @@ describe("activityApi", () => {
       ],
       items: [
         {
-          id: "ev-dup",
+          id: "evt:owned-event",
           source: "activity",
           actor_kind: "agent",
           actor_id: "0xagent",
+          kind: "action_finished",
+          status: "ok",
+          subject_id: "req-1",
+          stream_seq: 1,
+          created_at: "2026-11-20T10:00:00.000Z",
+        },
+        {
+          id: "evt:other-seat-event",
+          source: "activity",
+          actor_kind: "agent",
+          actor_id: "0xother",
           kind: "action_finished",
           status: "ok",
           subject_id: "req-1",
@@ -129,6 +140,8 @@ describe("activityApi", () => {
               reason: "executed",
               payload_hash: null,
               seq: 1,
+              activity_event_id: "owned-event",
+              activity_status: "ok",
             },
             {
               at: "2026-11-20T10:05:00.000Z",
@@ -155,9 +168,10 @@ describe("activityApi", () => {
     ];
 
     const merged = mergeActivityFeeds(hubFeed, localResults);
-    expect(merged.items.map((i) => i.subject_id)).toEqual(["req-2", "req-1", "t-1"]);
+    expect(merged.items.map((i) => i.subject_id)).toEqual(["req-2", "req-1", "req-1", "t-1"]);
     expect(merged.items[1].source).toBe("local_ledger");
     expect(merged.items[1].app).toBe("gmail");
+    expect(merged.items[2].id).toBe("activity-evt:other-seat-event");
     expect(merged.integrity.ok).toBe(false);
     expect(merged.integrity.issues).toEqual([{ code: "anchor_truncated", line: 2, detail: "truncated", port: 8791 }]);
     expect(merged.integrity.legacyUnverifiedCount).toBe(1);

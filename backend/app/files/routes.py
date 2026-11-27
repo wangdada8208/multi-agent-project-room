@@ -13,7 +13,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.permissions import require_role
+from app.permissions.service import require_role
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models.room import Room

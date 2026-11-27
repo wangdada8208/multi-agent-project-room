@@ -6,12 +6,13 @@ import path from "node:path";
 import test from "node:test";
 import type { DetectDeps } from "./knownAgents.ts";
 import { checkpointFromVerification, signLedgerCheckpoint, type SignedLedgerCheckpoint } from "../activity.ts";
+import type { HubSafeActivityEvent } from "../hubContracts.generated.ts";
 import { appendLedger, buildLedgerEntry, verifyLedger } from "../ledger.ts";
 import { writeJsonSecure } from "../secureFile.ts";
 import { createSeatStore, type SeatStore, type SeatSupervisor } from "./seats.ts";
 import { HelperHttpError } from "./server.ts";
 import type { HelperConfig, SeatRecord } from "./types.ts";
-import type { HubClient, HubSafeActivityEvent } from "./hubClient.ts";
+import type { HubClient } from "./hubClient.ts";
 import { createHelperRuntime, parseUpArgs, restoreSeats } from "./up.ts";
 
 async function withTmp(fn: (dir: string) => Promise<void>): Promise<void> {
@@ -481,6 +482,8 @@ test("heartbeat：seats_to_pause 只停进程不删数据；Hub 端恢复后自�
     await writePairedConfig(rootDir);
     const store = createSeatStore(rootDir);
     await store.save(seatFixture("seat-1"));
+    const ledgerFile = path.join(rootDir, "seats", "seat-1", "state", "ledger.jsonl");
+    await appendLedger(ledgerFile, buildLedgerEntry({ now: new Date("2026-11-20T00:00:00Z"), kind: "action_queued" }));
     const sup = fakeSup(store);
     let pauseList: string[] = ["seat-1"];
     const rt = await createHelperRuntime({
@@ -502,6 +505,7 @@ test("heartbeat：seats_to_pause 只停进程不删数据；Hub 端恢复后自�
     assert.deepEqual(sup.calls.stops, ["seat-1"]);
     assert.deepEqual(sup.calls.starts, []);
     assert.ok((await stat(path.join(rootDir, "seats", "seat-1", "seat.json"))).isFile());
+    assert.ok((await stat(ledgerFile)).isFile());
 
     // Hub 端恢复（不再出现在列表里）→ 清标记并重新拉起。
     pauseList = [];
@@ -518,6 +522,9 @@ test("heartbeat：seats_to_stop 仍是物理删除，与 pause 语义严格分�
     await writePairedConfig(rootDir);
     const store = createSeatStore(rootDir);
     await store.save(seatFixture("seat-1"));
+    const ledgerFile = path.join(rootDir, "seats", "seat-1", "state", "ledger.jsonl");
+    await appendLedger(ledgerFile, buildLedgerEntry({ now: new Date("2026-11-20T00:00:00Z"), kind: "action_queued" }));
+    assert.ok((await stat(ledgerFile)).isFile());
     const sup = fakeSup(store);
     const rt = await createHelperRuntime({
       hubOrigin: "https://hub.example",
@@ -532,6 +539,7 @@ test("heartbeat：seats_to_stop 仍是物理删除，与 pause 语义严格分�
     await rt.heartbeat();
     assert.equal(await rt.store.get("seat-1"), null);
     await assert.rejects(() => stat(path.join(rootDir, "seats", "seat-1")));
+    await assert.rejects(() => stat(ledgerFile), { code: "ENOENT" });
   });
 });
 

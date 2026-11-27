@@ -1,3 +1,5 @@
+import type { SeatPeer as HubSeatPeer } from "./hubContracts.generated.js";
+
 export type GroupPlan =
   | { action: "use"; groupId: string; source: "env" | "hub" }
   | { action: "create" }
@@ -16,12 +18,8 @@ export function resolveGroupPlan(input: {
   return { action: "none" };
 }
 
-export interface SeatPeer {
-  agent_display_name: string;
-  kind: string;
-  trust_tier: string;
-  xmtp_address: string;
-}
+export type SeatPeer = Pick<HubSeatPeer, "agent_display_name" | "xmtp_address">
+  & Partial<Pick<HubSeatPeer, "kind" | "trust_tier">>;
 
 /** 拉取本房席位名单（连环护栏用于区分人/Agent 发言者）。Hub 无此接口或失败时返回 null，调用方保持旧名单。 */
 export async function fetchHubSeatPeers(input: {

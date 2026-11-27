@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
 
-from app.api.permissions import require_role
+from app.permissions.service import require_role
 from app.approval.models import Approval
 from app.core.database import get_db
 from app.core.security import get_current_user

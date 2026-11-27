@@ -33,7 +33,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agent.identity import comparison_identity
-from app.api.permissions import get_room_permission, require_role
+from app.api.invite_schemas import RoomInviteView
+from app.permissions.service import get_room_permission, require_role
 
 from app.core.database import get_db
 from app.core.eip191 import (
@@ -409,7 +410,7 @@ async def create_room_invite(
     await db.commit()
     await db.refresh(invite)
 
-    return {"invite": invite.to_dict()}
+    return {"invite": RoomInviteView.model_validate(invite).model_dump()}
 
 
 @router.get("/api/v1/rooms/{room_id}/invites")
@@ -426,7 +427,7 @@ async def list_room_invites(
     ).order_by(RoomInvite.created_at.desc())
     result = await db.execute(stmt)
     invites = result.scalars().all()
-    return {"invites": [inv.to_dict() for inv in invites]}
+    return {"invites": [RoomInviteView.model_validate(invite).model_dump() for invite in invites]}
 
 
 @router.delete("/api/v1/rooms/{room_id}/invites/{token}")

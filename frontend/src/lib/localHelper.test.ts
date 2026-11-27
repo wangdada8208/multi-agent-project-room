@@ -14,7 +14,6 @@ import {
   joinViaTicket,
   listRoomInvites,
   listRoomRedemptions,
-  localErrorMessage,
   pauseRoomSeat,
   powershellInstallCommand,
   probeHelper,
@@ -61,18 +60,16 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
-describe("localErrorMessage", () => {
-  it("prefers body.reason from 127.0.0.1:8790 before detail and error", async () => {
-    expect(localErrorMessage({ ok: false, reason: "ticket 已过期", detail: "ignored" }, "兜底")).toBe(
-      "ticket 已过期",
-    );
-    expect(localErrorMessage({ detail: "详情错误" }, "兜底")).toBe("详情错误");
-    expect(localErrorMessage({ error: "通用错误" }, "兜底")).toBe("通用错误");
-    expect(localErrorMessage(null, "兜底")).toBe("兜底");
-
+describe("joinViaTicket errors", () => {
+  it.each([
+    [{ reason: "助手尚未配对", detail: "ignored" }, "助手尚未配对"],
+    [{ detail: "详情错误" }, "详情错误"],
+    [{ error: "通用错误" }, "通用错误"],
+    [{ reason: "x".repeat(205) }, "x".repeat(200)],
+  ])("uses the bounded error message from the helper response", async (body, expected) => {
     await expect(
-      joinViaTicket("mjt_1", "codex", async () => jsonResponse({ ok: false, reason: "助手尚未配对" }, 403)),
-    ).rejects.toThrow("助手尚未配对");
+      joinViaTicket("mjt_1", "codex", async () => jsonResponse(body, 403)),
+    ).rejects.toThrow(expected);
   });
 });
 

@@ -9,7 +9,7 @@ import {
   removeCredentialFile,
   resolveCredentialPath,
 } from "./accounts.ts";
-import { queryLocalActivity, verifyLedgerCheckpoint, type ActivityStatus } from "./activity.ts";
+import { activityEventId, ledgerEntryStatus, queryLocalActivity, verifyLedgerCheckpoint, type ActivityStatus } from "./activity.ts";
 import type { Connector } from "./connectors/types.ts";
 import { findConnector } from "./connectors/registry.ts";
 import type { ConsentQueue, PendingConsent } from "./consentQueue.ts";
@@ -40,6 +40,8 @@ export interface OwnerConsoleDeps {
   credDir?: string;
   /** 账本文件路径——GET /api/activity 的文件级完整性校验。 */
   ledgerFile?: string;
+  /** Local helper seat ID, used to match this ledger's uploaded metadata. */
+  activitySeatId?: string;
   /**
    * M5：本地签名账本锚点文件（.state/ledger-checkpoint.json）。
    * 配置后 /api/activity 把「已验签的最近一次链头」传给 verifyLedger——
@@ -614,7 +616,14 @@ export function createOwnerConsoleServer(deps: OwnerConsoleDeps): http.Server {
           ok: true,
           total: result.total,
           // L1：reason 可能带攻击者控制的键名——未认证响应一律按安全字符集脱敏。
-          entries: result.entries.map(sanitizeLedgerEntry),
+          entries: result.entries.map((entry) => ({
+            ...sanitizeLedgerEntry(entry),
+            activity_status: ledgerEntryStatus(entry),
+            activity_event_id: deps.activitySeatId && typeof entry.seq === "number"
+              && Number.isInteger(entry.seq) && entry.seq > 0 && entry.entry_hash
+              ? activityEventId(deps.activitySeatId, entry.seq, entry.entry_hash)
+              : undefined,
+          })),
           integrity: result.integrity,
         });
         return;

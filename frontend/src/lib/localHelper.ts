@@ -12,7 +12,9 @@
  */
 
 import { apiFetch } from "./api";
-import type { AgentKind, TrustTier } from "./seatIdentity";
+import { readLocalError } from "./apiError";
+import type { RoomInviteView as CurrentRoomInviteView, SeatView } from "../hubContracts.generated";
+import type { AgentKind } from "./seatIdentity";
 export { trustTierOf, TRUST_TIER_LABEL, type AgentKind, type TrustTier } from "./seatIdentity";
 
 export const HELPER_ORIGIN = "http://127.0.0.1:8790";
@@ -75,22 +77,10 @@ export interface SeatViewLocal {
   lastError: string | null;
 }
 
-export interface HubSeatView {
-  seat_id: string;
-  room_id: string;
-  agent_user_id: string;
-  agent_display_name: string;
-  owner_user_id: string;
-  kind: AgentKind;
-  /** Hub 下发的信任分级；旧版 Hub 没有此字段时前端按 kind 兜底。 */
-  trust_tier?: TrustTier;
-  xmtp_address: string;
-  group_status: "pending" | "added" | "removed";
-  /** helper=本机助手席位；invite=云端邀请入房席位。旧版 Hub 无此字段时视为 helper。 */
-  source?: "helper" | "invite";
-  /** 被显式暂停的时间；null/缺省 = 未暂停。 */
-  paused_at?: string | null;
-}
+// Older Hubs may omit these fields. Consumers already handle their absence.
+type LegacyOptionalSeatFields = "trust_tier" | "source" | "paused_at";
+export type HubSeatView = Omit<SeatView, LegacyOptionalSeatFields>
+  & Partial<Pick<SeatView, LegacyOptionalSeatFields>>;
 
 export interface HelperDevice {
   id: string;
@@ -101,23 +91,10 @@ export interface HelperDevice {
   revoked: boolean;
 }
 
-export interface RoomInviteView {
-  token: string;
-  room_id: string;
-  created_by: string;
-  proposed_scopes: string[];
-  expires_at: string;
-  is_expired?: boolean;
-  is_used?: boolean;
-  used_at: string | null;
-  redeemed_by_address: string | null;
-  created_at: string;
-  max_uses?: number;
-  use_count?: number;
-  requires_approval?: boolean;
-  role?: "member" | "viewer";
-  revoked_at?: string | null;
-}
+type LegacyOptionalInviteFields = "max_uses" | "use_count" | "requires_approval" | "role" | "revoked_at";
+export type RoomInviteView = Omit<CurrentRoomInviteView, LegacyOptionalInviteFields>
+  & Partial<Pick<CurrentRoomInviteView, LegacyOptionalInviteFields>>
+  & { is_expired?: boolean };
 
 export type RedemptionStatus =
   | "pending"
@@ -163,26 +140,8 @@ function isHelperHello(value: unknown): value is HelperHello {
   );
 }
 
-/** 本机接口的错误回包可能是 {reason}、{detail} 或 {error}；长度截断，防刷屏。 */
-export function localErrorMessage(body: unknown, fallback: string): string {
-  const detail =
-    typeof body === "object" && body !== null
-      ? (body as { reason?: unknown; detail?: unknown; error?: unknown }).reason ??
-        (body as { detail?: unknown; error?: unknown }).detail ??
-        (body as { error?: unknown }).error
-      : undefined;
-  const text = typeof detail === "string" && detail.trim() ? detail : fallback;
-  return text.slice(0, 200);
-}
-
 async function readLocalJson(res: Response, fallback: string): Promise<unknown> {
-  if (!res.ok) {
-    let body: unknown = null;
-    try {
-      body = await res.json();
-    } catch { /* 回包不是 JSON 时用兜底文案 */ }
-    throw new Error(localErrorMessage(body, fallback));
-  }
+  if (!res.ok) throw new Error(await readLocalError(res, fallback));
   return res.json();
 }
 

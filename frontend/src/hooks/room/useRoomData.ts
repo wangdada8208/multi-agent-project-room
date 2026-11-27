@@ -1,17 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
 import { ApiError, apiJson } from "../../lib/apiError";
 import { listRoomSeats } from "../../lib/localHelper";
+import type { RoomPermissionMember as HubPermissionMember } from "../../hubContracts.generated";
 import type { Room } from "../../types/chat";
 
-export interface RoomPermissionMember {
-  user_id: string;
-  role: string;
-  username: string;
-  display_name: string;
-  avatar_url: string | null;
-  user_type: string;
-  xmtp_address?: string | null;
-}
+export type RoomPermissionMember = Pick<HubPermissionMember,
+  "user_id" | "role" | "username" | "display_name" | "avatar_url" | "user_type"
+> & Partial<Pick<HubPermissionMember, "xmtp_address">>;
 
 interface RoomPermissions {
   members?: RoomPermissionMember[];

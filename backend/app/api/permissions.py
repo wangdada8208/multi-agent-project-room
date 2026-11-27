@@ -12,9 +12,10 @@ from app.core.database import get_db
 from app.core.eip191 import ACTION_BIND_ADDRESS, normalize_address, require_signed_nonce
 from app.core.security import get_current_user
 from app.helper.models import AgentSeat
-from app.models.room import Room
 from app.models.room_permission import RoomPermission
 from app.models.user import User
+from app.permissions.schemas import RoomPermissionMember, RoomPermissionView
+from app.permissions.service import get_room_permission, require_role
 
 router = APIRouter(prefix="/api/v1/rooms", tags=["permissions"])
 
@@ -37,32 +38,6 @@ class BindXmtpAddressRequest(BaseModel):
     signature: str = Field(min_length=10, max_length=200)
 
 
-async def get_room_permission(
-    room_id: str,
-    user: User,
-    db: AsyncSession,
-) -> RoomPermission | None:
-    """Get the permission record for a user in a room."""
-    stmt = select(RoomPermission).where(
-        RoomPermission.room_id == room_id,
-        RoomPermission.user_id == user.id,
-    )
-    result = await db.execute(stmt)
-    return result.scalars().first()
-
-
-async def require_role(room_id: str, user: User, db: AsyncSession, min_role: str = "viewer") -> RoomPermission:
-    """Require at least the specified role in a room. Raises 403 if insufficient."""
-    perm = await get_room_permission(room_id, user, db)
-    hierarchy = {"viewer": 0, "member": 1, "owner": 2}
-    room = await db.get(Room, room_id)
-    if perm is None or perm.role not in hierarchy or not room or not room.is_active:
-        raise HTTPException(status_code=403, detail="No access to this room")
-    if hierarchy.get(perm.role, 0) < hierarchy.get(min_role, 0):
-        raise HTTPException(status_code=403, detail=f"Requires {min_role} role")
-    return perm
-
-
 @router.get("/{room_id}/permissions")
 async def list_permissions(
     room_id: str,
@@ -79,13 +54,13 @@ async def list_permissions(
     result = await db.execute(stmt)
     members = []
     for perm, user in result.all():
-        members.append({
-            **perm.to_dict(),
+        members.append(RoomPermissionMember.model_validate({
+            **RoomPermissionView.model_validate(perm).model_dump(),
             "username": user.username,
             "display_name": user.display_name,
             "avatar_url": user.avatar_url,
             "user_type": user.user_type,
-        })
+        }).model_dump())
     return {"members": members}
 
 
@@ -122,7 +97,7 @@ async def invite_member(
     db.add(perm)
     await db.commit()
     await db.refresh(perm)
-    return {"permission": perm.to_dict()}
+    return {"permission": RoomPermissionView.model_validate(perm).model_dump()}
 
 
 @router.put("/{room_id}/role")
@@ -155,7 +130,7 @@ async def update_role(
     perm.role = payload.role
     await db.commit()
     await db.refresh(perm)
-    return {"permission": perm.to_dict()}
+    return {"permission": RoomPermissionView.model_validate(perm).model_dump()}
 
 
 @router.delete("/{room_id}/members/{user_id}")

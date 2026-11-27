@@ -11,6 +11,13 @@ function record(value: unknown): Record<string, unknown> {
   return value !== null && typeof value === "object" ? { ...value } : {};
 }
 
+/** Decode the detail shape shared by the loopback helper and owner console. */
+export async function readLocalError(response: Response, fallback: string): Promise<string> {
+  const payload = record(await response.json().catch(() => undefined));
+  const detail = payload.reason ?? payload.detail ?? payload.error;
+  return (typeof detail === "string" && detail.trim() ? detail : fallback).slice(0, 200);
+}
+
 export async function apiJson<T>(input: RequestInfo | URL, init?: RequestInit): Promise<T> {
   const response = await apiFetch(input, init);
   if (response.ok) return response.json();

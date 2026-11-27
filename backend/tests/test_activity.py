@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 import pytest
 import pytest_asyncio
 from eth_account.messages import encode_defunct
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 
 from _signing import bind_address_signed, new_wallet
 from app.activity.models import ActivityCheckpoint, ActivityEvent
@@ -130,30 +130,33 @@ async def _make_seat(client, paired, room_id, address, agent_key="codex"):
 
 @pytest.mark.asyncio
 async def test_forbidden_extra_and_plaintext_fields_rejected_422(
-    client, room_owner, paired_helper
+    client, db, room_owner, paired_helper, caplog
 ):
     """payload/content/params/digest-style keys must hard-fail with 422 —
     they may never ride the metadata pipeline."""
-    _owner, room = room_owner
+    owner, room = room_owner
+    marker = "do-not-echo-xmtp-ciphertext"
     for forbidden in (
         "payload", "payload_hash", "content", "params", "params_hash",
-        "digest", "body", "to", "subject", "text", "message",
+        "digest", "body", "to", "subject", "text", "message", marker,
     ):
-        ev = _event(room.id, "x", **{forbidden: "leak"})
+        ev = _event(room.id, owner.id, actor_kind="human", **{forbidden: marker})
         resp = await client.post(
             f"{BASE}/me/activity", headers=_helper_headers(paired_helper),
             json={"events": [ev]},
         )
         assert resp.status_code == 422, f"{forbidden} must be rejected: {resp.text}"
+        assert marker not in resp.text
 
     # Same redline on the checkpoint batch wrapper.
     forged = sign_checkpoint(new_wallet(), room_id=room.id)
-    forged["payload"] = {"secret": True}
+    forged["payload"] = {"ciphertext": marker}
     resp = await client.post(
         f"{BASE}/me/activity/checkpoints", headers=_helper_headers(paired_helper),
         json={"checkpoints": [forged]},
     )
     assert resp.status_code == 422
+    assert marker not in resp.text
 
     # Malformed signature/head shapes fail schema validation too.
     bad = sign_checkpoint(new_wallet(), room_id=room.id)
@@ -163,13 +166,48 @@ async def test_forbidden_extra_and_plaintext_fields_rejected_422(
         json={"checkpoints": [bad]},
     )
     assert resp.status_code == 422
-    bad2 = sign_checkpoint(new_wallet(), room_id=room.id)
-    bad2["head_hash"] = "ZZ" * 32
+    bad["head_hash"] = "ZZ" * 32
+    bad["signature"] = "0x" + "a" * 130
     resp = await client.post(
         f"{BASE}/me/activity/checkpoints", headers=_helper_headers(paired_helper),
-        json={"checkpoints": [bad2]},
+        json={"checkpoints": [bad]},
     )
     assert resp.status_code == 422
+    assert marker not in caplog.text
+    assert await db.scalar(select(func.count()).select_from(ActivityEvent)) == 0
+    assert await db.scalar(select(func.count()).select_from(ActivityCheckpoint)) == 0
+
+
+@pytest.mark.asyncio
+async def test_activity_room_archival_and_physical_deletion(client, db, room_owner):
+    owner, room = room_owner
+    other_room = Room(name="other room", created_by=owner.id)
+    db.add(other_room)
+    await db.flush()
+    archived_id, other_id = room.id, other_room.id
+    for room_id in (archived_id, other_id):
+        db.add(ActivityEvent(
+            id=str(uuid.uuid4()), room_id=room_id, actor_kind="human",
+            actor_id=owner.id, kind="activity", created_at=datetime.now(timezone.utc),
+        ))
+        db.add(ActivityCheckpoint(
+            room_id=room_id, stream_id="ledger", signer_address="0x" + "a" * 40,
+            head_seq=1, head_hash="b" * 64, entry_count=1, signature="0x" + "c" * 130,
+            checkpoint_at=datetime.now(timezone.utc),
+        ))
+    await db.commit()
+
+    assert (await client.delete(f"{ROOMS}/{archived_id}", headers=headers(owner))).status_code == 200
+    assert (await client.get(f"{ROOMS}/{archived_id}/activity", headers=headers(owner))).status_code == 403
+    for model in (ActivityEvent, ActivityCheckpoint):
+        assert set((await db.scalars(select(model.room_id))).all()) == {archived_id, other_id}
+
+    if db.bind.dialect.name == "postgresql":
+        await db.execute(delete(RoomPermission).where(RoomPermission.room_id == archived_id))
+        await db.execute(delete(Room).where(Room.id == archived_id))
+        await db.commit()
+        for model in (ActivityEvent, ActivityCheckpoint):
+            assert (await db.scalars(select(model.room_id))).all() == [other_id]
 
 
 # ── ingest: events happy path + idempotency ─────────────────────────────

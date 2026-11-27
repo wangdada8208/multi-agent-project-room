@@ -182,18 +182,6 @@ async def get_task_events(task_id: str, after_seq: int = 0, limit: int = 100) ->
         return [e.to_dict() for e in events]
 
 
-async def list_tasks(
-    page: int = 1, limit: int = 50, status: str | None = None
-) -> list[dict]:
-    """List tasks, optionally filtered by status."""
-    await expire_stale_tasks()
-    async with async_session() as db:
-        tasks = await TaskService.list_tasks(
-            db, page=page, limit=limit, status=status
-        )
-        return [t.to_dict() for t in tasks]
-
-
 async def list_room_tasks(
     room_id: str,
     page: int = 1,

@@ -45,20 +45,3 @@ class RoomInvite(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
-
-    def to_dict(self) -> dict:
-        return {
-            "token": self.token,
-            "room_id": self.room_id,
-            "created_by": self.created_by,
-            "proposed_scopes": self.proposed_scopes or [],
-            "expires_at": self.expires_at.isoformat() if self.expires_at else None,
-            "used_at": self.used_at.isoformat() if self.used_at else None,
-            "redeemed_by_address": self.redeemed_by_address,
-            "max_uses": self.max_uses,
-            "use_count": self.use_count,
-            "requires_approval": self.requires_approval,
-            "role": self.role,
-            "revoked_at": self.revoked_at.isoformat() if self.revoked_at else None,
-            "created_at": self.created_at.isoformat() if self.created_at else None,
-        }

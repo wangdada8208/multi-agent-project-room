@@ -264,7 +264,7 @@ export function ActivityPanel({ roomId, integrityOnly = false }: { roomId: strin
             <span className="trust-badge" style={{ marginLeft: 0 }}>
               {SOURCE_LABEL[item.source] ?? item.source}
             </span>
-            <code style={{ fontFamily: "var(--mono)", fontSize: 11.5 }}>{item.kind}</code>
+            <code style={{ fontFamily: "var(--font-mono-compact)", fontSize: 11.5 }}>{item.kind}</code>
             {item.app && (
               <span className="trust-badge" style={{ marginLeft: 0 }}>
                 {item.app}
@@ -283,7 +283,7 @@ export function ActivityPanel({ roomId, integrityOnly = false }: { roomId: strin
             {item.reason && <span>说明：{item.reason}</span>}
             {item.subject_id && (
               <span>
-                对象：<code style={{ fontFamily: "var(--mono)" }}>{item.subject_id}</code>
+                对象：<code style={{ fontFamily: "var(--font-mono-compact)" }}>{item.subject_id}</code>
               </span>
             )}
             {item.created_at && <span style={{ marginLeft: "auto" }}>{formatTime(item.created_at)}</span>}

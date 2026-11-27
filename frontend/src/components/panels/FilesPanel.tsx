@@ -108,12 +108,12 @@ export function FilesPanel({ roomId }: { roomId: string }) {
       ) : (
         files.map((f) => (
           <button key={f.id} type="button" className="file-row" onClick={() => handleDownload(f)}>
-            <FileText size={16} strokeWidth={1.8} style={{ color: "var(--text-secondary)", flexShrink: 0 }} />
+            <FileText size={16} strokeWidth={1.8} style={{ color: "var(--text-2)", flexShrink: 0 }} />
             <div className="file-row__info">
               <span className="file-row__name">{f.filename}</span>
               <small>{formatSize(f.size)} · {f.uploaded_by}</small>
             </div>
-            <Download size={15} strokeWidth={1.85} style={{ color: "var(--text-muted)", flexShrink: 0 }} />
+            <Download size={15} strokeWidth={1.85} style={{ color: "var(--text-3)", flexShrink: 0 }} />
           </button>
         ))
       )}

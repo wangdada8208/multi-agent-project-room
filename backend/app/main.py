@@ -37,6 +37,7 @@ from app.api.agent_bindings import router as agent_bindings_router
 from app.api.invites import router as invites_router
 from app.activity.routes import router as activity_router
 from app.helper.routes import router as helper_router
+from app.permissions.service import PermissionDenied
 from app.chat.ws_handler import handle_chat
 
 from app.a2a.sse_sweeper import SSEQuotaSweeper
@@ -127,6 +128,11 @@ app.add_middleware(
 
 
 # ── Global exception handler ───────────────────────────
+@app.exception_handler(PermissionDenied)
+async def permission_denied_handler(request: Request, exc: PermissionDenied) -> JSONResponse:
+    return JSONResponse(status_code=403, content={"detail": str(exc)})
+
+
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     return JSONResponse(

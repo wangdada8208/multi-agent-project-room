@@ -576,7 +576,7 @@ export function PermissionsPanel({
               value={invCustomScope}
               onChange={(e) => setInvCustomScope(e.target.value)}
               placeholder="自定义范围（空格或逗号分隔；支付/凭据类范围会被自动忽略）"
-              style={{ fontSize: 12, fontFamily: "var(--mono)" }}
+              style={{ fontSize: 12, fontFamily: "var(--font-mono-compact)" }}
             />
           </div>
 
@@ -639,7 +639,7 @@ export function PermissionsPanel({
                       padding: "4px 0",
                     }}
                   >
-                    <code style={{ fontFamily: "var(--mono)", flex: 1, overflow: "hidden", textOverflow: "ellipsis" }}>
+                    <code style={{ fontFamily: "var(--font-mono-compact)", flex: 1, overflow: "hidden", textOverflow: "ellipsis" }}>
                       {inv.token.slice(0, 10)}…
                     </code>
                     <span>{inviteStatusLabel(inv)}</span>
@@ -691,7 +691,7 @@ export function PermissionsPanel({
                 onChange={(e) => setDirectAddress(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && directAddress.trim() && void handleDirectAdd()}
                 placeholder="0x 开头的 42 位加密地址"
-                style={{ fontSize: 12.5, fontFamily: "var(--mono)" }}
+                style={{ fontSize: 12.5, fontFamily: "var(--font-mono-compact)" }}
               />
               <button
                 type="button"
@@ -750,7 +750,7 @@ export function PermissionsPanel({
               >
                 {red.kind === "agent" ? "云端 Agent" : "真人"}
               </span>
-              <code style={{ fontFamily: "var(--mono)", fontSize: 11 }}>
+              <code style={{ fontFamily: "var(--font-mono-compact)", fontSize: 11 }}>
                 {red.kind === "agent" && "displayName" in red && typeof red.displayName === "string"
                   ? red.displayName : `${(red.redeemer_address ?? red.redeemer_user_id ?? "?").slice(0, 14)}…`}
               </code>
@@ -842,7 +842,7 @@ export function PermissionsPanel({
         >
           {boundAddress ? (
             <span>
-              已绑定加密地址 <code style={{ fontFamily: "var(--mono)" }}>{boundAddress.slice(0, 10)}…</code>
+              已绑定加密地址 <code style={{ fontFamily: "var(--font-mono-compact)" }}>{boundAddress.slice(0, 10)}…</code>
             </span>
           ) : (
             <span>你的成员行尚未绑定加密地址</span>
@@ -882,7 +882,7 @@ export function PermissionsPanel({
                 <small>
                   {m.username && `@${m.username}`}
                   {m.xmtp_address && (
-                    <code style={{ fontFamily: "var(--mono)", marginLeft: 6 }}>
+                    <code style={{ fontFamily: "var(--font-mono-compact)", marginLeft: 6 }}>
                       {m.xmtp_address.slice(0, 6)}…{m.xmtp_address.slice(-4)}
                     </code>
                   )}
@@ -993,7 +993,7 @@ export function PermissionsPanel({
                   )
                 }
                 placeholder="scope，如 gmail.send"
-                style={{ fontSize: 12, fontFamily: "var(--mono)", flex: 1 }}
+                style={{ fontSize: 12, fontFamily: "var(--font-mono-compact)", flex: 1 }}
               />
               <select
                 className="role-select"

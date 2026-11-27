@@ -38,21 +38,6 @@ import websockets
 from local_agent_reliable import ReliableAgentMixin, _run_supervised_sync
 
 
-def _compact_stderr(stderr: str) -> str:
-    """Return the useful tail of stderr without noisy warning lines."""
-    lines = [
-        line.strip()
-        for line in stderr.splitlines()
-        if line.strip()
-        and " WARN " not in line
-        and "warning" not in line.lower()
-        and "hook:" not in line.lower()
-    ]
-    if not lines:
-        return stderr.strip()[-500:]
-    return "\n".join(lines[-5:])[-1000:]
-
-
 def _friendly_ai_failure(agent_name: str, stderr: str) -> Optional[str]:
     """Turn common local CLI failures into short room-safe messages."""
     compact = " ".join(stderr.lower().split())

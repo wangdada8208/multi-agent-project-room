@@ -136,6 +136,7 @@ export function seatEnv(
   env.HUB_BASE_URL = helper.hubOrigin;
   env.HUB_ROOM_ID = seat.roomId;
   env.HUB_TOKEN = seat.agentToken;
+  env.MAPR_HELPER_SEAT_ID = seat.seatId;
   env.OWNER_NOTES_PORT = String(seat.consolePort);
   env.MEMBER_AGENT_KIND = engine.kind;
   env.MEMBER_AGENT_TIMEOUT_MS = String(engine.timeoutMs);

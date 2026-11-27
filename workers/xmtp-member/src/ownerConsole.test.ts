@@ -578,7 +578,7 @@ test("GET /connect/authorize serves consent page and handles approve/deny", asyn
 const OWNER_H = { "X-MAPR-Owner": "1", "Content-Type": "application/json" };
 const SELF_ADDR = "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266";
 
-async function startWp7() {
+async function startWp7(activitySeatId?: string) {
   const dir = await mkdtemp(path.join(os.tmpdir(), "console-wp7-"));
   const credDir = path.join(dir, "credentials");
   await mkdir(credDir, { recursive: true, mode: 0o700 });
@@ -598,6 +598,7 @@ async function startWp7() {
     credDir,
     ledgerFile,
     ledgerCheckpointFile: checkpointFile,
+    activitySeatId,
     policy: normalizePolicy({ allow: {}, rules: {} }),
     onTriggersChanged: () => refreshed.push("refresh"),
     readLedger: async () => [],
@@ -784,7 +785,7 @@ test("POST /api/triggers validates; hard-forbidden scope and bad template reject
 });
 
 test("GET /api/activity filters and reports hash-chain integrity", async () => {
-  const { server, base, ledgerFile } = await startWp7();
+  const { server, base, ledgerFile } = await startWp7("seat-1");
   try {
     const peer = "0x70997970c51812dc3a010c7d01b50e0d17dc79c8";
     await appendLedger(ledgerFile, buildLedgerEntry({
@@ -808,6 +809,10 @@ test("GET /api/activity filters and reports hash-chain integrity", async () => {
     assert.deepEqual(all.integrity.issues, []);
     assert.equal(all.integrity.head?.seq, 3);
     assert.ok(all.integrity.head?.entry_hash);
+    assert.equal(all.entries[0].activity_status, "pending");
+    assert.equal(all.entries[2].activity_status, "denied");
+    assert.match(all.entries[0].activity_event_id, /^[0-9a-f]{36}$/);
+    assert.notEqual(all.entries[0].activity_event_id, all.entries[1].activity_event_id);
 
     // kind 过滤
     const queued = await (await fetch(`${base}/api/activity?kind=action_queued`)).json();

@@ -20,7 +20,9 @@ from datetime import datetime
 from functools import wraps
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.routing import APIRoute
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -38,7 +40,27 @@ from app.helper.models import HelperDevice
 from app.helper.routes import get_current_helper
 from app.models.user import User
 
-router = APIRouter(tags=["activity"])
+class ActivityRoute(APIRoute):
+    def get_route_handler(self):
+        handler = super().get_route_handler()
+        if "POST" not in self.methods:
+            return handler
+
+        async def validate_metadata(request: Request):
+            try:
+                return await handler(request)
+            except RequestValidationError:
+                # FastAPI's default error echoes input values and unknown keys.
+                raise HTTPException(422, [{
+                    "loc": ["body"],
+                    "msg": "Invalid activity metadata",
+                    "type": "value_error",
+                }]) from None
+
+        return validate_metadata
+
+
+router = APIRouter(tags=["activity"], route_class=ActivityRoute)
 
 
 def _database_errors(handler):
