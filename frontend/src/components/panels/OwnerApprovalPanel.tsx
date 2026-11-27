@@ -84,7 +84,7 @@ export function ConsentCard({
       style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 12.5 }}
     >
       <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-        <code style={{ fontFamily: "var(--mono)", fontSize: 11.5, color: "#1d1d1f" }}>
+        <code style={{ fontFamily: "var(--font-mono-compact)", fontSize: 11.5, color: "#1d1d1f" }}>
           {consent.scope}
         </code>
         {consent.kind === "action" && (
@@ -139,7 +139,7 @@ export function ConsentCard({
           <span>执行结果：{RESULT_STATUS_LABEL[consent.result_status] ?? consent.result_status}</span>
           {consent.result_receipt && (
             <span>
-              回执：<code style={{ fontFamily: "var(--mono)" }}>{consent.result_receipt}</code>
+              回执：<code style={{ fontFamily: "var(--font-mono-compact)" }}>{consent.result_receipt}</code>
             </span>
           )}
           {(consent.resend_count ?? 0) > 0 && <span>已重发 {consent.resend_count} 次</span>}
@@ -169,7 +169,7 @@ export function ConsentCard({
             ) : (
               Object.entries(preview).map(([key, value]) => (
                 <div key={key} style={{ display: "flex", gap: 6 }}>
-                  <code style={{ fontFamily: "var(--mono)", color: "#6e6e73", flexShrink: 0 }}>
+                  <code style={{ fontFamily: "var(--font-mono-compact)", color: "#6e6e73", flexShrink: 0 }}>
                     {key}:
                   </code>
                   <span style={{ wordBreak: "break-all", whiteSpace: "pre-wrap" }}>
@@ -180,7 +180,7 @@ export function ConsentCard({
             ))}
           {consent.params_hash && (
             <span style={{ color: "#6e6e73", fontSize: 11 }}>
-              参数哈希：<code style={{ fontFamily: "var(--mono)" }}>{consent.params_hash.slice(0, 16)}…</code>
+              参数哈希：<code style={{ fontFamily: "var(--font-mono-compact)" }}>{consent.params_hash.slice(0, 16)}…</code>
             </span>
           )}
         </div>

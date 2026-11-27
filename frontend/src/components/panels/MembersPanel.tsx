@@ -170,7 +170,7 @@ export function MembersPanel({
                     {GROUP_STATUS_TEXT[s.group_status]}
                   </span>
                   <span>·</span>
-                  <span style={{ fontFamily: "var(--mono)" }}>
+                  <span style={{ fontFamily: "var(--font-mono-compact)" }}>
                     {s.xmtp_address.slice(0, 6)}…{s.xmtp_address.slice(-4)}
                   </span>
                   {isCollaboratorSeat && (

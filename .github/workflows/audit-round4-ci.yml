@@ -281,6 +281,9 @@ jobs:
       - name: Check backend ORM model imports
         run: python3 scripts/check_backend_model_imports.py
 
+      - name: Check frontend design tokens
+        run: python3 scripts/check_frontend_tokens.py
+
       - name: No committed secrets in the tracked tree
         run: |
           set -e
