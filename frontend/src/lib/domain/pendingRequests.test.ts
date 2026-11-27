@@ -22,7 +22,7 @@ it("merges pending humans and agents, with the preset name only for the matching
     { ...pending, id: "expired", status: "expired" },
   ], lookup);
   expect(requests.map(({ id, displayName }) => [id, displayName])).toEqual([
-    ["pending", "Muse"], ["human", "协作者（0xabab…abab）"], ["unknown", "一个云端 Agent（0xabab…abab）"],
+    ["pending", "Muse"], ["human", "协作者（0xabab…abab）"], ["unknown", "云端 Agent（0xabab…abab）"],
   ]);
   expect(lookup.mock.calls).toEqual([["sample"], ["unknown"]]);
 });

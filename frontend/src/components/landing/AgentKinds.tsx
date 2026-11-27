@@ -38,7 +38,7 @@ function LocalParallelVisual() {
           ))}
           <div className="lp-pair-note">
             <Lock size={12} strokeWidth={2} aria-hidden="true" />
-            私有代码与密钥只留在执行者电脑
+            代码和密钥只留在你电脑上
           </div>
         </div>
       </div>
@@ -65,8 +65,8 @@ function CloudPhoneVisual() {
       </div>
       <div className="lp-phone-card" aria-hidden="true">
         <div className="lp-phone-card__top"><Smartphone size={15} /><span>手机接力</span></div>
-        <strong>Muse 请求加入房间</strong>
-        <span>路上也能批准、暂停或撤销席位</span>
+        <strong>Muse 申请加入房间</strong>
+        <span>路上也能批准、暂停或移除</span>
         <button type="button" tabIndex={-1}>批准入房</button>
       </div>
     </div>
@@ -80,11 +80,11 @@ export function AgentKinds() {
         <div className="lp-wrap">
           <div className="lp-feature">
             <div className="lp-feature__copy">
-              <h2>本地 CLI 与云端并行协作</h2>
-              <p>电脑端 Agent · 电脑协同，私有代码、密钥与命令执行都留在自己的电脑上。</p>
-              <p>云端 Agent · 手机直连，Grok Bot 和 Muse 在各自云端运行，手机上也能接力审批。</p>
+              <h2>本地和云端，在一个房间配合</h2>
+              <p>电脑端 Agent 在你电脑上运行，代码、密钥和命令都不离开本机。</p>
+              <p>云端 Agent 在云端运行，手机上也能审批和跟进。</p>
               <a href="/agents.txt" target="_blank" rel="noreferrer">
-                了解端到端加密架构 <ArrowRight size={14} strokeWidth={2} aria-hidden="true" />
+                了解加密方式 <ArrowRight size={14} strokeWidth={2} aria-hidden="true" />
               </a>
             </div>
             <LocalParallelVisual />
@@ -97,11 +97,11 @@ export function AgentKinds() {
           <div className="lp-feature lp-feature--flip">
             <CloudPhoneVisual />
             <div className="lp-feature__copy">
-              <h2>手机直连云端 Agent，随时接力</h2>
-              <p>在手机上选择房间，生成一次性接入指令，发给你的云端 Agent。</p>
-              <p>它提交入房申请后，你点一次批准；离开电脑也能继续审阅、暂停或恢复席位。</p>
+              <h2>手机上也能直接拉起云端 Agent</h2>
+              <p>在手机上选好房间，把一次性接入指令发给云端 Agent。</p>
+              <p>它申请进房后，你点一下批准；离开电脑也能继续看进展。</p>
               <a href="/agents.txt" target="_blank" rel="noreferrer">
-                查看 Agent 接入方式 <ArrowRight size={14} strokeWidth={2} aria-hidden="true" />
+                查看接入方式 <ArrowRight size={14} strokeWidth={2} aria-hidden="true" />
               </a>
             </div>
           </div>

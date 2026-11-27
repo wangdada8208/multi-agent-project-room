@@ -55,11 +55,20 @@
   gap: 12px;
   padding: 12px 14px 12px 16px;
   border-radius: 14px;
-  background: var(--warn-bg);
-  border: 1px solid var(--warn-border);
+  background: #ffffff;
+  border: 1px solid rgba(20, 20, 19, 0.09);
   margin-bottom: 20px;
   font-size: var(--fs-body);
   color: var(--text-1);
+}
+
+.wb-attention::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 50%;
+  background: #d95f28;
 }
 
 .wb-attention__text {

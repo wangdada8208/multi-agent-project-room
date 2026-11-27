@@ -150,13 +150,13 @@ export function CreateRoomDrawer({ open, onClose, onCreated }: CreateRoomDrawerP
       onClose={() => {
         if (!creating) onClose();
       }}
-      title="新建协作室"
+      title="新建房间"
       className="wb-create-drawer"
     >
       <form className="wb-create-drawer__form" onSubmit={handleSubmit}>
         <div className="wb-create-drawer__scroll">
           <div className="wb-create-drawer__field">
-            <span className="wb-create-drawer__label">选择协作模板</span>
+            <span className="wb-create-drawer__label">选择模板</span>
             {templatesQuery.isLoading ? (
               <div className="wb-rooms-state">
                 <span className="ui-spinner" aria-hidden="true" />
@@ -210,7 +210,7 @@ export function CreateRoomDrawer({ open, onClose, onCreated }: CreateRoomDrawerP
                 className="wb-create-drawer__input"
                 value={roomDesc}
                 onChange={(e) => setRoomDesc(e.target.value)}
-                placeholder="一句话说明本房间的协作目标"
+                placeholder="一句话说明本房间的房间目标"
               />
             </div>
           )}

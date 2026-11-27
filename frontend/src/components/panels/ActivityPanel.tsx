@@ -162,7 +162,7 @@ export function ActivityPanel({ roomId, integrityOnly = false }: { roomId: strin
               <AlertTriangle size={14} color="var(--warn)" />
               <span style={{ color: "var(--warn)" }}>
                 {integrity.checkedPorts === 0
-                  ? "未连上本机席位账本，当前仅展示 Hub 元数据"
+                  ? "未连上本地助手，当前只展示服务器动态"
                   : "本机链完整（含历史未加链条目）"}
               </span>
             </>
@@ -226,7 +226,7 @@ export function ActivityPanel({ roomId, integrityOnly = false }: { roomId: strin
           style={{ fontSize: 12, padding: "5px 8px" }}
         >
           <option value="">全部状态</option>
-          <option value="pending">待处理 (pending)</option>
+          <option value="pending">待审批 (pending)</option>
           <option value="ok">成功 (ok)</option>
           <option value="denied">已拒绝 (denied)</option>
           <option value="failed">失败 (failed)</option>

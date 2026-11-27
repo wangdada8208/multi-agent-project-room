@@ -59,7 +59,7 @@ export function TemplateRulesPreview({
     <div className="wb-preview-box">
       <header className="wb-preview-box__head">
         <ListChecks size={14} strokeWidth={1.9} aria-hidden="true" />
-        <span>协作规则预览</span>
+        <span>房间规则预览</span>
         <small>
           {rounds != null ? `默认 ${rounds} 轮 · ` : ""}建房后可在「规则」中修改
         </small>

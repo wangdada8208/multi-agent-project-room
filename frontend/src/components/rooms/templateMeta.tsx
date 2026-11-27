@@ -88,7 +88,7 @@ export function parseTemplateRoles(markdown?: string | null): ParsedTemplateRole
   const flush = () => {
     if (!currentName) return;
     const summary = bullets.join("；").trim();
-    roles.push({ name: currentName, summary: summary || "按房间规则参与协作" });
+    roles.push({ name: currentName, summary: summary || "按房间规则参与" });
     currentName = null;
     bullets = [];
   };

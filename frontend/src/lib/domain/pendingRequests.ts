@@ -10,7 +10,7 @@ export function pendingRequestsFrom(redemptions: readonly RedemptionView[], look
       const abbreviated = address ? `（${address.slice(0, 6)}…${address.slice(-4)}）` : "";
       return {
         ...row,
-        displayName: row.kind === "agent" ? lookupName(row.token) || `一个云端 Agent${abbreviated}` : `协作者${abbreviated}`,
+        displayName: row.kind === "agent" ? lookupName(row.token) || `云端 Agent${abbreviated}` : `协作者${abbreviated}`,
       };
     });
 }

@@ -146,7 +146,7 @@ export function PermissionsPanel({
   const [invites, setInvites] = useState<RoomInviteView[]>([]);
   const [revokingToken, setRevokingToken] = useState<string | null>(null);
 
-  // 房主待批准核销队列
+  // 房主待审批核销队列
   const [standaloneRedemptions, setRedemptions] = useState<RedemptionView[]>([]);
   const [redemptionBusyId, setRedemptionBusyId] = useState<string | null>(null);
   const [redemptionError, setRedemptionError] = useState("");
@@ -508,7 +508,7 @@ export function PermissionsPanel({
         >
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <Shield size={14} strokeWidth={1.9} style={{ color: "var(--info)" }} />
-            <strong style={{ fontSize: 13, color: "var(--text-1)" }}>邀请真人协作者进入加密群</strong>
+            <strong style={{ fontSize: 13, color: "var(--text-1)" }}>邀请成员进入加密群</strong>
           </div>
           <p style={{ fontSize: 12, color: "var(--text-2)", lineHeight: 1.5 }}>
             生成可复用的加密入群链接；受邀人登录并签名后可获得房间权限并加入加密群。
@@ -716,7 +716,7 @@ export function PermissionsPanel({
         </div>
       )}
 
-      {/* ── 房主待批准的入群申请 ── */}
+      {/* ── 房主待审批的入群申请 ── */}
       {!section && effectiveIsOwner && redemptions.length > 0 && (
         <div
           style={{
@@ -730,7 +730,7 @@ export function PermissionsPanel({
           }}
         >
           <strong style={{ fontSize: 13, color: "var(--text-1)" }}>
-            待批准的入群申请 ({redemptions.length})
+            待审批的入群申请 ({redemptions.length})
           </strong>
           {redemptions.map((red) => (
             <div

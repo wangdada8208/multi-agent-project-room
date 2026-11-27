@@ -472,20 +472,30 @@
   gap: 8px;
   margin-bottom: 8px;
   padding: 8px 9px;
-  border: 1px solid #e8d6a8;
+  border: 1px solid rgba(20, 20, 19, 0.1);
   border-radius: 9px;
-  background: #f8f0d8;
+  background: rgba(255, 255, 255, 0.72);
   transition: background 180ms, border-color 180ms;
 }
 
 .lp-banner--approved {
-  border-color: #c4dfd0;
-  background: #eaf4ee;
+  border-color: rgba(24, 121, 78, 0.2);
+  background: rgba(255, 255, 255, 0.78);
 }
 
 .lp-banner .ui-avatar {
   --avatar-size: 25px;
 }
+
+.lp-banner::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 50%;
+  background: #d95f28;
+}
+.lp-banner--approved::before { background: #18794e; }
 
 .lp-banner__txt {
   flex: 1;
@@ -983,19 +993,29 @@
   align-items: center;
   gap: 9px;
   padding: 10px;
-  border: 1px solid #e8d6a8;
+  border: 1px solid rgba(20, 20, 19, 0.1);
   border-radius: 10px;
-  background: #f8f0d8;
+  background: rgba(255, 255, 255, 0.72);
 }
 
 .lp-approval--done {
-  border-color: #c4dfd0;
-  background: #eaf4ee;
+  border-color: rgba(24, 121, 78, 0.2);
+  background: rgba(255, 255, 255, 0.78);
 }
 
 .lp-approval .ui-avatar {
   --avatar-size: 30px;
 }
+
+.lp-approval::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 50%;
+  background: #d95f28;
+}
+.lp-approval--done::before { background: #18794e; }
 
 .lp-approval > div {
   flex: 1;

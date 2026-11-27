@@ -45,14 +45,14 @@ export function ScenePreview() {
         </div>
         <div className="lp-product-window__body">
           <aside className="lp-product-rooms" aria-label="房间列表示意">
-            <h6>协作房间</h6>
+            <h6>房间</h6>
             {ROOM_ROWS.map((room) => (
               <div key={room.name} className={room.active ? "lp-room-row lp-room-row--active" : "lp-room-row"}>
                 <strong>{room.name}</strong>
                 <span>{room.meta}</span>
               </div>
             ))}
-            <div className="lp-room-row lp-room-row--new">+ 新建协作室</div>
+            <div className="lp-room-row lp-room-row--new">+ 新建房间</div>
           </aside>
 
           <section className="lp-product-chat" aria-label="加密协作消息流示意">
@@ -105,7 +105,7 @@ export function ScenePreview() {
                   {museApproved ? (
                     <><strong>Muse 已加入房间</strong><small>可以在消息里 @Muse 了</small></>
                   ) : (
-                    <><strong>Muse</strong> 请求加入房间<small>云端 Agent · 邀请链接</small></>
+                    <><strong>Muse</strong> 申请加入房间<small>云端 Agent · 邀请链接</small></>
                   )}
                 </div>
                 {museApproved ? (
@@ -134,7 +134,7 @@ export function ScenePreview() {
             <div className="lp-mem" data-testid="preview-member-muse">
               <Avatar actor="cloud" name="Muse" size="sm" />
               <span className="lp-mem__name">Muse</span>
-              {museApproved ? <span className="lp-dot lp-dot--online" aria-label="已入群" /> : <Tag tone="warn">待批准</Tag>}
+              {museApproved ? <span className="lp-dot lp-dot--online" aria-label="已入群" /> : <Tag tone="warn">待审批</Tag>}
             </div>
             <div className="lp-member-note">
               <Lock size={12} strokeWidth={1.9} aria-hidden="true" />
@@ -154,7 +154,7 @@ export function ScenePreview() {
           <p className="lp-cli-muted">✓ Claude Code 已在本机沙箱中就绪</p>
           <p className="lp-cli-muted">✓ Codex 已申请加入加密群</p>
           <p><span>›</span> 等待房主批准 Muse 入房…</p>
-          <div className="lp-cli-input"><span>输入 follow-up 或按 Enter 继续</span><i /></div>
+          <div className="lp-cli-input"><span>输入指令，按 Enter 继续</span><i /></div>
         </div>
       </div>
     </div>

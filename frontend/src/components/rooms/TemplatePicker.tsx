@@ -9,7 +9,7 @@ export interface TemplatePickerProps {
 
 export function TemplatePicker({ templates, selectedKey, onSelect }: TemplatePickerProps) {
   return (
-    <div className="wb-tpl-list" role="radiogroup" aria-label="选择协作模板">
+    <div className="wb-tpl-list" role="radiogroup" aria-label="选择模板">
       {templates.map((tpl) => (
         <button
           key={tpl.key}
@@ -24,7 +24,7 @@ export function TemplatePicker({ templates, selectedKey, onSelect }: TemplatePic
           </span>
           <span className="wb-tpl-opt__copy">
             <strong>{tpl.name}</strong>
-            <small>{tpl.description || "预置多角色协作分工"}</small>
+            <small>{tpl.description || "预置分工"}</small>
           </span>
         </button>
       ))}

@@ -61,7 +61,7 @@
     --ss-danger-soft: rgba(239, 68, 68, 0.1);
     --ss-danger-text: #b91c1c;
     --ss-warning-soft: rgba(245, 158, 11, 0.14);
-    --ss-warning-text: #b45309;
+    --ss-warning-text: #d95f28;
     /* A second accent stop, for gradient meters and lines */
     --ss-accent-2: #8b5cf6;
     /* The accent as text (a link, a selected label). Darkened so it reads on

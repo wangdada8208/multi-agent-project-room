@@ -53,7 +53,7 @@ export function SharedRoomPage() {
         <div className="shared-banner">
           <Eye size={15} strokeWidth={1.9} />
           <span>
-            {roomName ? `「${roomName}」` : ""}只读分享视图 — 仅可浏览协作记录，无法发言
+            {roomName ? `「${roomName}」` : ""}只读分享视图 — 仅可浏览工作记录，无法发言
           </span>
         </div>
 

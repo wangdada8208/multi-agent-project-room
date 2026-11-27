@@ -404,7 +404,7 @@ describe("AgentJoinSection cloud invitations", () => {
       setter?.call(input, "新房间");
       input.dispatchEvent(new Event("input", { bubbles: true }));
     });
-    await clickButton(createForm, "先创建一个协作房间");
+    await clickButton(createForm, "先创建一个房间");
     await clickButton(panel, "生成接入指令");
     expect(createRoomInvite).toHaveBeenCalledWith("new-room", expect.any(Object));
   });

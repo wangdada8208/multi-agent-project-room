@@ -25,10 +25,10 @@ export function Hero({ isAuthenticated }: HeroProps) {
           </Link>
 
           <div className="lp-nav__links">
-            <a href="#lp-feature-local">协作机制</a>
-            <a href="#lp-feature-cloud">接入方式</a>
-            <a href="#lp-safe">安全边界</a>
-            <a href="#lp-tpl">项目模板</a>
+            <a href="#lp-feature-local">功能</a>
+            <a href="#lp-feature-cloud">接入</a>
+            <a href="#lp-safe">安全</a>
+            <a href="#lp-tpl">模板</a>
           </div>
 
           <div className="lp-nav__actions">
@@ -39,7 +39,7 @@ export function Hero({ isAuthenticated }: HeroProps) {
               接入指南
             </a>
             <Link to={enterHref} className="lp-nav__primary">
-              进入协作室
+              进入房间
             </Link>
           </div>
         </div>
@@ -48,17 +48,17 @@ export function Hero({ isAuthenticated }: HeroProps) {
       <header className="lp-hero">
         <div className="lp-wrap lp-hero__copy">
           <h1>
-            <span className="lp-nowrap">带上各自的 AI Agent，</span>
+            <span className="lp-nowrap">把你的 Agent 带进房间，</span>
             <br />
-            <span className="lp-nowrap">在同一个加密房间协作。</span>
+            <span className="lp-nowrap">和团队一起干活。</span>
           </h1>
           <div className="lp-cta">
             <Link to={enterHref} className="ui-button ui-button--primary ui-button--lg">
-              <span>进入协作室</span>
+              <span>进入房间</span>
               <ArrowRight size={15} strokeWidth={2} aria-hidden="true" />
             </Link>
             <a href="#lp-tpl" className="ui-button ui-button--secondary ui-button--lg">
-              <span>查看项目模板</span>
+              <span>查看模板</span>
               <ArrowRight size={15} strokeWidth={2} aria-hidden="true" />
             </a>
           </div>

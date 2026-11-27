@@ -80,7 +80,7 @@
 .app-account:not(.app-account--mobile) summary > .ui-avatar { --avatar-size: 28px; }
 .app-mobile-tabs > a { position: relative; }
 .app-mobile-tabs > a > .workbench-count { position: absolute; top: 3px; left: calc(50% + 9px); }
-.workbench-count { background: var(--presence-pending); color: var(--gray-950); }
+.workbench-count { background: #141413; color: #f7f7f4; }
 @media (min-width: 768px) and (max-width: 1023px) {
   .app-rail__rooms h2, .app-rail .app-account summary > span:nth-child(2) { display: none; }
 }

@@ -41,7 +41,7 @@
 
   /* ---- 语义：状态 ---- */
   --ok: #18794e;      --ok-bg: #eaf4ee;      --ok-border: #c4dfd0;
-  --warn: #9a6700;    --warn-bg: #f8f0d8;    --warn-border: #e8d6a8;
+  --warn: #d95f28;    --warn-bg: #f2f1ec;    --warn-border: rgba(20, 20, 19, 0.10);
   --danger: #b91c1c;  --danger-bg: #fbeae8;  --danger-border: #efc4c0;
   --info: #d95f28;    --info-bg: #f9eee8;    --info-border: #ebcdbb;
 
@@ -51,7 +51,7 @@
   --actor-human2-bg: #e4e8e2;  --actor-human2-fg: #3f5846;
   --actor-cloud: #141413;      --actor-cloud-bg: #f2f1ec;  --actor-cloud-border: rgba(20, 20, 19, 0.10);
   --actor-local: #141413;      --actor-local-bg: #f2f1ec;  --actor-local-border: rgba(20, 20, 19, 0.10);
-  --presence-online: #18794e;  --presence-paused: #a0a099; --presence-pending: #9a6700;
+  --presence-online: #18794e;  --presence-paused: #a0a099; --presence-pending: #d95f28;
 
   /* ---- 字体 ---- */
   --font-sans: Inter, -apple-system, BlinkMacSystemFont, "PingFang SC", "Noto Sans SC", "Hiragino Sans GB", "Noto Sans CJK SC", "Microsoft YaHei", system-ui, sans-serif;
@@ -113,7 +113,7 @@
   --border-1: rgba(255, 255, 250, 0.08); --border-2: rgba(255, 255, 250, 0.13); --border-3: rgba(255, 255, 250, 0.22);
   --accent: #ededea; --accent-hover: #ffffff; --accent-fg: #121211;
   --ok: #4cc27f; --ok-bg: rgba(76, 194, 127, 0.12); --ok-border: rgba(76, 194, 127, 0.3);
-  --warn: #e9a640; --warn-bg: rgba(233, 166, 64, 0.12); --warn-border: rgba(233, 166, 64, 0.32);
+  --warn: #e0764a; --warn-bg: rgba(217, 95, 40, 0.13); --warn-border: rgba(217, 95, 40, 0.28);
   --danger: #f07171; --danger-bg: rgba(240, 113, 113, 0.12); --danger-border: rgba(240, 113, 113, 0.3);
   --info: #ec8b5c; --info-bg: rgba(236, 139, 92, 0.12); --info-border: rgba(236, 139, 92, 0.3);
   --actor-me-bg: #ededea; --actor-me-fg: #121211;
@@ -134,7 +134,7 @@
     --border-1: rgba(255, 255, 250, 0.08); --border-2: rgba(255, 255, 250, 0.13); --border-3: rgba(255, 255, 250, 0.22);
     --accent: #ededea; --accent-hover: #ffffff; --accent-fg: #121211;
     --ok: #4cc27f; --ok-bg: rgba(76, 194, 127, 0.12); --ok-border: rgba(76, 194, 127, 0.3);
-    --warn: #e9a640; --warn-bg: rgba(233, 166, 64, 0.12); --warn-border: rgba(233, 166, 64, 0.32);
+    --warn: #e0764a; --warn-bg: rgba(217, 95, 40, 0.13); --warn-border: rgba(217, 95, 40, 0.28);
     --danger: #f07171; --danger-bg: rgba(240, 113, 113, 0.12); --danger-border: rgba(240, 113, 113, 0.3);
     --info: #ec8b5c; --info-bg: rgba(236, 139, 92, 0.12); --info-border: rgba(236, 139, 92, 0.3);
     --actor-me-bg: #ededea; --actor-me-fg: #121211;

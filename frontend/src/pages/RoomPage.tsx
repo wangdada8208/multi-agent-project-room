@@ -56,7 +56,7 @@ export function RoomPage() {
   if (workspace.inviteAccepting) return <div className="loading-center" role="status">正在验证入群邀请并开通房间权限…</div>;
   if (workspace.roomError || (workspace.roomLoaded && !room)) return <div className="page-error card">
     <p>{workspace.inviteAcceptError ?? workspace.roomError?.message ?? "房间不存在或没有访问权限。"}</p>
-    <Link to="/home">回到协作室</Link>
+    <Link to="/home">回到房间</Link>
   </div>;
 
   const members = workspace.permissionsQuery.data?.members ?? [];
@@ -102,7 +102,7 @@ export function RoomPage() {
         }) : undefined}
         notice={<>
           {workspace.showCrashBanner && <div className="wb-notice">
-            <AlertCircle size={17} /><span>本机席位（{workspace.crashedLocalSeats.map((seat) => seat.agentKey).join("、")}）异常退出。</span>
+            <AlertCircle size={17} /><span>本机 Agent（{workspace.crashedLocalSeats.map((seat) => seat.agentKey).join("、")}）异常退出。</span>
             <HelperLink className="ui-button ui-button--secondary ui-button--sm" action="console">打开本机助手查看</HelperLink>
             <IconButton label="关闭提示" size="sm" onClick={workspace.dismissCrash}><X size={14} /></IconButton>
           </div>}
@@ -113,11 +113,11 @@ export function RoomPage() {
             starters={workspace.starterChips} onStarter={onPrefill} />}
           {!isEncrypted && workspace.messagesQuery.isLoading && <p className="wb-status" role="status">加载消息…</p>}
           {!isEncrypted && workspace.messagesQuery.isError && <p className="wb-status wb-error" role="alert">加载失败，请刷新重试。</p>}
-          {!isEncrypted && workspace.messagesQuery.isSuccess && !workspace.displayMessages.length && <p className="wb-status">协作对话已就绪</p>}
+          {!isEncrypted && workspace.messagesQuery.isSuccess && !workspace.displayMessages.length && <p className="wb-status">对话已就绪</p>}
         </>} />}
-      composer={workspace.isObserver ? <div className="wb-composer-notice">当前为只读观察者模式，仅可旁听协作过程。</div>
+      composer={workspace.isObserver ? <div className="wb-composer-notice">当前为只读观察者模式，仅可旁听工作过程。</div>
         : <div className="wb-composer-slot">
-          {!workspace.canSendNow && <div className="wb-composer-notice">{isEncrypted ? "等待加密连接就绪…" : "正在连接协作室…"}</div>}
+          {!workspace.canSendNow && <div className="wb-composer-notice">{isEncrypted ? "等待加密连接就绪…" : "正在连接房间…"}</div>}
           <div hidden={!workspace.canSendNow}>
             <Composer disabled={!workspace.canSendNow} candidates={workspace.candidates} onlineAgents={workspace.onlineAgentNames}
               encrypted={isEncrypted} onSend={workspace.handleSend} roomId={roomId} prefill={prefill}

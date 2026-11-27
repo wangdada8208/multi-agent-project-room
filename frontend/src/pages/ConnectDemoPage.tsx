@@ -17,7 +17,7 @@ export function ConnectDemoPage() {
         </Link>
         <span className="topbar__spacer" />
         <Link to="/home" className="ui-button ui-button--ghost ui-button--sm">
-          返回协作室
+          返回房间
         </Link>
       </header>
 

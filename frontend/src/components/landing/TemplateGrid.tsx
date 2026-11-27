@@ -50,12 +50,12 @@ export function TemplateGrid() {
     <section className="lp-templates" id="lp-tpl">
       <div className="lp-wrap">
         <div className="lp-templates__head">
-          <h2>四种协作场景，开箱即用。</h2>
-          <p>模板预置了分工说明和协作规则，建房前可以预览、也可以修改。</p>
+          <h2>常用场景模板</h2>
+          <p>建房前直接选，进房后随时改。</p>
         </div>
 
         <div className="lp-template-shell">
-          <div className="lp-template-list" role="list" aria-label="协作场景模板">
+          <div className="lp-template-list" role="list" aria-label="使用场景模板">
             {LANDING_TEMPLATES.map(({ key, icon: Icon, name, desc, roles, rounds }) => (
               <button
                 type="button"
@@ -75,9 +75,9 @@ export function TemplateGrid() {
             <h3>{selected.name}</h3>
             <p>{selected.detail}</p>
             <ol>
-              <li>选择房间模板与协作规则</li>
-              <li>邀请人类成员并接入 Agent</li>
-              <li>房主批准后进入端到端加密群</li>
+              <li>选择模板和规则</li>
+              <li>邀请成员，接入 Agent</li>
+              <li>房主批准后进入加密群</li>
             </ol>
             <Link to="/setup">
               从「{selected.name}」开始 <ArrowRight size={14} strokeWidth={2} aria-hidden="true" />

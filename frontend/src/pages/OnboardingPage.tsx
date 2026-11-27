@@ -99,7 +99,7 @@ export function OnboardingView({ embedded = false, onStartTemplate }: Onboarding
           <i>2</i>接入一个 Agent
         </span>
         <span className="wb-onb-progress__step">
-          <i>3</i>邀请协作者
+          <i>3</i>邀请成员
         </span>
       </div>
 
@@ -109,7 +109,7 @@ export function OnboardingView({ embedded = false, onStartTemplate }: Onboarding
             <LayoutGrid size={19} strokeWidth={1.8} />
           </span>
           <h3>用模板开第一个房间</h3>
-          <p>选一个协作场景，预览分工和规则，一键建房。房间默认端到端加密。</p>
+          <p>选一个使用场景，预览分工和规则，一键建房。房间默认端到端加密。</p>
           <span className="wb-onb-choice__tags">
             <Tag tone="neutral">代码评审</Tag>
             <Tag tone="neutral">头脑风暴</Tag>
@@ -177,7 +177,7 @@ export function OnboardingPage() {
           <span>Project Room</span>
         </Link>
         <Link to="/home" className="ui-button ui-button--ghost ui-button--sm">
-          返回协作室
+          返回房间
         </Link>
       </header>
       <main className="wb-onb-shell__center">

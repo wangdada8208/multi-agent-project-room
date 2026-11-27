@@ -23,7 +23,7 @@ export function RoomHeader({ name, template, encryption, avatars, pending, inspe
   onInspector: () => void;
 }) {
   return <header className="wb-room-head">
-    <Link className="wb-room-back wb-mobile" to="/home" aria-label="返回协作室"><ArrowLeft size={19} /></Link>
+    <Link className="wb-room-back wb-mobile" to="/home" aria-label="返回房间"><ArrowLeft size={19} /></Link>
     <div className="wb-room-head__title">
       <h1 title={name}>{name}</h1>
       {template && <Tag className="wb-desktop">{template}</Tag>}
@@ -41,7 +41,7 @@ export function RoomHeader({ name, template, encryption, avatars, pending, inspe
       <IconButton className="wb-desktop" label="切换侧栏" pressed={inspector} onClick={onInspector}><PanelRight size={17} /></IconButton>
       <div className="wb-head-members-mobile wb-mobile">
         <IconButton label="打开成员" onClick={onMembers}><Users size={19} /></IconButton>
-        {pending > 0 && <span className="workbench-count" aria-label={`${pending} 个待批准`}>{pending}</span>}
+        {pending > 0 && <span className="workbench-count" aria-label={`${pending} 个待审批`}>{pending}</span>}
       </div>
     </div>
   </header>;
