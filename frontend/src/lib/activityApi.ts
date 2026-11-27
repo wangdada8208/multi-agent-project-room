@@ -1,6 +1,6 @@
 import { apiFetch } from "./api";
 import type { ActivityItem, CheckpointView } from "../hubContracts.generated";
-import { localErrorMessage } from "./localHelper";
+import { readLocalError } from "./apiError";
 import { OWNER_HEADER, ownerConsoleUrl } from "./ownerConsole";
 
 export interface HubActivityFeed {
@@ -92,13 +92,7 @@ export async function fetchHubActivity(
   });
   const res = await fetchImpl(`/api/v1/rooms/${encodeURIComponent(roomId)}/activity${qs}`);
   if (!res.ok) {
-    let body: unknown = null;
-    try {
-      body = await res.json();
-    } catch {
-      /* ignore non-JSON error body */
-    }
-    throw new Error(localErrorMessage(body, `读取房间活动流失败（HTTP ${res.status}）`));
+    throw new Error(await readLocalError(res, `读取房间活动流失败（HTTP ${res.status}）`));
   }
   return (await res.json()) as HubActivityFeed;
 }
@@ -130,17 +124,11 @@ export async function fetchLocalActivity(
       signal: AbortSignal.timeout(5000),
     });
     if (!res.ok) {
-      let body: unknown = null;
-      try {
-        body = await res.json();
-      } catch {
-        /* ignore */
-      }
       return {
         available: false,
         port,
         seatId: options.seatId,
-        error: localErrorMessage(body, `本机控制台拒绝或不可用（HTTP ${res.status}）`),
+        error: await readLocalError(res, `本机控制台拒绝或不可用（HTTP ${res.status}）`),
       };
     }
     const data = (await res.json()) as LocalActivityResponse;

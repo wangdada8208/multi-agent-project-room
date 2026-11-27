@@ -12,6 +12,7 @@
  */
 
 import { apiFetch } from "./api";
+import { readLocalError } from "./apiError";
 import type { RoomInviteView as CurrentRoomInviteView, SeatView } from "../hubContracts.generated";
 import type { AgentKind } from "./seatIdentity";
 export { trustTierOf, TRUST_TIER_LABEL, type AgentKind, type TrustTier } from "./seatIdentity";
@@ -139,26 +140,8 @@ function isHelperHello(value: unknown): value is HelperHello {
   );
 }
 
-/** 本机接口的错误回包可能是 {reason}、{detail} 或 {error}；长度截断，防刷屏。 */
-export function localErrorMessage(body: unknown, fallback: string): string {
-  const detail =
-    typeof body === "object" && body !== null
-      ? (body as { reason?: unknown; detail?: unknown; error?: unknown }).reason ??
-        (body as { detail?: unknown; error?: unknown }).detail ??
-        (body as { error?: unknown }).error
-      : undefined;
-  const text = typeof detail === "string" && detail.trim() ? detail : fallback;
-  return text.slice(0, 200);
-}
-
 async function readLocalJson(res: Response, fallback: string): Promise<unknown> {
-  if (!res.ok) {
-    let body: unknown = null;
-    try {
-      body = await res.json();
-    } catch { /* 回包不是 JSON 时用兜底文案 */ }
-    throw new Error(localErrorMessage(body, fallback));
-  }
+  if (!res.ok) throw new Error(await readLocalError(res, fallback));
   return res.json();
 }
 

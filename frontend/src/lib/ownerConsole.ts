@@ -8,7 +8,7 @@
  *   面板必须如实降级为「到运行助手的电脑上打开控制台页面」。
  */
 
-import { localErrorMessage } from "./localHelper";
+import { readLocalError } from "./apiError";
 
 export const OWNER_HEADER = "X-MAPR-Owner";
 
@@ -99,13 +99,7 @@ async function ownerFetch(
 }
 
 async function readOwnerJson(res: Response, fallback: string): Promise<unknown> {
-  if (!res.ok) {
-    let body: unknown = null;
-    try {
-      body = await res.json();
-    } catch { /* 非 JSON 回包用兜底文案 */ }
-    throw new OwnerConsoleError(localErrorMessage(body, fallback), res.status);
-  }
+  if (!res.ok) throw new OwnerConsoleError(await readLocalError(res, fallback), res.status);
   return res.json();
 }
 
