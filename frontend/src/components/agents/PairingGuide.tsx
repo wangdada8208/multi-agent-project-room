@@ -24,7 +24,7 @@ export function PairingGuide({ mobile, running, secondary, pairing, error, hubOr
   return <section className={`wb-pairing${highlighted ? " step-one-highlight" : ""}`}>
     <header>
       <div>
-        <h3><Terminal size={17} />{running ? "本机助手已在运行 · 完成当前账号配对" : secondary ? "连接另一台电脑" : "第 1 步：在电脑「终端」运行配对命令"}</h3>
+        <h3><Terminal size={17} />{running ? "本地助手已连接" : secondary ? "连接另一台电脑" : "第 1 步：在电脑「终端」运行配对命令"}</h3>
         <p>在电脑的终端粘贴配对命令。每台电脑只需配对一次。</p>
       </div>
       <Segmented label="切换操作系统" options={[{ value: "unix", label: "macOS / Linux" }, { value: "windows", label: "Windows" }]} value={platform} onChange={setPlatform} />
@@ -43,7 +43,7 @@ export function PairingGuide({ mobile, running, secondary, pairing, error, hubOr
     </div> : <p className="wb-muted">正在生成专属一次性配对命令…</p>}
     {!mobile && <HelperLink className="wb-pairing__link" action={action ?? (pairing ? { pair: pairing.code } : "console")}>点此直接打开本机控制台 →</HelperLink>}
     <details className="wb-pairing__demo">
-      <summary>查看 20 秒终端配对动画演示</summary>
+      <summary>看一遍配对演示</summary>
       <HelperIntroDemo />
     </details>
   </section>;

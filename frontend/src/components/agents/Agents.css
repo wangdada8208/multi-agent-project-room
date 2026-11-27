@@ -1,7 +1,7 @@
 .wb-agents-page { max-width: 1080px; margin-inline: auto; padding: 28px 24px 44px; }
 .wb-agents-flow { display: grid; gap: 12px; }
 .wb-agents-head { display: flex; align-items: center; justify-content: space-between; gap: 20px; margin-bottom: 24px; }
-.wb-agents-head h1 { font: 650 30px/38px var(--font-display); letter-spacing: var(--tracking-display); }
+.wb-agents-head h1 { font: 500 26px/34px var(--font-display); letter-spacing: var(--tracking-display); }
 .wb-agents-head p { margin-top: 4px; color: var(--text-2); }
 .wb-target { display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 8px 0 12px; border-radius: 10px; border: 1px solid var(--border-2); background: var(--bg-surface); font-size: 13.5px; box-shadow: var(--sh-1); white-space: nowrap; flex: none; color: var(--text-2); }
 .wb-target select { border: 0; height: 30px; min-width: 0; max-width: 220px; font-weight: 600; padding-inline: 4px; background: var(--bg-surface); color: var(--text-1); cursor: pointer; text-overflow: ellipsis; }

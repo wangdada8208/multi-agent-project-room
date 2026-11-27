@@ -179,7 +179,7 @@ export function useLocalAgents({ roomId: effectiveRoomId, ownerXmtpAddress, onJo
   function startJoin(agentKey: string) {
     const target = effectiveRoomId;
     if (!target) {
-      setJoinError("请先选择或创建一个要加入的协作房间。");
+      setJoinError("请先选择或创建一个要加入的房间。");
       return;
     }
     setJoinError("");
@@ -199,7 +199,7 @@ export function useLocalAgents({ roomId: effectiveRoomId, ownerXmtpAddress, onJo
         return;
       }
       if (current.group_status !== "pending") {
-        setListError("请进入协作房间并解锁加密身份，在「成员」面板移出该席位。");
+        setListError("请进入房间并解锁加密身份，在「成员」面板移出该席位。");
         return;
       }
       await removeSeatFromRoom(current);

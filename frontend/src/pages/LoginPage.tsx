@@ -11,6 +11,7 @@ import {
   registerWithEmail,
   sendEmailCode,
 } from "../lib/api";
+import heroPainting from "../assets/paintings/hero-mist-valley.webp";
 import { useAuthStore } from "../stores/authStore";
 import "./LoginPage.css";
 
@@ -278,7 +279,7 @@ export function LoginPage() {
       return;
     }
     const container = googleButtonRef.current;
-    container.innerHTML = "";
+    container.replaceChildren();
     window.google.accounts.id.initialize({
       client_id: googleClientId,
       callback: (resp) => googleHandlerRef.current(resp),
@@ -410,10 +411,20 @@ export function LoginPage() {
       </header>
 
       <main className="wb-auth__center">
+        <div className="wb-auth-gallery">
+          <aside className="wb-auth-art" aria-hidden="true">
+            <img src={heroPainting} alt="" />
+            <div className="wb-auth-art__wash" />
+            <div className="wb-auth-art__copy">
+              <span>Multi-Agent Project Room</span>
+              <strong>带上你的 Agent，一起把事做完。</strong>
+              <p>端到端加密 · 房主审批 · 代码留本地</p>
+            </div>
+          </aside>
         <section className="wb-auth-card" aria-label={mode === "login" ? "登录" : "注册"}>
-          <h1>{mode === "login" ? "登录 Project Room" : "创建协作账户"}</h1>
+          <h1>{mode === "login" ? "登录 Project Room" : "创建账户"}</h1>
           <p className="wb-auth-card__sub">
-            {mode === "login" ? "首次登录会自动为你创建账户。" : "端到端加密 · 多人多 Agent 协作房间"}
+            {mode === "login" ? "首次登录会自动为你创建账户。" : "端到端加密 · 和你的 Agent 一起工作"}
           </p>
 
           {hasInviteTarget && (
@@ -686,9 +697,10 @@ export function LoginPage() {
           </div>
 
           <p className="wb-auth-foot">
-            受邀加入？直接打开邀请链接，登录后会自动回到对应房间。
+            收到邀请链接？登录后会自动跳回对应房间。
           </p>
         </section>
+        </div>
       </main>
     </div>
   );

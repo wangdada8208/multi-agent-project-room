@@ -70,7 +70,7 @@
 .app-rail { padding: 12px 10px; gap: 2px; }
 .app-rail__brand { padding: 4px 6px 12px; font-size: 14px; }
 .app-rail__brand > span { width: 26px; height: 26px; }
-.app-rail__nav > a[aria-current="page"] { background: var(--bg-surface); box-shadow: var(--sh-1), 0 0 0 1px var(--border-1); }
+.app-rail__nav > a[aria-current="page"] { background: #e6e5df; box-shadow: none; }
 .app-rail__rooms h2 { display: flex; align-items: center; justify-content: space-between; padding: 14px 10px 4px; }
 .app-rail__rooms h2 a { padding: 0 4px; min-height: 26px; }
 .app-rail__pending-dot { width: 7px; height: 7px; flex: none; margin-left: auto; border-radius: var(--r-full); background: var(--presence-pending); }
@@ -80,7 +80,7 @@
 .app-account:not(.app-account--mobile) summary > .ui-avatar { --avatar-size: 28px; }
 .app-mobile-tabs > a { position: relative; }
 .app-mobile-tabs > a > .workbench-count { position: absolute; top: 3px; left: calc(50% + 9px); }
-.workbench-count { background: var(--presence-pending); color: var(--gray-950); }
+.workbench-count { background: #141413; color: #f7f7f4; }
 @media (min-width: 768px) and (max-width: 1023px) {
   .app-rail__rooms h2, .app-rail .app-account summary > span:nth-child(2) { display: none; }
 }
@@ -90,3 +90,12 @@
 .app-shell .input { color-scheme: inherit; }
 [data-theme="light"] .app-shell { color-scheme: light; }
 [data-theme="dark"] .app-shell { color-scheme: dark; }
+
+.app-rail { border-right: 1px solid rgba(20,20,19,.08); }
+
+/* Cursor web-agent rail */
+.app-shell{background:#fff}.app-rail{background:#f5f5f5;border-right:1px solid rgba(0,0,0,.07);width:236px}
+.app-rail__brand>span{background:#171717;color:#fff}.app-rail nav a[aria-current=page]{background:#eaeae9;color:#171717;font-weight:500}
+.app-rail__rooms h2{font-size:11px;color:#8e8e8e;font-weight:500;letter-spacing:.01em}
+.workbench-count{background:transparent!important;color:#6e6e6e!important;min-width:auto!important;height:auto!important;padding:0!important;border-radius:0!important;font-weight:500!important}
+.app-rail__pending-dot{display:none!important}

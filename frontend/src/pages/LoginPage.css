@@ -1,324 +1,52 @@
-/* =====================================================================
-   Login Page — Quiet Workbench 400px Minimal Card (light, dark, mobile)
-   Zero hardcoded hex colors: all colors derive from tokens.css.
-   ===================================================================== */
-
-.wb-auth {
-  min-height: 100dvh;
-  display: flex;
-  flex-direction: column;
-  background: var(--bg-canvas);
-  color: var(--text-1);
-  font-family: var(--font-sans);
-}
-
-.wb-auth__top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: calc(18px + var(--safe-top)) 28px 18px;
-}
-
-.wb-auth__brand {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  font-weight: var(--fw-bold);
-  font-size: 15px;
-  letter-spacing: -0.01em;
-  color: var(--text-1);
-  text-decoration: none;
-}
-
-.wb-auth__mark {
-  width: 26px;
-  height: 26px;
-  border-radius: var(--r-md);
-  background: var(--accent);
-  color: var(--accent-fg);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: none;
-}
-
-.wb-auth__center {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 16px 20px calc(56px + var(--safe-bottom));
-}
-
-.wb-auth-card {
-  width: 400px;
-  max-width: 100%;
-  background: var(--bg-surface);
-  border: 1px solid var(--border-1);
-  border-radius: var(--r-2xl);
-  box-shadow: var(--sh-3);
-  padding: 32px;
-}
-
-.wb-auth-card h1 {
-  font-family: var(--font-display);
-  font-size: var(--fs-h2);
-  line-height: var(--lh-h2);
-  font-weight: var(--fw-bold);
-  letter-spacing: -0.016em;
-  color: var(--text-1);
-}
-
-.wb-auth-card__sub {
-  color: var(--text-2);
-  margin-top: 6px;
-  font-size: var(--fs-body);
-}
-
-.wb-auth-card__next-pill {
-  margin-top: 12px;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
-  border-radius: var(--r-full);
-  background: var(--info-bg);
-  border: 1px solid var(--info-border);
-  color: var(--info);
-  font-size: var(--fs-caption);
-  font-weight: var(--fw-medium);
-}
-
-.wb-auth-google {
-  margin-top: 22px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-
-.wb-auth-google__slot {
-  width: 100%;
-  min-height: 42px;
-  display: flex;
-  justify-content: center;
-}
-
-.wb-auth-google__fallback {
-  width: 100%;
-  min-height: 42px;
-  border-radius: 10px;
-  border: 1px solid var(--border-2);
-  background: var(--bg-surface);
-  color: var(--text-1);
-  font-weight: var(--fw-medium);
-  font-size: var(--fs-body);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  box-shadow: var(--sh-1);
-}
-
-.wb-auth-or {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  color: var(--text-3);
-  font-size: var(--fs-caption);
-  margin: 20px 0;
-}
-
-.wb-auth-or::before,
-.wb-auth-or::after {
-  content: "";
-  flex: 1;
-  height: 1px;
-  background: var(--border-1);
-}
-
-.wb-auth-form {
-  margin-top: 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.wb-auth-form--after-or {
-  margin-top: 0;
-}
-
-.wb-auth-field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.wb-auth-field__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.wb-auth-field label {
-  font-size: var(--fs-sm);
-  font-weight: var(--fw-medium);
-  color: var(--text-1);
-}
-
-.wb-auth-field__meta {
-  font-size: var(--fs-caption);
-  font-weight: var(--fw-regular);
-  color: var(--text-3);
-}
-
-.wb-auth-input {
-  height: 40px;
-  width: 100%;
-  padding: 0 12px;
-  border-radius: var(--r-md);
-  border: 1px solid var(--border-2);
-  background: var(--bg-surface);
-  font-size: var(--fs-body);
-  color: var(--text-1);
-  transition: border-color var(--dur-1), box-shadow var(--dur-1);
-}
-
-.wb-auth-input::placeholder {
-  color: var(--text-3);
-}
-
-.wb-auth-input:focus {
-  outline: none;
-  border-color: var(--text-link);
-  box-shadow: 0 0 0 3px var(--info-bg);
-}
-
-/* 6-box OTP Code Input */
-.wb-otp-grid {
-  display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.wb-otp-cell {
-  height: 46px;
-  width: 100%;
-  text-align: center;
-  border-radius: 10px;
-  border: 1px solid var(--border-2);
-  background: var(--bg-surface);
-  color: var(--text-1);
-  font-family: var(--font-mono);
-  font-size: 18px;
-  font-weight: var(--fw-semibold);
-  transition: border-color var(--dur-1), box-shadow var(--dur-1);
-}
-
-.wb-otp-cell:focus {
-  outline: none;
-  border-color: var(--text-1);
-  box-shadow: 0 0 0 3px var(--bg-subtle);
-}
-
-.wb-auth-submit {
-  width: 100%;
-  margin-top: 6px;
-  min-height: 44px;
-  border-radius: 10px;
-}
-
-.wb-auth-links {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin-top: 12px;
-  font-size: var(--fs-sm);
-}
-
-.wb-auth-link-btn {
-  color: var(--text-2);
-  background: transparent;
-  border: 0;
-  padding: 4px 2px;
-  cursor: pointer;
-  font-size: var(--fs-sm);
-  transition: color var(--dur-1);
-}
-
-.wb-auth-link-btn:hover:not(:disabled) {
-  color: var(--text-1);
-}
-
-.wb-auth-link-btn:disabled {
-  opacity: 0.55;
-  cursor: default;
-}
-
-.wb-auth-notice {
-  padding: 9px 12px;
-  border-radius: var(--r-md);
-  background: var(--ok-bg);
-  border: 1px solid var(--ok-border);
-  color: var(--ok);
-  font-size: var(--fs-sm);
-  line-height: 19px;
-}
-
-.wb-auth-error {
-  padding: 9px 12px;
-  border-radius: var(--r-md);
-  background: var(--danger-bg);
-  border: 1px solid var(--danger-border);
-  color: var(--danger);
-  font-size: var(--fs-sm);
-  line-height: 19px;
-}
-
-.wb-auth-mode-bar {
-  margin-top: 16px;
-  padding-top: 14px;
-  border-top: 1px solid var(--border-1);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  font-size: var(--fs-sm);
-  color: var(--text-2);
-}
-
-.wb-auth-mode-bar button {
-  color: var(--text-1);
-  font-weight: var(--fw-medium);
-  background: transparent;
-  border: 0;
-  cursor: pointer;
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-
-.wb-auth-foot {
-  margin-top: 18px;
-  font-size: 12.5px;
-  color: var(--text-3);
-  line-height: 19px;
-  text-align: center;
-}
-
-@media (max-width: 767px) {
-  .wb-auth__top {
-    padding: calc(14px + var(--safe-top)) 18px 14px;
-  }
-  .wb-auth__center {
-    align-items: flex-start;
-    padding: 8px 16px calc(40px + var(--safe-bottom));
-  }
-  .wb-auth-card {
-    padding: 24px 20px;
-    box-shadow: var(--sh-1);
-  }
-  .wb-auth-input {
-    font-size: 16px;
-  }
+/* Login — warm alabaster gallery split, restrained Cursor-like forms */
+.wb-auth { min-height:100dvh; display:flex; flex-direction:column; background:#f7f7f4; color:var(--text-1); font-family:var(--font-sans); }
+.wb-auth__top { display:flex; align-items:center; justify-content:space-between; padding:calc(16px + var(--safe-top)) 30px 12px; }
+.wb-auth__brand { display:inline-flex; align-items:center; gap:8px; font-weight:600; font-size:14px; letter-spacing:-.01em; color:var(--text-1); text-decoration:none; }
+.wb-auth__mark { width:23px; height:23px; border-radius:6px; background:#141413; color:#f7f7f4; display:inline-flex; align-items:center; justify-content:center; flex:none; }
+.wb-auth__center { flex:1; display:flex; align-items:center; justify-content:center; padding:12px 24px calc(46px + var(--safe-bottom)); }
+.wb-auth-gallery { width:min(920px,100%); min-height:610px; display:grid; grid-template-columns:minmax(280px,.86fr) minmax(380px,1.14fr); overflow:hidden; border:1px solid rgba(20,20,19,.08); border-radius:14px; background:#fff; box-shadow:0 24px 60px rgba(20,20,19,.12); }
+.wb-auth-art { position:relative; overflow:hidden; background:#dfddd5; }
+.wb-auth-art img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; object-position:center 48%; filter:brightness(1.15) saturate(.75) contrast(.88); }
+.wb-auth-art__wash { position:absolute; inset:0; background:linear-gradient(180deg,rgba(247,247,244,.26),rgba(247,247,244,.05) 45%,rgba(20,20,19,.18)); }
+.wb-auth-art__copy { position:absolute; left:24px; right:24px; bottom:24px; color:#fff; text-shadow:0 1px 12px rgba(20,20,19,.42); }
+.wb-auth-art__copy span { display:block; font-size:11px; letter-spacing:.04em; opacity:.86; text-transform:uppercase; }
+.wb-auth-art__copy strong { display:block; margin-top:7px; font-size:22px; line-height:30px; font-weight:500; letter-spacing:-.015em; }
+.wb-auth-art__copy p { margin-top:7px; font-size:12px; opacity:.9; }
+.wb-auth-card { width:100%; max-width:none; align-self:stretch; display:flex; flex-direction:column; justify-content:center; background:#fff; padding:42px clamp(30px,4.6vw,54px); }
+.wb-auth-card h1 { font-family:var(--font-display); font-size:26px; line-height:34px; font-weight:500; letter-spacing:-.018em; color:var(--text-1); }
+.wb-auth-card__sub { color:var(--text-2); margin-top:6px; font-size:14px; }
+.wb-auth-card__next-pill { margin-top:12px; display:inline-flex; align-items:center; gap:6px; padding:4px 10px; border-radius:9999px; background:var(--info-bg); border:1px solid var(--info-border); color:var(--info); font-size:12px; font-weight:500; width:max-content; }
+.wb-auth-google { margin-top:22px; display:flex; flex-direction:column; align-items:center; }
+.wb-auth-google__slot { width:100%; min-height:42px; display:flex; justify-content:center; }
+.wb-auth-google__fallback { width:100%; min-height:42px; border-radius:9999px; border:1px solid rgba(20,20,19,.14); background:#fff; color:var(--text-1); font-weight:500; font-size:14px; display:inline-flex; align-items:center; justify-content:center; gap:8px; }
+.wb-auth-or { display:flex; align-items:center; gap:12px; color:var(--text-3); font-size:12px; margin:18px 0; }
+.wb-auth-or::before,.wb-auth-or::after { content:""; flex:1; height:1px; background:rgba(20,20,19,.08); }
+.wb-auth-form { margin-top:20px; display:flex; flex-direction:column; gap:13px; }
+.wb-auth-form--after-or { margin-top:0; }
+.wb-auth-field { display:flex; flex-direction:column; gap:6px; }
+.wb-auth-field__head { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.wb-auth-field label { font-size:13px; font-weight:500; color:var(--text-1); }
+.wb-auth-field__meta { font-size:12px; font-weight:400; color:var(--text-3); }
+.wb-auth-input { height:40px; width:100%; padding:0 12px; border-radius:9px; border:1px solid rgba(20,20,19,.14); background:#fff; font-size:14px; color:var(--text-1); transition:border-color 160ms,box-shadow 160ms; }
+.wb-auth-input::placeholder { color:var(--text-3); }
+.wb-auth-input:focus { outline:none; border-color:#141413; box-shadow:0 0 0 3px rgba(20,20,19,.06); }
+.wb-otp-grid { display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:7px; }
+.wb-otp-cell { height:45px; width:100%; text-align:center; border-radius:9px; border:1px solid rgba(20,20,19,.14); background:#fff; color:var(--text-1); font-family:var(--font-mono); font-size:17px; font-weight:500; }
+.wb-otp-cell:focus { outline:none; border-color:#141413; box-shadow:0 0 0 3px rgba(20,20,19,.06); }
+.wb-auth-submit { width:100%; margin-top:5px; min-height:42px; border-radius:9999px; font-size:14px; }
+.wb-auth-links { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:12px; font-size:13px; }
+.wb-auth-link-btn { color:var(--text-2); background:transparent; border:0; padding:4px 2px; cursor:pointer; font-size:13px; }
+.wb-auth-link-btn:hover:not(:disabled) { color:var(--text-1); }
+.wb-auth-link-btn:disabled { opacity:.55; cursor:default; }
+.wb-auth-notice,.wb-auth-error { padding:9px 12px; border-radius:9px; font-size:13px; line-height:19px; }
+.wb-auth-notice { background:var(--ok-bg); border:1px solid var(--ok-border); color:var(--ok); }
+.wb-auth-error { background:var(--danger-bg); border:1px solid var(--danger-border); color:var(--danger); }
+.wb-auth-foot { margin-top:18px; font-size:12px; color:var(--text-3); line-height:18px; text-align:center; }
+@media (max-width:820px) {
+  .wb-auth__center { align-items:flex-start; padding:8px 14px calc(32px + var(--safe-bottom)); }
+  .wb-auth-gallery { grid-template-columns:minmax(0,1fr); min-height:0; }
+  .wb-auth-art { min-height:176px; }
+  .wb-auth-art__copy strong { font-size:19px; line-height:26px; }
+  .wb-auth-card { padding:26px 20px; }
+  .wb-auth-input { font-size:16px; }
 }

@@ -78,17 +78,17 @@ export function MembersPanel({
 
   return (
     <div className="panel-section" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      {/* ── 加密群 Agent 席位 ── */}
+      {/* ── 已接入 Agent ── */}
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <p className="panel-heading" style={{ color: "#1d1d1f", fontSize: 13, fontWeight: 600 }}>
-            加密群 Agent 席位 ({activeSeats.length + legacyAgents.length})
+            已接入 Agent ({activeSeats.length + legacyAgents.length})
           </p>
         </div>
 
         {activeSeats.length === 0 && legacyAgents.length === 0 && (
           <div className="panel-card" style={{ fontSize: 13, color: "#6e6e73", lineHeight: 1.5 }}>
-            当前房间尚无 Agent 席位。可一键接入 Claude Code、Codex、Grok、Muse 等智能体。
+            房间里还没有 Agent。可以接入 Claude Code、Codex、Grok、Muse。
           </div>
         )}
 
@@ -144,7 +144,7 @@ export function MembersPanel({
                   {isPaused && (
                     <span
                       className="trust-badge"
-                      title="席位已暂停：本机进程已停，席位记录保留；随时可恢复"
+                      title="已暂停：进程已停止，记录保留，随时可恢复"
                       style={{ marginLeft: 0, border: "1px solid rgba(0,0,0,0.12)" }}
                     >
                       已暂停
@@ -174,7 +174,7 @@ export function MembersPanel({
                     {s.xmtp_address.slice(0, 6)}…{s.xmtp_address.slice(-4)}
                   </span>
                   {isCollaboratorSeat && (
-                    <span className="collaborator-seat-badge">· 协作者席位</span>
+                    <span className="collaborator-seat-badge">· 协作者</span>
                   )}
                 </div>
               </div>
@@ -185,7 +185,7 @@ export function MembersPanel({
                     className="icon-btn"
                     disabled={pausingId === s.seat_id || removingId === s.seat_id}
                     onClick={() => void handleSetPaused(s, !isPaused)}
-                    title={isPaused ? "恢复席位（本机助手下次心跳生效）" : "暂停席位（只停进程，不删席位）"}
+                    title={isPaused ? "恢复（本机助手下次心跳生效）" : "暂停（只停进程，不删记录）"}
                     style={{ width: 28, height: 28 }}
                   >
                     {isPaused ? (
@@ -199,7 +199,7 @@ export function MembersPanel({
                     className="icon-btn"
                     disabled={removingId === s.seat_id || pausingId === s.seat_id}
                     onClick={() => void handleRemoveSeat(s)}
-                    title="移出房间（先移出加密群，再删席位记录）"
+                    title="移出房间（先退出加密群，再删除记录）"
                     style={{ width: 28, height: 28 }}
                   >
                     <Trash2 size={14} strokeWidth={1.75} />
@@ -229,7 +229,7 @@ export function MembersPanel({
         </Link>
       </div>
 
-      {/* ── 在线人类协作者 ── */}
+      {/* ── 在线成员 ── */}
       <div
         style={{
           display: "flex",
@@ -240,11 +240,11 @@ export function MembersPanel({
         }}
       >
         <p className="panel-heading" style={{ color: "#1d1d1f", fontSize: 13, fontWeight: 600 }}>
-          在线人类协作者 {humans.length > 0 ? `(${humans.length})` : ""}
+          在线成员 {humans.length > 0 ? `(${humans.length})` : ""}
         </p>
         {humans.length === 0 ? (
           <p className="panel-hint" style={{ fontSize: 12, color: "#6e6e73", lineHeight: 1.5 }}>
-            当前暂无在线人类协作者。如需邀请协作者进入加密群，请前往「权限」面板生成入群邀请链接。
+            当前暂无在线成员。如需邀请成员进入加密群，请前往「权限」面板生成入群邀请链接。
           </p>
         ) : (
           humans.map((p) => (

@@ -25,13 +25,13 @@ function SeatRow({ seat, actions, editable, source }: { seat: HubSeatView; actio
       <small><i className={`wb-presence wb-presence--${paused ? "paused" : pending ? "pending" : "online"}`} />{paused ? "已暂停" : pending ? "待入群" : "已入群"}{source ? ` · ${source}` : ""}</small>
     </div>
     {editable && <div className="wb-seat__actions">
-      <IconButton label={paused ? "恢复席位" : "暂停席位"} size="sm" disabled={busy}
+      <IconButton label={paused ? "恢复" : "暂停"} size="sm" disabled={busy}
         onClick={() => void actions.handleSetPaused(seat, !paused)}>{paused ? <Play size={14} /> : <Pause size={14} />}</IconButton>
-      <IconButton label="移出席位" size="sm" disabled={busy} onClick={() => setConfirming(true)}><Trash2 size={14} /></IconButton>
+      <IconButton label="移除" size="sm" disabled={busy} onClick={() => setConfirming(true)}><Trash2 size={14} /></IconButton>
     </div>}
     {confirming && <ConfirmInline confirmLabel="移出" loading={actions.removingId === seat.seat_id} onCancel={() => setConfirming(false)}
       onConfirm={() => void actions.handleRemoveSeat(seat)}>
-      {pending ? "移除此待入群席位？" : `先把 ${seat.agent_display_name} 移出加密群，再删除席位。移出后无法读取新消息。`}
+      {pending ? "移除此待入群 Agent？" : `先把 ${seat.agent_display_name} 移出加密群，再删除记录。移除后无法读取新消息。`}
     </ConfirmInline>}
   </article>;
 }
@@ -50,10 +50,10 @@ export function MembersTab({ requests, requestActions, seats, seatActions, permi
   const activeSeats = seats.filter((seat) => seat.group_status !== "removed");
   return <div className="wb-tab-content">
     {requests.length > 0 && <section>
-      <h3>待批准 <span className="workbench-count">{requests.length}</span></h3>
+      <h3>待审批 <span className="workbench-count">{requests.length}</span></h3>
       {requests.map((request) => <article className="wb-seat wb-seat--pending" key={request.id}>
         <Avatar name={request.displayName} actor={request.kind === "agent" ? "cloud" : "human"} size="sm" />
-        <div className="wb-seat__info"><strong>{request.displayName} {request.kind === "agent" && <Tag tone="cloud">云端</Tag>}</strong><small>通过你的邀请链接 · 等待批准</small></div>
+        <div className="wb-seat__info"><strong>{request.displayName} {request.kind === "agent" && <Tag tone="cloud">云端</Tag>}</strong><small>通过邀请链接 · 等待审批</small></div>
         <RequestActions request={request} {...requestActions} />
       </article>)}
     </section>}
@@ -81,7 +81,7 @@ export function MembersTab({ requests, requestActions, seats, seatActions, permi
         {entries.map((seat) => <SeatRow key={seat.seat_id} seat={seat} actions={seatActions}
           editable={Boolean(permissions.isOwner || seat.owner_user_id === currentUserId)}
           source={seat.owner_user_id === currentUserId ? "由你接入" : members.find((member) => member.user_id === seat.owner_user_id)?.display_name} />)}
-        {entries.length === 0 && <p className="wb-muted">暂无席位</p>}
+        {entries.length === 0 && <p className="wb-muted">暂无 Agent</p>}
       </section>
     ))}
     {(seatActions.removeError || seatActions.pauseError) && <p className="wb-error" role="alert">{seatActions.removeError || seatActions.pauseError}</p>}
