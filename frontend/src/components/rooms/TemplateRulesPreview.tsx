@@ -7,6 +7,7 @@ import {
   HOUSE_RULE_DECISION_LABEL,
   parseTemplateRoles,
   SCOPE_LABELS,
+  type ParsedTemplateRole,
   type TemplateOverrideDraft,
 } from "./templateMeta";
 
@@ -16,6 +17,49 @@ export interface TemplateRulesPreviewProps {
   customizing: boolean;
   onToggleCustomizing: () => void;
   onChangeDraft: (updater: (prev: TemplateOverrideDraft) => TemplateOverrideDraft) => void;
+}
+
+function humanRoleName(name: string): string {
+  const cleaned = name
+    .replace(/\s*\([^)]*\)/gu, "")
+    .replace(/(?:\s+[A-Za-z][A-Za-z-]*)+$/u, "")
+    .trim();
+  return cleaned || name;
+}
+
+function joinAlternatives(items: readonly string[]): string {
+  const unique = [...new Set(items)];
+  if (unique.length <= 1) return unique[0] ?? "使用外部能力";
+  return `${unique.slice(0, -1).join("、")}或${unique[unique.length - 1]}`;
+}
+
+function buildTemplateSummaries(
+  roles: readonly ParsedTemplateRole[],
+  scopeEntries: readonly (readonly [string, HouseRuleDecision])[],
+  notes: readonly string[],
+  rounds: number | undefined,
+): string[] {
+  const summaries: string[] = [];
+  const roleNames = roles.map((role) => humanRoleName(role.name)).filter(Boolean).slice(0, 3);
+  if (roleNames.length === 1) summaries.push(`${roleNames[0]}负责协作。`);
+  if (roleNames.length > 1) summaries.push(`${roleNames.join("、")}分工协作。`);
+
+  const askLabels = scopeEntries
+    .filter(([scope, decision]) => decision === "ask" && scope !== "gmail.send")
+    .map(([scope]) => SCOPE_LABELS[scope] ?? "使用外部能力");
+  if (askLabels.length > 0) summaries.push(`${joinAlternatives(askLabels)}前，都会先问主人。`);
+
+  const gmailDecision = scopeEntries.find(([scope]) => scope === "gmail.send")?.[1];
+  if (gmailDecision === "cannot") summaries.push("不会替主人对外发邮件。");
+  if (gmailDecision === "ask") summaries.push("对外发邮件前也必须得到主人当场批准。");
+
+  if (summaries.length < 3 && notes.length > 0) {
+    summaries.push(`还附带 ${notes.length} 条房间建议，可在详情中查看。`);
+  }
+  if (summaries.length < 3 && rounds != null) {
+    summaries.push(`默认最多 ${rounds} 轮，避免讨论失控。`);
+  }
+  return summaries.slice(0, 3);
 }
 
 export function TemplateRulesPreview({
@@ -53,7 +97,9 @@ export function TemplateRulesPreview({
   const roles = parseTemplateRoles(activeDraft.team_config_markdown);
   const scopeEntries = Object.entries(activeDraft.house_rules.scopes);
   const notes = activeDraft.house_rules.notes;
-  const rounds = activeDraft.default_max_rounds ?? template.default_max_rounds;
+  const rounds = activeDraft.default_max_rounds ?? template.default_max_rounds ?? undefined;
+  const summaries = buildTemplateSummaries(roles, scopeEntries, notes, rounds);
+  const hasAdvancedDetails = roles.length > 0 || scopeEntries.length > 0 || notes.length > 0;
 
   return (
     <div className="wb-preview-box">
@@ -65,45 +111,64 @@ export function TemplateRulesPreview({
         </small>
       </header>
 
-      {roles.length > 0 && (
+      {summaries.length > 0 && (
         <section className="wb-preview-box__section">
-          <h5>分工</h5>
-          <div className="wb-preview-roles">
-            {roles.map((role) => (
-              <div key={role.name} className="wb-preview-role">
-                <strong>{role.name}</strong>
-                <span>{role.summary}</span>
-              </div>
+          <h5>这个模板会做什么</h5>
+          <ul className="wb-preview-summary">
+            {summaries.map((summary) => (
+              <li key={summary}>{summary}</li>
             ))}
-          </div>
+          </ul>
         </section>
       )}
 
-      {(scopeEntries.length > 0 || notes.length > 0) && (
+      {hasAdvancedDetails && (
         <section className="wb-preview-box__section">
-          <h5>Agent 行为规则</h5>
-          {scopeEntries.length > 0 && (
-            <div className="wb-preview-rules">
-              {scopeEntries.map(([scope, decision]) => (
-                <div key={scope} className="wb-preview-rule">
-                  <span className="wb-preview-rule__scope">
-                    {SCOPE_LABELS[scope] ?? scope}
-                    <code>{scope}</code>
-                  </span>
-                  <Tag tone={decision === "cannot" ? "warn" : "neutral"}>
-                    {HOUSE_RULE_DECISION_LABEL[decision] ?? decision}
-                  </Tag>
+          <details className="wb-preview-advanced">
+            <summary>查看完整分工与机器范围</summary>
+            <div className="wb-preview-advanced__body">
+              {roles.length > 0 && (
+                <div>
+                  <h5>分工</h5>
+                  <div className="wb-preview-roles">
+                    {roles.map((role) => (
+                      <div key={role.name} className="wb-preview-role">
+                        <strong>{role.name}</strong>
+                        <span>{role.summary}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              ))}
+              )}
+
+              {scopeEntries.length > 0 && (
+                <div>
+                  <h5>Agent 行为规则</h5>
+                  <div className="wb-preview-rules">
+                    {scopeEntries.map(([scope, decision]) => (
+                      <div key={scope} className="wb-preview-rule">
+                        <span className="wb-preview-rule__scope">
+                          <span className="wb-preview-rule__label">{SCOPE_LABELS[scope] ?? "自定义外部能力"}</span>
+                          <code>{scope}</code>
+                        </span>
+                        <Tag tone={decision === "cannot" ? "warn" : "neutral"}>
+                          {HOUSE_RULE_DECISION_LABEL[decision] ?? decision}
+                        </Tag>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {notes.length > 0 && (
+                <ul className="wb-preview-notes">
+                  {notes.map((note, idx) => (
+                    <li key={`${idx}-${note}`}>{note}</li>
+                  ))}
+                </ul>
+              )}
             </div>
-          )}
-          {notes.length > 0 && (
-            <ul className="wb-preview-notes">
-              {notes.map((note, idx) => (
-                <li key={`${idx}-${note}`}>{note}</li>
-              ))}
-            </ul>
-          )}
+          </details>
         </section>
       )}
 
