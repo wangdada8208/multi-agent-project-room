@@ -138,6 +138,70 @@
   padding-top: 72px;
 }
 
+.lp-hero__lead {
+  max-width: 640px;
+  margin-top: 14px;
+  color: #5c5b56;
+  font-size: clamp(15px, 1.35vw, 18px);
+  line-height: 1.55;
+  letter-spacing: -0.01em;
+}
+
+.lp-scenario-preview {
+  display: grid;
+  gap: 14px;
+}
+
+.lp-scenario-switch {
+  width: min(520px, 100%);
+  margin-inline: auto;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid rgba(20, 20, 19, 0.1);
+  border-radius: 9999px;
+  background: rgba(242, 241, 236, 0.86);
+  box-shadow: 0 1px 2px rgba(20, 20, 14, 0.04);
+}
+
+.lp-scenario-tab {
+  min-width: 0;
+  display: grid;
+  justify-items: center;
+  gap: 1px;
+  padding: 8px 14px 7px;
+  border: 0;
+  border-radius: 9999px;
+  background: transparent;
+  color: #6b6a65;
+  cursor: pointer;
+  font-family: var(--font-sans);
+}
+
+.lp-scenario-tab strong {
+  color: inherit;
+  font-size: 13px;
+  font-weight: 550;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.lp-scenario-tab span {
+  overflow: hidden;
+  max-width: 100%;
+  font-size: 10.5px;
+  line-height: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lp-scenario-tab--active {
+  background: #141413;
+  color: #f7f7f4;
+  box-shadow: 0 1px 2px rgba(20, 20, 14, 0.14);
+}
+
 .lp-hero h1 {
   max-width: 680px;
   color: #141413;
@@ -563,6 +627,16 @@
   min-width: 0;
   overflow: hidden;
   color: #2c2c2a;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lp-mem__state {
+  flex: none;
+  max-width: 74px;
+  overflow: hidden;
+  color: #8c8a84;
+  font-size: 9px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }

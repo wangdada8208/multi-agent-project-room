@@ -417,14 +417,14 @@ export function LoginPage() {
             <div className="wb-auth-art__wash" />
             <div className="wb-auth-art__copy">
               <span>PARLOR</span>
-              <strong>带上你的 Agent，一起把事做完。</strong>
-              <p>端到端加密 · 房主审批 · 代码留本地</p>
+              <strong>一个人能开场，团队也能进来。</strong>
+              <p>端到端加密 · 单人开工 · 邀请链接随时拉人</p>
             </div>
           </aside>
         <section className="wb-auth-card" aria-label={mode === "login" ? "登录" : "注册"}>
           <h1>{mode === "login" ? "登录 Parlor" : "创建账户"}</h1>
           <p className="wb-auth-card__sub">
-            {mode === "login" ? "首次登录会自动为你创建账户。" : "端到端加密 · 和你的 Agent 一起工作"}
+            {mode === "login" ? "首次登录会自动为你创建账户。" : "端到端加密 · 一个人或多个团队都能用"}
           </p>
 
           {hasInviteTarget && (

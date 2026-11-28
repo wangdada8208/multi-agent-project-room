@@ -29,7 +29,7 @@ export function LandingPage() {
 
       <section className="lp-ecosystem" aria-label="支持的 Agent 生态">
         <div className="lp-wrap">
-          <p>支持常用云端与本地 Agent</p>
+          <p>常用云端与本地 Agent，都能进同一个房间</p>
           <div className="lp-ecosystem__grid">
             {ECOSYSTEM.map(({ key, name }) => (
               <div className="lp-ecosystem__tile" key={key}>
@@ -48,8 +48,8 @@ export function LandingPage() {
       <section className="lp-final">
         <div className="lp-wrap lp-final__inner">
           <div>
-            <h2>建一个房间，马上开始。</h2>
-            <p>一分钟建好，手机上也能用。</p>
+            <h2>一个人先开工，团队随时加入。</h2>
+            <p>一分钟建好房间，先接自己的 Agent；之后发链接就能拉同事和他们的 Agent。</p>
           </div>
           <Link to={enterHref} className="ui-button ui-button--primary ui-button--lg">
             <span>进入房间</span>

@@ -76,7 +76,7 @@ export function TemplateGrid() {
             <p>{selected.detail}</p>
             <ol>
               <li>选择模板和规则</li>
-              <li>邀请成员，接入 Agent</li>
+              <li>先接入自己的 Agent，需要时再邀请成员</li>
               <li>房主批准后进入加密群</li>
             </ol>
             <Link to="/setup">
