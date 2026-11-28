@@ -11,6 +11,9 @@ import { isHardForbiddenScope } from "./rulesEngine.ts";
 import { joinHubCall, parseInviteInput, signedProof } from "./inviteRegistration.ts";
 import { runBridgeCommand } from "./bot-bridge.ts";
 import { writeJsonSecure } from "./secureFile.ts";
+import { authorizeMcpSend } from "./mcp.ts";
+import { SEAT_ID_RE } from "./helper/seats.ts";
+import { recordPairingKeys } from "./pairingCredentials.ts";
 
 export interface CliIO {
   stdout: (msg: string) => void;
@@ -34,7 +37,7 @@ function parseArgs(args: string[]): { command: string; subCommand?: string; flag
       const key = arg.slice(2);
       const next = args[i + 1];
       if (next && !next.startsWith("--")) {
-        flags[key] = next;
+        flags[key] = key === "cap" && flags.cap ? `${flags.cap},${next}` : next;
         i += 2;
       } else {
         flags[key] = "true";
@@ -133,13 +136,16 @@ export async function joinWithInvite(
   // 1. 本机 XMTP 身份：.env 已有 XMTP_WALLET_KEY 就复用，没有就生成；私钥绝不打印。
   const envFile = path.join(dir, ".env");
   const vars = await readEnvVars(envFile);
+  const generatedKeys: string[] = [];
   let walletKey = vars.get("XMTP_WALLET_KEY") ?? "";
   if (!/^0x[0-9a-fA-F]{64}$/.test(walletKey)) {
     walletKey = generatePrivateKey();
     vars.set("XMTP_WALLET_KEY", walletKey);
+    generatedKeys.push("XMTP_WALLET_KEY");
   }
   if (!vars.get("XMTP_DB_ENCRYPTION_KEY")) {
     vars.set("XMTP_DB_ENCRYPTION_KEY", "0x" + randomBytes(32).toString("hex"));
+    generatedKeys.push("XMTP_DB_ENCRYPTION_KEY");
   }
   if (!vars.get("XMTP_ENV")) vars.set("XMTP_ENV", "dev");
   const account = privateKeyToAccount(walletKey as `0x${string}`);
@@ -211,6 +217,7 @@ export async function joinWithInvite(
   // 云端席位没有 helper 下发 allowed_senders；群成员名单就是信任边界。
   vars.set("XMTP_ALLOW_GROUP_MEMBERS", "1");
   await writeEnvVars(envFile, vars);
+  await recordPairingKeys(path.join(dir, ".state"), seatId, vars, generatedKeys);
 
   // 4. .state/policy.json（0600）：approved_scopes 滤掉硬禁区后写成本机 actor 建议（一律 ask）。
   const approved = (Array.isArray(body.approved_scopes) ? body.approved_scopes : [])
@@ -362,6 +369,21 @@ export async function runCli(args: string[], io: CliIO = { stdout: (m) => consol
       const options = parseUpArgs(flags, process.env, os.homedir());
       io.stdout(JSON.stringify({ ok: true, helper: "starting", hub: options.hubOrigin, dir: options.rootDir }));
       return await runHelper(options);
+    }
+
+    if (command === "mcp-approve-send") {
+      const root = flags.dir || process.env.MAPR_DIR || path.join(os.homedir(), ".mapr");
+      const seat = flags.seat || "";
+      if (!SEAT_ID_RE.test(seat) || !flags.room || !flags.text) {
+        io.stderr("Usage: mapr mcp-approve-send --seat ID --room ID --text TEXT");
+        return 1;
+      }
+      const dir = path.join(root, "seats", seat, "state");
+      const approval = await authorizeMcpSend(dir, flags.room, flags.text).catch(() => {
+        throw new Error("invalid_send_approval");
+      });
+      io.stdout(JSON.stringify({ approval }));
+      return 0;
     }
 
     io.stderr(JSON.stringify({ ok: false, reason: "unknown_command", command }));
