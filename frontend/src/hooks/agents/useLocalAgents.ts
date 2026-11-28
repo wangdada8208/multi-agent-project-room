@@ -1,13 +1,67 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { openHelperLink } from "../../components/HelperLink";
 import { removeSeatFromRoom } from "../room/useSeatActions";
 import { useLocalHelper } from "../useLocalHelper";
 import {
   createJoinTicket, createPairingCode, isMobileBrowser, joinViaTicket, listLocalAgents,
   listLocalSeats, listMyHelpers, listRoomSeats, resolvePresetOpenDecision,
-  type HelperHandoffAction, type HelperDevice, type LocalAgentView, type SeatViewLocal,
+  type HelperHandoffAction, type HelperDevice, type LocalAgentView, type PairingCode, type SeatViewLocal,
 } from "../../lib/localHelper";
 import { inboxAddress } from "../../lib/xmtpLocalIdentity";
+
+export type TimedPairingCode = PairingCode & { remainingSeconds: number };
+
+function secondsUntil(expiresAt: string) {
+  return Math.max(0, Math.ceil((Date.parse(expiresAt) - Date.now()) / 1000));
+}
+
+export function usePairingCode() {
+  const [pairing, setPairing] = useState<TimedPairingCode | null>(null);
+  const [pairingError, setPairingError] = useState("");
+  const request = useRef<"idle" | "pending" | "loaded">("idle");
+
+  const ensurePairing = useCallback((forceRefresh = false) => {
+    if (request.current === "pending" || (!forceRefresh && request.current === "loaded")) return;
+    request.current = "pending";
+    setPairingError("");
+    setPairing(null);
+    createPairingCode()
+      .then((issued) => {
+        request.current = "loaded";
+        setPairing({ ...issued, remainingSeconds: secondsUntil(issued.expires_at) });
+      })
+      .catch((err) => {
+        request.current = "idle";
+        setPairingError(err instanceof Error ? err.message : "生成配对码失败");
+      });
+  }, []);
+
+  const expiresAt = pairing?.expires_at;
+  useEffect(() => {
+    if (!expiresAt) return;
+    let timer: number;
+    const tick = () => {
+      window.clearTimeout(timer);
+      const remainingSeconds = secondsUntil(expiresAt);
+      setPairing((current) => current?.expires_at === expiresAt && current.remainingSeconds !== remainingSeconds
+        ? { ...current, remainingSeconds } : current);
+      if (remainingSeconds > 0) {
+        const millis = Date.parse(expiresAt) - Date.now();
+        timer = window.setTimeout(tick, Math.max(1, millis % 1000 || 1000));
+      }
+    };
+    tick();
+    document.addEventListener("visibilitychange", tick);
+    return () => {
+      window.clearTimeout(timer);
+      document.removeEventListener("visibilitychange", tick);
+    };
+  }, [expiresAt]);
+
+  return { pairing, pairingError, ensurePairing };
+}
+
+export const PairingCodeContext = createContext<ReturnType<typeof usePairingCode> | null>(null);
 
 export function useLocalAgents({ roomId: effectiveRoomId, ownerXmtpAddress, onJoined, legacyMobile, hubOrigin }: {
   roomId: string;
@@ -18,13 +72,13 @@ export function useLocalAgents({ roomId: effectiveRoomId, ownerXmtpAddress, onJo
 }) {
   const isMobile = isMobileBrowser();
   const { probe, refresh: refreshProbe, updatedAt } = useLocalHelper();
-  const [pairing, setPairing] = useState<{ code: string; install_command: string; expires_at: string } | null>(null);
-  const [pairingError, setPairingError] = useState("");
+  const sharedPairing = useContext(PairingCodeContext);
+  const standalonePairing = usePairingCode();
+  const { pairing, pairingError, ensurePairing } = sharedPairing ?? standalonePairing;
   const [guideNotice, setGuideNotice] = useState("");
   const [pendingPreset, setPendingPreset] = useState<{ presetId: string; label: string } | null>(null);
   const [highlightStepOne, setHighlightStepOne] = useState(false);
   const [expandAnotherComputer, setExpandAnotherComputer] = useState(false);
-  const pairingFetched = useRef(false);
   const pairingSectionRef = useRef<HTMLDivElement>(null);
   const presetContinueRef = useRef<HTMLDivElement>(null);
   const highlightTimerRef = useRef<number>(0);
@@ -61,12 +115,13 @@ export function useLocalAgents({ roomId: effectiveRoomId, ownerXmtpAddress, onJo
   }, [helperRunning, updatedAt, refreshLocal]);
 
   const isHelperReadyAndPaired = !isMobile && probe?.state === "running" && probe.hello.paired;
+  const activePairCode = !isHelperReadyAndPaired && pairing && pairing.remainingSeconds > 0 ? pairing.code : undefined;
   const presetDecision = resolvePresetOpenDecision(probe, isMobile);
   const pendingPresetAction: HelperHandoffAction | undefined = pendingPreset && !isMobile
     ? {
         preset: pendingPreset.presetId,
         roomId: effectiveRoomId || undefined,
-        pairCode: isHelperReadyAndPaired ? undefined : pairing?.code,
+        pairCode: activePairCode,
       }
     : undefined;
 
@@ -98,19 +153,6 @@ export function useLocalAgents({ roomId: effectiveRoomId, ownerXmtpAddress, onJo
 
   const needPairingCode =
     legacyMobile || (probe !== null && !isHelperReadyAndPaired) || expandAnotherComputer;
-
-  const ensurePairing = useCallback((forceRefresh = false) => {
-    if (!forceRefresh && pairingFetched.current) return;
-    pairingFetched.current = true;
-    setPairingError("");
-    if (forceRefresh) setPairing(null);
-    createPairingCode()
-      .then(setPairing)
-      .catch((err) => {
-        pairingFetched.current = false;
-        setPairingError(err instanceof Error ? err.message : "生成配对码失败");
-      });
-  }, []);
 
   useEffect(() => {
     if (needPairingCode) {
@@ -216,7 +258,7 @@ export function useLocalAgents({ roomId: effectiveRoomId, ownerXmtpAddress, onJo
       const win = openHelperLink({
         preset: presetId,
         roomId: effectiveRoomId || undefined,
-        pairCode: isHelperReadyAndPaired ? undefined : pairing?.code,
+        pairCode: activePairCode,
       });
       if (win) {
         setPendingPreset(null);
