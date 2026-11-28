@@ -40,14 +40,79 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  pack:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      tarball_name: ${{ steps.pack.outputs.tarball_name }}
+      sha256: ${{ steps.pack.outputs.sha256 }}
+
+    steps:
+      - name: Check out source for local packaging
+        if: ${{ github.event_name == 'push' || inputs.source_base_url == '' }}
+        uses: actions/checkout@v6
+
+      - name: Pack XMTP member release
+        if: ${{ github.event_name == 'push' || inputs.source_base_url == '' }}
+        id: pack
+        shell: bash
+        run: |
+          set -euo pipefail
+          sh scripts/pack-xmtp-member.sh
+          built_tarball="$(find dist -maxdepth 1 -type f -name 'xmtp-member-*.tar.gz' | sort | head -n 1)"
+          if [ -z "$built_tarball" ] || [ ! -f "$built_tarball" ]; then
+            echo "pack-xmtp-member.sh did not produce dist/xmtp-member-*.tar.gz" >&2
+            exit 2
+          fi
+          tarball_name="$(basename "$built_tarball")"
+          case "$tarball_name" in
+            *[!A-Za-z0-9._-]*|""|"."|"..")
+              echo "Invalid packed tarball name: $tarball_name" >&2
+              exit 2
+              ;;
+          esac
+          sha_file="dist/$tarball_name.sha256"
+          if [ ! -f "$sha_file" ]; then
+            echo "pack-xmtp-member.sh did not produce $sha_file" >&2
+            exit 2
+          fi
+          sha256="$(awk 'NR == 1 { print tolower($1) }' "$sha_file")"
+          if [[ ! "$sha256" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "Invalid packed SHA256 in $sha_file: $sha256" >&2
+            exit 2
+          fi
+          echo "tarball_name=$tarball_name" >> "$GITHUB_OUTPUT"
+          echo "sha256=$sha256" >> "$GITHUB_OUTPUT"
+
+      - name: Skip local packing for external source mode
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.source_base_url != '' }}
+        run: echo "source_base_url is set; publish will download the external tarball directly."
+
+      - name: Upload member tarball artifact
+        if: ${{ github.event_name == 'push' || inputs.source_base_url == '' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: member-tarball-${{ github.sha }}
+          path: |
+            dist/xmtp-member-*.tar.gz
+            dist/xmtp-member-*.tar.gz.sha256
+          retention-days: 1
+          if-no-files-found: error
+
   publish:
+    needs: pack
     runs-on: [self-hosted, multi-agent]
     timeout-minutes: 60
 
     steps:
-      - uses: actions/checkout@v6
+      - name: Download packed member tarball
+        if: ${{ github.event_name == 'push' || inputs.source_base_url == '' }}
+        uses: actions/download-artifact@v8
+        with:
+          name: member-tarball-${{ github.sha }}
+          path: ${{ runner.temp }}/member-tarball
 
-      - name: Build or download, verify SHA256, and expose release tarball
+      - name: Resolve, verify SHA256, and expose release tarball
         env:
           EVENT_NAME: ${{ github.event_name }}
           SOURCE_BASE_URL: ${{ inputs.source_base_url }}
@@ -55,6 +120,9 @@ jobs:
           EXPECTED_SHA256: ${{ inputs.expected_sha256 }}
           INPUT_LATEST_ALIAS: ${{ inputs.latest_alias }}
           TARGET_SLUG: ${{ inputs.target_slug }}
+          PACK_ARTIFACT_DIR: ${{ runner.temp }}/member-tarball
+          PACK_TARBALL_NAME: ${{ needs.pack.outputs.tarball_name }}
+          PACK_SHA256: ${{ needs.pack.outputs.sha256 }}
         run: |
           set -euo pipefail
 
@@ -123,16 +191,34 @@ jobs:
 
             printf "%s  %s\n" "$SHA_NORM" "$STAGE/$TARBALL_NAME" | sha256sum -c -
           else
-            sh scripts/pack-xmtp-member.sh
-            BUILT_TARBALL="$(ls dist/xmtp-member-*.tar.gz 2>/dev/null | head -n 1)"
-            if [ -z "$BUILT_TARBALL" ] || [ ! -f "$BUILT_TARBALL" ]; then
-              echo "pack-xmtp-member.sh did not produce dist/xmtp-member-*.tar.gz" >&2
+            TARBALL_NAME="$PACK_TARBALL_NAME"
+            validate_filename "tarball_name" "$TARBALL_NAME"
+
+            SHA_NORM="$(printf '%s' "$PACK_SHA256" | tr 'A-F' 'a-f')"
+            if [[ ! "$SHA_NORM" =~ ^[0-9a-f]{64}$ ]]; then
+              echo "Invalid pack job SHA256 output: $PACK_SHA256" >&2
               exit 2
             fi
-            TARBALL_NAME="$(basename "$BUILT_TARBALL")"
-            validate_filename "tarball_name" "$TARBALL_NAME"
-            cp "$BUILT_TARBALL" "$STAGE/$TARBALL_NAME"
-            SHA_NORM="$(sha256sum "$STAGE/$TARBALL_NAME" | awk '{print tolower($1)}')"
+
+            if [ ! -d "$PACK_ARTIFACT_DIR" ]; then
+              echo "Packed artifact directory is missing: $PACK_ARTIFACT_DIR" >&2
+              exit 2
+            fi
+            TARBALL_PATH="$(find "$PACK_ARTIFACT_DIR" -type f -name "$TARBALL_NAME" -print -quit)"
+            SHA_PATH="$(find "$PACK_ARTIFACT_DIR" -type f -name "$TARBALL_NAME.sha256" -print -quit)"
+            if [ -z "$TARBALL_PATH" ] || [ -z "$SHA_PATH" ]; then
+              echo "Packed artifact is missing $TARBALL_NAME or its .sha256 sidecar" >&2
+              exit 2
+            fi
+
+            cp "$TARBALL_PATH" "$STAGE/$TARBALL_NAME"
+            cp "$SHA_PATH" "$STAGE/$TARBALL_NAME.sha256"
+            (cd "$STAGE" && sha256sum -c "$TARBALL_NAME.sha256" >/dev/null)
+            COMPUTED_SHA="$(sha256sum "$STAGE/$TARBALL_NAME" | awk '{print tolower($1)}')"
+            if [ "$COMPUTED_SHA" != "$SHA_NORM" ]; then
+              echo "Artifact SHA256 mismatch: pack output $SHA_NORM, downloaded file $COMPUTED_SHA" >&2
+              exit 2
+            fi
           fi
 
           printf "%s  %s\n" "$SHA_NORM" "$TARBALL_NAME" > "$STAGE/$TARBALL_NAME.sha256"

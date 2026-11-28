@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Folder, Plus } from "lucide-react";
 import type { useTargetRoom } from "../../hooks/agents/useTargetRoom";
+import { formatConnectionError } from "../../lib/localHelper";
 import { Button } from "../ui/Button";
 
 type Target = ReturnType<typeof useTargetRoom>;
@@ -30,6 +31,6 @@ export function CreateTargetRoom({ target }: { target: Target }) {
       <input className="input" value={name} aria-label="房间名称" placeholder="例如：产品迭代协作间" onChange={(event) => setName(event.target.value)} />
       <Button type="submit" loading={target.create.isPending} disabled={!name.trim()}><Plus size={15} />先创建一个房间</Button>
     </div>
-    {target.create.error && <p className="wb-error" role="alert">{target.create.error.message}</p>}
+    {target.create.error && <p className="wb-error" role="alert">{formatConnectionError(target.create.error, "server", "创建房间失败，请重试。")}</p>}
   </form>;
 }

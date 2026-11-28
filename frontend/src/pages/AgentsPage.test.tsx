@@ -448,6 +448,25 @@ async function renderAgents(path = "/agents?room=room-42") {
   await advanceTime(2);
 }
 
+it("shows plain Chinese instead of Failed to fetch when the pairing code request cannot reach the server", async () => {
+  vi.mocked(createPairingCode).mockRejectedValue(new TypeError("Failed to fetch"));
+  await renderAgents();
+
+  expect(container.textContent).toContain("暂时连不上服务器，检查网络连接后再试。");
+  expect(container.textContent).not.toContain("Failed to fetch");
+  expect(container.textContent).not.toContain("TypeError");
+});
+
+it("shows plain Chinese instead of Failed to fetch when the local helper list cannot be read", async () => {
+  vi.mocked(probeHelper).mockResolvedValue(runningProbe);
+  vi.mocked(listLocalAgents).mockRejectedValue(new TypeError("Failed to fetch"));
+  await renderAgents();
+
+  expect(container.textContent).toContain("暂时连不上本地助手，确认电脑上的连接程序已经启动后再试。");
+  expect(container.textContent).not.toContain("Failed to fetch");
+  expect(container.textContent).not.toContain("TypeError");
+});
+
 it("defaults to a copyable cloud prompt on iPhone and shows computer guidance only for local clients", async () => {
   vi.spyOn(navigator, "userAgent", "get").mockReturnValue(mobileUA);
   await renderAgents("/agents?room=room-42&agent=muse");

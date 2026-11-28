@@ -3,8 +3,8 @@ import { openHelperLink } from "../../components/HelperLink";
 import { removeSeatFromRoom } from "../room/useSeatActions";
 import { useLocalHelper } from "../useLocalHelper";
 import {
-  createJoinTicket, createPairingCode, isMobileBrowser, joinViaTicket, listLocalAgents,
-  listLocalSeats, listMyHelpers, listRoomSeats, resolvePresetOpenDecision,
+  createJoinTicket, createPairingCode, formatConnectionError, isMobileBrowser, isNativeConnectivityError,
+  joinViaTicket, listLocalAgents, listLocalSeats, listMyHelpers, listRoomSeats, resolvePresetOpenDecision,
   type HelperHandoffAction, type HelperDevice, type LocalAgentView, type PairingCode, type SeatViewLocal,
 } from "../../lib/localHelper";
 import { inboxAddress } from "../../lib/xmtpLocalIdentity";
@@ -32,7 +32,7 @@ export function usePairingCode() {
       })
       .catch((err) => {
         request.current = "idle";
-        setPairingError(err instanceof Error ? err.message : "生成配对码失败");
+        setPairingError(formatConnectionError(err, "server", "生成配对码失败"));
       });
   }, []);
 
@@ -109,7 +109,7 @@ export function useLocalAgents({ roomId: effectiveRoomId, ownerXmtpAddress, onJo
     if (!helperRunning) return;
     let active = true;
     void refreshLocal().catch((err) => {
-      if (active) setListError(err instanceof Error ? err.message : "读取本机助手失败");
+      if (active) setListError(formatConnectionError(err, "local-helper", "读取本机助手失败"));
     });
     return () => { active = false; };
   }, [helperRunning, updatedAt, refreshLocal]);
@@ -165,7 +165,7 @@ export function useLocalAgents({ roomId: effectiveRoomId, ownerXmtpAddress, onJo
     try {
       await refreshProbe?.({ throwOnError: true, cancelRefetch: false });
     } catch (err) {
-      setListError(err instanceof Error ? err.message : "扫描失败");
+      setListError(formatConnectionError(err, "local-helper", "扫描失败"));
     } finally {
       setRescanning(false);
     }
@@ -200,7 +200,7 @@ export function useLocalAgents({ roomId: effectiveRoomId, ownerXmtpAddress, onJo
       try {
         seat = await joinViaTicket(ticket, agentKey);
       } catch (err) {
-        if (err instanceof TypeError) {
+        if (isNativeConnectivityError(err)) {
           setJoinError("无法连接本机助手。请确认电脑上的本机助手已启动，并在浏览器中允许本地网络访问。");
           openHelperLink({ ticket, agentKey });
           return;
@@ -211,7 +211,7 @@ export function useLocalAgents({ roomId: effectiveRoomId, ownerXmtpAddress, onJo
       onJoined?.(seat);
       await refreshLocal();
     } catch (err) {
-      setJoinError(err instanceof Error ? err.message : "加入失败，请重试");
+      setJoinError(formatConnectionError(err, "server", "加入失败，请重试"));
     } finally {
       joinInFlight.current = false;
       setJoiningKey(null);
@@ -247,7 +247,7 @@ export function useLocalAgents({ roomId: effectiveRoomId, ownerXmtpAddress, onJo
       await removeSeatFromRoom(current);
       await refreshLocal();
     } catch (err) {
-      setListError(err instanceof Error ? err.message : "移出席位失败");
+      setListError(formatConnectionError(err, "server", "移出席位失败"));
     }
   }
 

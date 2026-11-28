@@ -8,6 +8,7 @@ import {
   createPairingCode,
   createRoomInvite,
   denyRedemption,
+  formatConnectionError,
   formatInviteAcceptError,
   helperHandoffUrl,
   isMobileBrowser,
@@ -72,6 +73,30 @@ describe("joinViaTicket errors", () => {
     await expect(
       joinViaTicket("mjt_1", "codex", async () => jsonResponse(body, 403)),
     ).rejects.toThrow(expected);
+  });
+});
+
+describe("formatConnectionError", () => {
+  it.each([
+    new TypeError("Failed to fetch"),
+    new Error("Load failed"),
+    new Error("NetworkError when attempting to fetch resource."),
+    new DOMException("The operation timed out", "TimeoutError"),
+  ])("maps native connectivity errors to plain Chinese for the server", (error) => {
+    const message = formatConnectionError(error, "server", "操作失败，请重试。");
+    expect(message).toBe("暂时连不上服务器，检查网络连接后再试。");
+    expect(message).not.toContain("fetch");
+    expect(message).not.toContain("TypeError");
+  });
+
+  it("maps local helper connectivity errors to local helper guidance", () => {
+    expect(formatConnectionError(new TypeError("Failed to fetch"), "local-helper", "操作失败，请重试。"))
+      .toBe("暂时连不上本地助手，确认电脑上的连接程序已经启动后再试。");
+  });
+
+  it("keeps an existing human-readable error and uses the fallback for non-errors", () => {
+    expect(formatConnectionError(new Error("邀请已过期"), "server", "操作失败，请重试。")).toBe("邀请已过期");
+    expect(formatConnectionError(null, "server", "操作失败，请重试。")).toBe("操作失败，请重试。");
   });
 });
 
@@ -587,7 +612,7 @@ describe("room invite Hub API helpers", () => {
     }
   });
 
-  it("formatInviteAcceptError maps 409, 410, 404, and fallback error messages accurately", () => {
+  it("formatInviteAcceptError maps statuses, connectivity failures, and fallback error messages accurately", () => {
     expect(formatInviteAcceptError(new HubHttpError("Invite token already redeemed", 409))).toBe(
       "该入群邀请链接已被使用，请向房主索取新的邀请链接。",
     );
@@ -602,6 +627,9 @@ describe("room invite Hub API helpers", () => {
     );
     expect(formatInviteAcceptError(new HubHttpError("Invite token not found", 404))).toBe(
       "入群邀请链接无效或不存在。",
+    );
+    expect(formatInviteAcceptError(new TypeError("Failed to fetch"))).toBe(
+      "暂时连不上服务器，检查网络连接后再试。",
     );
     expect(formatInviteAcceptError(new Error("网络暂时不可用"))).toBe("网络暂时不可用");
   });
