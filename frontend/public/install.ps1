@@ -69,20 +69,34 @@ if ($Uninstall -or $Purge) {
 }
 
 # ── 环境检查 ──
+function Show-NodeSetupGuidance([string]$Reason) {
+  Write-Host "错误: $Reason" -ForegroundColor Red
+  Write-Host "本机助手需要 Node.js 22.6 或更高版本。"
+  if (Get-Command winget -ErrorAction SilentlyContinue) {
+    Write-Host "复制这一行安装 Node 22 或更新："
+    Write-Host "  winget install OpenJS.NodeJS.LTS"
+  } else {
+    Write-Host "这台电脑没有 winget。打开 https://nodejs.org/en/download 安装 Node 22 LTS（或更新）。"
+  }
+  Write-Host "装完后，关闭并重新打开 PowerShell，然后重新粘贴刚才那条 Parlor 配对命令即可继续。"
+  exit 1
+}
+
 if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
-  Die "检测不到 Node.js。
-本机助手需要 Node.js 22.6 或更高版本，本脚本不会自动安装。
-请先从 https://nodejs.org/ 下载 22 LTS（或更新）安装，然后重新运行这条命令。"
+  Show-NodeSetupGuidance "检测不到 Node.js。"
 }
 if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
-  Die "检测不到 npm（应随 Node.js 一起安装）。请装好 Node.js 后重试。"
+  Show-NodeSetupGuidance "检测不到 npm（它应随 Node.js 一起安装）。"
 }
 $nodeVer = (& node -v) -replace '^v',''
 $parts = $nodeVer -split '\.'
+if ($parts[0] -notmatch '^\d+$') {
+  Show-NodeSetupGuidance "无法识别 Node.js 版本 v$nodeVer。"
+}
 $major = [int]$parts[0]; $minor = 0
 if ($parts.Count -gt 1 -and $parts[1] -match '^\d+$') { $minor = [int]$parts[1] }
 if ($major -lt 22 -or ($major -eq 22 -and $minor -lt 6)) {
-  Die "Node.js 版本太低（当前 v$nodeVer，需要 >= 22.6）。请升级后重新运行。"
+  Show-NodeSetupGuidance "Node.js 版本太低（当前 v$nodeVer，需要 >= 22.6）。"
 }
 if (-not (Get-Command tar -ErrorAction SilentlyContinue)) {
   Die "检测不到 tar（Windows 10 1803+ 自带 tar.exe）。请升级系统或手动安装 bsdtar。"

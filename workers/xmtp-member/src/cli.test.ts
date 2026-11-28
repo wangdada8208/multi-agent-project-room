@@ -1,11 +1,134 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import test from "node:test";
-import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import http, { type IncomingHttpHeaders } from "node:http";
 import type { AddressInfo } from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { runCli } from "./cli.ts";
+
+async function withoutMaprJson<T>(fn: () => Promise<T>): Promise<T> {
+  const old = process.env.MAPR_JSON;
+  delete process.env.MAPR_JSON;
+  try {
+    return await fn();
+  } finally {
+    if (old === undefined) delete process.env.MAPR_JSON;
+    else process.env.MAPR_JSON = old;
+  }
+}
+
+test("mapr --help、-h、help 输出人类可读命令列表和可复制示例", async () => {
+  await withoutMaprJson(async () => {
+    for (const args of [["--help"], ["-h"], ["help"]]) {
+      const stdout: string[] = [];
+      const stderr: string[] = [];
+      const code = await runCli(args, {
+        stdout: (m) => stdout.push(m),
+        stderr: (m) => stderr.push(m),
+      });
+      assert.equal(code, 0);
+      assert.deepEqual(stderr, []);
+      const out = stdout.join("\n");
+      for (const needle of ["up", "join", "bridge", "mcp-approve-send", "可复制示例", "mapr join"]) {
+        assert.ok(out.includes(needle), `${args[0]} should mention ${needle}`);
+      }
+    }
+  });
+});
+
+test("mapr 无参数和未知命令给人类可读用法；JSON 模式保持机器输出", async () => {
+  await withoutMaprJson(async () => {
+    for (const args of [[], ["does-not-exist"]]) {
+      const stdout: string[] = [];
+      const stderr: string[] = [];
+      const code = await runCli(args, {
+        stdout: (m) => stdout.push(m),
+        stderr: (m) => stderr.push(m),
+      });
+      assert.equal(code, 1);
+      assert.deepEqual(stdout, []);
+      const err = stderr.join("\n");
+      assert.match(err, /可复制示例/);
+      assert.match(err, /mapr join/);
+      assert.doesNotMatch(err.trim(), /^\{/);
+    }
+  });
+
+  for (const args of [["--json"], ["does-not-exist", "--json"], ["--json", "does-not-exist"]]) {
+    const stderr: string[] = [];
+    const code = await runCli(args, {
+      stdout: () => {},
+      stderr: (m) => stderr.push(m),
+    });
+    assert.equal(code, 1);
+    assert.deepEqual(JSON.parse(stderr.join("")), {
+      ok: false,
+      reason: "unknown_command",
+      command: args.includes("does-not-exist") ? "does-not-exist" : "",
+    });
+  }
+
+  const old = process.env.MAPR_JSON;
+  process.env.MAPR_JSON = "1";
+  try {
+    const stderr: string[] = [];
+    const code = await runCli([], {
+      stdout: () => {},
+      stderr: (m) => stderr.push(m),
+    });
+    assert.equal(code, 1);
+    assert.deepEqual(JSON.parse(stderr.join("")), { ok: false, reason: "unknown_command", command: "" });
+  } finally {
+    if (old === undefined) delete process.env.MAPR_JSON;
+    else process.env.MAPR_JSON = old;
+  }
+});
+
+test("mapr join 缺邀请链接时给人类下一步；--json 保持 invite_required", async () => {
+  await withoutMaprJson(async () => {
+    const stderr: string[] = [];
+    const code = await runCli(["join"], {
+      stdout: () => {},
+      stderr: (m) => stderr.push(m),
+    });
+    assert.equal(code, 1);
+    const err = stderr.join("\n");
+    assert.match(err, /邀请链接缺失/);
+    assert.match(err, /mapr join/);
+    assert.doesNotMatch(err.trim(), /^\{/);
+  });
+
+  const stderr: string[] = [];
+  const code = await runCli(["join", "--json"], {
+    stdout: () => {},
+    stderr: (m) => stderr.push(m),
+  });
+  assert.equal(code, 1);
+  assert.deepEqual(JSON.parse(stderr.join("")), { ok: false, reason: "invite_required" });
+});
+
+test("mapr join 人类模式区分无效链接和网络错误", async () => {
+  await withoutMaprJson(async () => {
+    const invalidStderr: string[] = [];
+    const invalidCode = await runCli(["join", "https://hub.example/rooms/r-1"], {
+      stdout: () => {},
+      stderr: (m) => invalidStderr.push(m),
+    });
+    assert.equal(invalidCode, 1);
+    assert.match(invalidStderr.join("\n"), /链接已过期或失效/);
+
+    const dir = await mkdtemp(path.join(os.tmpdir(), "mapr-join-offline-"));
+    const networkStderr: string[] = [];
+    const networkCode = await runCli(
+      ["join", "tok-join-1", "--hub", "http://127.0.0.1:1", "--state-dir", dir, "--wait", "0"],
+      { stdout: () => {}, stderr: (m) => networkStderr.push(m) }
+    );
+    assert.equal(networkCode, 1);
+    assert.match(networkStderr.join("\n"), /网络连不上/);
+  });
+});
 
 test("mapr bridge 转发参数并隐藏注册失败的 Hub 响应原文", async (t) => {
   const dir = await mkdtemp(path.join(os.tmpdir(), "mapr-cli-bridge-"));
@@ -421,7 +544,7 @@ test("mapr join：审批被拒（409）时干净退出且不落盘令牌", async
   const stderr: string[] = [];
   try {
     const code = await runCli(
-      ["join", "tok-join-1", "--hub", `http://127.0.0.1:${port}`, "--state-dir", dir, "--wait", "10", "--poll", "50"],
+      ["join", "tok-join-1", "--hub", `http://127.0.0.1:${port}`, "--state-dir", dir, "--wait", "10", "--poll", "50", "--json"],
       { stdout: () => {}, stderr: (m) => stderr.push(m) }
     );
     assert.equal(code, 1);
@@ -437,7 +560,7 @@ test("mapr join：审批被拒（409）时干净退出且不落盘令牌", async
 test("mapr join：邀请 URL 无 token 时报 invite_token_not_found", async () => {
   const dir = await mkdtemp(path.join(os.tmpdir(), "mapr-join-bad-"));
   const stderr: string[] = [];
-  const code = await runCli(["join", "https://hub.example/rooms/r-1", "--state-dir", dir], {
+  const code = await runCli(["join", "https://hub.example/rooms/r-1", "--state-dir", dir, "--json"], {
     stdout: () => {},
     stderr: (m) => stderr.push(m),
   });
@@ -445,3 +568,147 @@ test("mapr join：邀请 URL 无 token 时报 invite_token_not_found", async () 
   assert.equal(JSON.parse(stderr.join("")).reason, "invite_token_not_found");
 });
 
+test("mapr join：410 提示链接已过期或失效，pending 明确等待房主审批", async () => {
+  await withoutMaprJson(async () => {
+    const expiredDir = await mkdtemp(path.join(os.tmpdir(), "mapr-join-expired-"));
+    const expiredState: FakeHubState = {
+      registerCalls: [],
+      nonceCalls: [],
+      pollCalls: [],
+      registerResponse: { status: 410, body: { detail: "Invite token expired" } },
+      pollResponses: [],
+    };
+    const expiredServer = fakeInviteHub(expiredState);
+    await new Promise<void>((resolve) => expiredServer.listen(0, "127.0.0.1", resolve));
+    const expiredPort = (expiredServer.address() as AddressInfo).port;
+    try {
+      const stderr: string[] = [];
+      const code = await runCli(
+        ["join", "tok-join-1", "--hub", `http://127.0.0.1:${expiredPort}`, "--state-dir", expiredDir, "--wait", "0"],
+        { stdout: () => {}, stderr: (m) => stderr.push(m) }
+      );
+      assert.equal(code, 1);
+      assert.match(stderr.join("\n"), /链接已过期或失效/);
+    } finally {
+      expiredServer.close();
+    }
+
+    const pendingDir = await mkdtemp(path.join(os.tmpdir(), "mapr-join-waiting-"));
+    const pendingState: FakeHubState = {
+      registerCalls: [],
+      nonceCalls: [],
+      pollCalls: [],
+      registerResponse: { status: 200, body: { status: "pending", redemption_id: "red-wait" } },
+      pollResponses: [],
+    };
+    const pendingServer = fakeInviteHub(pendingState);
+    await new Promise<void>((resolve) => pendingServer.listen(0, "127.0.0.1", resolve));
+    const pendingPort = (pendingServer.address() as AddressInfo).port;
+    try {
+      const stdout: string[] = [];
+      const stderr: string[] = [];
+      const code = await runCli(
+        ["join", "tok-join-1", "--hub", `http://127.0.0.1:${pendingPort}`, "--state-dir", pendingDir, "--wait", "0"],
+        { stdout: (m) => stdout.push(m), stderr: (m) => stderr.push(m) }
+      );
+      assert.equal(code, 0);
+      assert.match(stderr.join("\n"), /等待房主审批/);
+      assert.equal(JSON.parse(stdout.join("")).status, "pending");
+    } finally {
+      pendingServer.close();
+    }
+  });
+});
+
+type TestWithAfter = { after: (fn: () => unknown) => void };
+
+async function writeExecutable(file: string, body: string): Promise<void> {
+  await writeFile(file, body, "utf8");
+  await chmod(file, 0o755);
+}
+
+async function makeInstallHarness(t: TestWithAfter, nodeVersion?: string): Promise<{ bin: string; home: string }> {
+  const root = await mkdtemp(path.join(os.tmpdir(), "mapr-install-sh-test-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const bin = path.join(root, "bin");
+  const home = path.join(root, "home");
+  await mkdir(bin, { recursive: true });
+  await mkdir(home, { recursive: true });
+
+  const tools: Record<string, string> = {
+    uname: "#!/bin/sh\necho Linux\n",
+    date: "#!/bin/sh\necho 0\n",
+    curl: "#!/bin/sh\nexit 0\n",
+    tar: "#!/bin/sh\nexit 0\n",
+    npm: "#!/bin/sh\nexit 0\n",
+    sed: "#!/bin/sh\nexec /usr/bin/sed \"$@\"\n",
+  };
+  if (nodeVersion) {
+    tools.node = `#!/bin/sh\necho v${nodeVersion}\n`;
+  }
+  for (const [name, body] of Object.entries(tools)) {
+    await writeExecutable(path.join(bin, name), body);
+  }
+  return { bin, home };
+}
+
+function runInstallSh(harness: { bin: string; home: string }) {
+  const script = path.resolve(import.meta.dirname, "../../../frontend/public/install.sh");
+  return spawnSync("/bin/sh", [script, "--pair", "mpc_test", "--hub", "https://hub.example"], {
+    env: { PATH: harness.bin, HOME: harness.home, TMPDIR: os.tmpdir() },
+    encoding: "utf8",
+  });
+}
+
+test("install.sh 在无 Node 的 PATH 中实跑：给出一条可复制的自救命令并非零退出", async (t) => {
+  const harness = await makeInstallHarness(t);
+  const result = runInstallSh(harness);
+  assert.equal(result.error, undefined);
+  assert.notEqual(result.status, 0);
+  assert.equal(result.stdout, "");
+  assert.match(result.stderr, /检测不到 Node\.js/);
+  assert.match(result.stderr, /复制这一行安装 Node 22/);
+  assert.match(result.stderr, /curl -fsSL 'https:\/\/hub\.example\/install\.sh' \| sh -s -- --auto-install-node/);
+  assert.match(result.stderr, /--pair 'mpc_test'/);
+  assert.match(result.stderr, /装完后，重新粘贴刚才那条 Parlor 配对命令即可继续/);
+});
+
+test("install.sh 在低版本 Node 的 PATH 中实跑：说明当前版本并给出自救命令", async (t) => {
+  const harness = await makeInstallHarness(t, "20.9.0");
+  const result = runInstallSh(harness);
+  assert.equal(result.error, undefined);
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /Node\.js 版本太低（当前 v20\.9\.0，需要 >= 22\.6）/);
+  assert.match(result.stderr, /--auto-install-node/);
+  assert.match(result.stderr, /装完后，重新粘贴刚才那条 Parlor 配对命令即可继续/);
+});
+
+test("install.sh 优先利用本机已有的 brew、fnm 或 nvm 给出对应安装命令", async (t) => {
+  const scenarios = [
+    { name: "brew", expected: /brew install node/ },
+    { name: "fnm", expected: /fnm install 22 && fnm use 22/ },
+    { name: "nvm", expected: /nvm install 22/ },
+  ];
+  for (const scenario of scenarios) {
+    const harness = await makeInstallHarness(t);
+    if (scenario.name === "brew" || scenario.name === "fnm") {
+      await writeExecutable(path.join(harness.bin, scenario.name), "#!/bin/sh\nexit 0\n");
+    } else {
+      await mkdir(path.join(harness.home, ".nvm"), { recursive: true });
+      await writeFile(path.join(harness.home, ".nvm", "nvm.sh"), "# nvm test fixture\n", "utf8");
+    }
+    const result = runInstallSh(harness);
+    assert.equal(result.error, undefined);
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, scenario.expected, `${scenario.name} should be detected`);
+  }
+});
+
+test("install.ps1 缺 Node 指引包含 winget 一键命令和重新配对步骤", async () => {
+  const script = path.resolve(import.meta.dirname, "../../../frontend/public/install.ps1");
+  const text = await readFile(script, "utf8");
+  assert.match(text, /winget install OpenJS\.NodeJS\.LTS/);
+  assert.match(text, /装完后，关闭并重新打开 PowerShell，然后重新粘贴刚才那条 Parlor 配对命令即可继续/);
+  assert.match(text, /Show-NodeSetupGuidance "检测不到 Node\.js。"/);
+  assert.match(text, /Show-NodeSetupGuidance "Node\.js 版本太低/);
+});

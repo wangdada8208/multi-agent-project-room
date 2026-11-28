@@ -20,6 +20,123 @@ export interface CliIO {
   stderr: (msg: string) => void;
 }
 
+export type CliOutputMode = "human" | "json";
+
+const CLI_HELP = `Parlor mapr 命令行
+
+用法:
+  mapr <命令> [参数]
+
+命令:
+  up                 启动本机助手
+  join               用邀请链接接入云端助手席位
+  bridge             把本机助手桥接进房间
+  mcp-approve-send   审批一次工具发送请求
+  identity create    创建本机身份
+  start              用 .env 启动成员进程
+  request            发起一次授权请求
+  consents           查看待批准请求
+  approve / deny     批准或拒绝请求
+  task               给房间里的助手派任务
+
+可复制示例:
+  mapr up --hub https://hub.wangdada8208.xyz --pair mpc_xxx
+  mapr join "https://hub.wangdada8208.xyz/rooms/room-id?invite=token" --state-dir .
+  mapr bridge --invite "https://hub.wangdada8208.xyz/rooms/room-id?invite=token" --exec "claude"
+  mapr mcp-approve-send --seat seat-id --room room-id --text "允许发送这条消息"
+
+机器模式:
+  在命令中加 --json，或设置 MAPR_JSON=1。机器模式只输出结构化 JSON。
+`;
+
+type JoinFailureKind = "invite_required" | "invite_invalid" | "network" | "pending" | "denied" | "registration_failed";
+
+const JOIN_FAILURE_COPY: Record<JoinFailureKind, { title: string; next: string }> = {
+  invite_required: {
+    title: "邀请链接缺失",
+    next: "从 Parlor 房间重新复制完整邀请链接，然后运行：mapr join \"粘贴邀请链接\"",
+  },
+  invite_invalid: {
+    title: "链接已过期或失效",
+    next: "请房主重新生成邀请链接。拿到新链接后，重新运行同一条 mapr join 命令。",
+  },
+  network: {
+    title: "网络连不上",
+    next: "检查电脑是否联网，确认 Parlor 服务器地址正确，然后重新运行同一条命令。",
+  },
+  pending: {
+    title: "等待房主审批",
+    next: "房主还没有批准。请房主在 Parlor 里批准；批准后，这个命令会自动继续。",
+  },
+  denied: {
+    title: "房主没有批准这次加入",
+    next: "请联系房主确认。若仍要加入，请房主重新生成邀请链接后再试。",
+  },
+  registration_failed: {
+    title: "注册没有完成",
+    next: "请复制这条错误和刚才运行的命令，发给 Parlor 房间的主人排查。",
+  },
+};
+
+function joinFailureText(kind: JoinFailureKind, detail = ""): string {
+  const copy = JOIN_FAILURE_COPY[kind];
+  const lines = [copy.title, `下一步：${copy.next}`];
+  if (detail && kind === "registration_failed") lines.push(`细节：${detail}`);
+  return lines.join("\n");
+}
+
+function writeJoinFailure(
+  io: CliIO,
+  mode: CliOutputMode,
+  kind: JoinFailureKind,
+  payload: Record<string, unknown>,
+  detail = ""
+): void {
+  if (mode === "json") {
+    io.stderr(JSON.stringify(payload));
+  } else {
+    io.stderr(joinFailureText(kind, detail));
+  }
+}
+
+function classifyJoinHttpStatus(status: number): JoinFailureKind {
+  if (status === 0) return "network";
+  if (status === 404 || status === 410) return "invite_invalid";
+  if (status === 409) return "denied";
+  return "registration_failed";
+}
+
+function classifyJoinReason(reason: string): JoinFailureKind {
+  if (reason === "invite_required") return "invite_required";
+  if (reason === "invite_token_not_found" || reason === "invalid_invite_url") return "invite_invalid";
+  const nonceFailure = reason.match(/^nonce_failed:(\d+)$/);
+  if (nonceFailure) return classifyJoinHttpStatus(Number(nonceFailure[1]));
+  return "registration_failed";
+}
+
+function splitJsonMode(args: string[], env: NodeJS.ProcessEnv = process.env): { args: string[]; mode: CliOutputMode } {
+  const filtered: string[] = [];
+  let jsonFlag = false;
+  for (const arg of args) {
+    if (arg === "--json") {
+      jsonFlag = true;
+    } else {
+      filtered.push(arg);
+    }
+  }
+  return { args: filtered, mode: jsonFlag || env.MAPR_JSON === "1" ? "json" : "human" };
+}
+
+function writeUsageFailure(command: string, mode: CliOutputMode, io: CliIO): number {
+  if (mode === "json") {
+    io.stderr(JSON.stringify({ ok: false, reason: "unknown_command", command }));
+    return 1;
+  }
+  const prefix = command ? `不认识命令 "${command}"。` : "缺少命令。";
+  io.stderr(`${prefix}\n\n${CLI_HELP}`);
+  return 1;
+}
+
 function parseArgs(args: string[]): { command: string; subCommand?: string; flags: Record<string, string>; positional: string[] } {
   const flags: Record<string, string> = {};
   const positional: string[] = [];
@@ -117,7 +234,8 @@ export async function joinWithInvite(
   invite: string,
   flags: Record<string, string>,
   io: CliIO,
-  deps: JoinDeps = {}
+  deps: JoinDeps = {},
+  outputMode: CliOutputMode = "json"
 ): Promise<number> {
   const fetchImpl = deps.fetchImpl ?? fetch;
   const sleep = deps.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
@@ -167,6 +285,9 @@ export async function joinWithInvite(
   })();
 
   // pending = 主人审批中：同样的签名 GET 轮询，直到出结果或 --wait 到期。
+  if (outputMode === "human" && res.status === 200 && res.body?.status === "pending") {
+    io.stderr(joinFailureText("pending"));
+  }
   const deadline = Date.now() + waitSec * 1000;
   while (res.status === 200 && res.body?.status === "pending" && Date.now() < deadline) {
     await sleep(pollMs);
@@ -183,7 +304,13 @@ export async function joinWithInvite(
 
   if (res.status !== 200) {
     // 失败只回 HTTP 状态码：Hub 422 会照抄请求字段，响应正文不回显。
-    io.stderr(JSON.stringify({ ok: false, reason: "register_failed", status: res.status }));
+    writeJoinFailure(
+      io,
+      outputMode,
+      classifyJoinHttpStatus(res.status),
+      { ok: false, reason: "register_failed", status: res.status },
+      `HTTP ${res.status}`
+    );
     return 1;
   }
   const body = res.body ?? {};
@@ -193,14 +320,20 @@ export async function joinWithInvite(
     return 0;
   }
   if (status !== "consumed" && status !== "approved") {
-    io.stderr(JSON.stringify({ ok: false, reason: "registration_not_completed", status: status || "unknown" }));
+    writeJoinFailure(
+      io,
+      outputMode,
+      "registration_failed",
+      { ok: false, reason: "registration_not_completed", status: status || "unknown" },
+      `status=${status || "unknown"}`
+    );
     return 1;
   }
   const agentToken = typeof body.agent_token === "string" ? body.agent_token : "";
   const seatId = typeof body.seat_id === "string" ? body.seat_id : "";
   const roomId = typeof body.room_id === "string" ? body.room_id : "";
   if (!agentToken || !seatId) {
-    io.stderr(JSON.stringify({ ok: false, reason: "incomplete_registration" }));
+    writeJoinFailure(io, outputMode, "registration_failed", { ok: false, reason: "incomplete_registration" });
     return 1;
   }
 
@@ -243,11 +376,18 @@ export async function joinWithInvite(
 }
 
 export async function runCli(args: string[], io: CliIO = { stdout: (m) => console.log(m), stderr: (m) => console.error(m) }): Promise<number> {
-  if (args[0] === "bridge") return runBridgeCommand(args.slice(1), io);
-  const { command, subCommand, flags, positional } = parseArgs(args);
+  const { args: cliArgs, mode } = splitJsonMode(args);
+  if (cliArgs[0] === "bridge") return runBridgeCommand(cliArgs.slice(1), io);
+  if (cliArgs[0] === "--help" || cliArgs[0] === "-h" || cliArgs[0] === "help") {
+    io.stdout(CLI_HELP);
+    return 0;
+  }
+  const { command, subCommand, flags, positional } = parseArgs(cliArgs);
   const port = flags.port || process.env.OWNER_NOTES_PORT || "8787";
 
   try {
+    if (!command) return writeUsageFailure("", mode, io);
+
     if (command === "identity" && subCommand === "create") {
       const dir = flags.dir || ".";
       const key = generatePrivateKey();
@@ -358,10 +498,10 @@ export async function runCli(args: string[], io: CliIO = { stdout: (m) => consol
     if (command === "join") {
       const invite = positional[0] || "";
       if (!invite) {
-        io.stderr(JSON.stringify({ ok: false, reason: "invite_required" }));
+        writeJoinFailure(io, mode, "invite_required", { ok: false, reason: "invite_required" });
         return 1;
       }
-      return await joinWithInvite(invite, flags, io);
+      return await joinWithInvite(invite, flags, io, {}, mode);
     }
 
     if (command === "up") {
@@ -386,10 +526,14 @@ export async function runCli(args: string[], io: CliIO = { stdout: (m) => consol
       return 0;
     }
 
-    io.stderr(JSON.stringify({ ok: false, reason: "unknown_command", command }));
-    return 1;
+    return writeUsageFailure(command, mode, io);
   } catch (err: any) {
-    io.stderr(JSON.stringify({ ok: false, reason: err.message || "error" }));
+    const reason = err?.message || "error";
+    if (command === "join" && mode === "human") {
+      io.stderr(joinFailureText(classifyJoinReason(reason), reason));
+    } else {
+      io.stderr(JSON.stringify({ ok: false, reason }));
+    }
     return 1;
   }
 }
