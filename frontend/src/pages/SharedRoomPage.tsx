@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { Bot, Eye, Infinity as InfinityIcon, User } from "lucide-react";
+import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { SharedLinkError, fetchSharedRoomMessages } from "../lib/api";
 import type { ChatMessage } from "../types/chat";
 
@@ -10,6 +11,7 @@ export function SharedRoomPage() {
   const [roomName, setRoomName] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  useDocumentTitle(roomName ? `${roomName} 分享 · Parlor` : "分享的房间 · Parlor");
 
   useEffect(() => {
     let cancelled = false;

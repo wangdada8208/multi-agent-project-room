@@ -59,9 +59,9 @@ const runningProbe: HelperProbe = {
 const desktopUA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Version/18.0 Safari/605.1.15";
 const mobileUA = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) Version/18.0 Mobile/15E148 Safari/604.1";
 const modelPresets = [
-  ["xAI Grok API（模型接口）", "grok"],
+  ["Grok 云端模型", "grok"],
   ["Ollama 本机模型", "ollama"],
-  ["自定义 Agent / Webhook", "webhook"],
+  ["我自己的云端助手", "webhook"],
 ] as const;
 const invite = {
   token: "cloud+invite&token",
@@ -173,8 +173,8 @@ async function openCloudPanel(name: "Grok Bot" | "Muse") {
   const card = [...container.querySelectorAll<HTMLButtonElement>(".wb-cloud-card")].find((button) => button.querySelector("strong")?.textContent === name);
   if (!card) throw new Error(`找不到「${name}」预设卡片`);
   await act(async () => card.click());
-  const panel = container.querySelector(`section[aria-label="${name} 云端接入"]`);
-  if (!panel) throw new Error(`找不到「${name}」云端接入面板`);
+  const panel = container.querySelector(`section[aria-label="${name} 接入面板"]`);
+  if (!panel) throw new Error(`找不到「${name}」接入面板`);
   return panel;
 }
 
@@ -259,7 +259,7 @@ describe("AgentJoinSection preset configuration", () => {
 
   it("preserves the Webhook preset when a later probe detects a paired helper", async () => {
     await renderSection();
-    await clickPreset("自定义 Agent / Webhook");
+    await clickPreset("我自己的云端助手");
     expect(helperLink("点此直接打开本机控制台")).toBe(
       `${HELPER_ORIGIN}/#pair=mpc_test.code&preset=webhook&room=room-42`,
     );
@@ -268,7 +268,7 @@ describe("AgentJoinSection preset configuration", () => {
     await act(async () => vi.advanceTimersByTimeAsync(3000));
 
     expect(openWindow).not.toHaveBeenCalled();
-    expect(container.textContent).toContain("本机助手已就绪，可以继续配置「自定义 Agent / Webhook」");
+    expect(container.textContent).toContain("电脑助手已就绪，可以继续配置「我自己的云端助手」");
     expect(helperLink("继续一键配置")).toBe(`${HELPER_ORIGIN}/#preset=webhook&room=room-42`);
     await clickButton(container, "关闭提示");
     expect(container.querySelector('[role="status"]')).toBeNull();
@@ -358,9 +358,9 @@ describe("AgentJoinSection cloud invitations", () => {
 
     expect(approveRedemption).toHaveBeenCalledExactlyOnceWith("room-42", "redemption-1");
     expect(panel.textContent).toContain("Grok Bot 已入驻当前房间");
-    expect(panel.querySelector('a[href="/rooms/room-42"]')?.textContent).toContain("进入房间自动拉入加密群");
+    expect(panel.querySelector('a[href="/rooms/room-42"]')?.textContent).toContain("进入房间并完成加密连接");
 
-    await clickButton(panel, "关闭云端接入");
+    await act(async () => panel.querySelector<HTMLButtonElement>('button[aria-label="关闭接入面板"]')?.click());
     const calls = vi.mocked(listRoomSeats).mock.calls.length;
     await advanceTime(8000);
     expect(listRoomSeats).toHaveBeenCalledTimes(calls);
@@ -451,13 +451,13 @@ async function renderAgents(path = "/agents?room=room-42") {
 it("defaults to a copyable cloud prompt on iPhone and shows computer guidance only for local clients", async () => {
   vi.spyOn(navigator, "userAgent", "get").mockReturnValue(mobileUA);
   await renderAgents("/agents?room=room-42&agent=muse");
-  const panel = container.querySelector('section[aria-label="Muse 云端接入"]');
+  const panel = container.querySelector('section[aria-label="Muse 接入面板"]');
   expect(panel?.querySelector<HTMLInputElement>('[role="switch"]')?.checked).toBe(true);
   expect(container.querySelector('[role="radio"][aria-checked="true"]')?.textContent).toContain("Grok Bot");
   const prompt = container.querySelector('[data-testid="agent-prompt-preview"]');
   expect(prompt?.textContent).toContain("目标房间：目标房间（room-42）");
   expect(prompt?.textContent).not.toContain("配对码：");
-  expect(container.textContent).not.toContain("本机终端工具需在电脑上运行");
+  expect(container.textContent).not.toContain("这个助手需要在电脑上运行");
   expect(container.querySelector(".wb-local")).toBeNull();
   expect(container.querySelector('a[href*="127.0.0.1:8790"]')).toBeNull();
   const writeText = vi.fn().mockResolvedValue(undefined);
@@ -466,7 +466,7 @@ it("defaults to a copyable cloud prompt on iPhone and shows computer guidance on
     await clickButton(container, "复制专属提示词");
     expect(writeText).toHaveBeenCalledExactlyOnceWith(prompt?.textContent);
     await act(async () => container.querySelector<HTMLButtonElement>('[role="radio"]:nth-child(2)')?.click());
-    expect(container.textContent).toContain("本机终端工具需在电脑上运行");
+    expect(container.textContent).toContain("这个助手需要在电脑上运行");
     await advanceTime(1600);
     await clickButton(container, "复制专属提示词");
     expect(writeText).toHaveBeenLastCalledWith(prompt?.textContent);

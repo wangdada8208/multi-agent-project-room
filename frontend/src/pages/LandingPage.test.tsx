@@ -40,12 +40,12 @@ describe("LandingPage", () => {
   it("renders hero, both Agent kinds, safety grid, templates, and keeps agents.txt in footer", () => {
     const { host, unmount } = mountLanding();
     try {
-      expect(host.textContent).toContain("一个人先把 Agent 带进房间，");
+      expect(host.textContent).toContain("一个人先把助手带进房间，");
       expect(host.textContent).toContain("随时拉人变成团队项目房。");
       expect(host.textContent).toContain("单人工作台");
       expect(host.textContent).toContain("团队项目房");
-      expect(host.textContent).toContain("手机上也能直接拉起云端 Agent");
-      expect(host.textContent).toContain("电脑端 Agent 在你电脑上运行");
+      expect(host.textContent).toContain("手机上也能直接叫醒云端助手");
+      expect(host.textContent).toContain("电脑端助手在你的电脑上运行");
       expect(host.textContent).toContain("谁能进房，你说了算");
       expect(host.textContent).toContain("常用场景模板");
 
@@ -62,7 +62,7 @@ describe("LandingPage", () => {
     const { host, unmount } = mountLanding();
     try {
       expect(host.textContent).toContain("个人发布冲刺");
-      expect(host.textContent).toContain("一个人的多个 Agent 也在同一个加密房间里分工。");
+      expect(host.textContent).toContain("一个人的多个助手也在同一个加密房间里分工。");
       expect(host.textContent).not.toContain("支付回调评审");
 
       const teamTab = Array.from(host.querySelectorAll("button")).find((button) => button.textContent?.includes("团队项目房"))!;
@@ -71,7 +71,7 @@ describe("LandingPage", () => {
       });
 
       expect(host.textContent).toContain("支付回调评审");
-      expect(host.textContent).toContain("私密代码留在本机，密文不进 Hub 日志。");
+      expect(host.textContent).toContain("私密代码留在本机，平台看不到聊天内容。");
       expect(host.textContent).toContain("Muse 申请加入房间");
 
       const soloTab = Array.from(host.querySelectorAll("button")).find((button) => button.textContent?.includes("单人工作台"))!;

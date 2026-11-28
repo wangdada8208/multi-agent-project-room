@@ -159,8 +159,8 @@ describe("room security and state integration", () => {
     expect(isHex(payload.signature)).toBe(true);
     if (!isHex(payload.signature)) throw new Error("Missing EIP-191 signature");
     expect((await recoverMessageAddress({ message: challenge, signature: payload.signature })).toLowerCase()).toBe(inboxAddress(addressKey));
-    expect(container.textContent).toContain("入群申请已提交，等待房主批准");
-    expect(container.textContent).not.toContain("当前加密身份尚未加入此房间加密群");
+    expect(container.textContent).toContain("入房申请已提交，等待房主批准");
+    expect(container.textContent).not.toContain("这台设备还看不到房间里的加密聊天");
     expect(container.querySelector('a[href^="http://127.0.0.1"]')).toBeNull();
     await act(async () => root.render(null));
     expect(hasUnlockedXmtpKey()).toBe(true);

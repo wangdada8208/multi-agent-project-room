@@ -18,6 +18,7 @@ import { InviteTab } from "../components/room/tabs/InviteTab";
 import { MembersTab } from "../components/room/tabs/MembersTab";
 import { RulesTab } from "../components/room/tabs/RulesTab";
 import type { AvatarProps } from "../components/ui/Avatar";
+import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { useViewportWidth } from "../hooks/useViewportWidth";
 import { useRoomWorkspace } from "../hooks/room/useRoomWorkspace";
 import { apiJson } from "../lib/apiError";
@@ -29,6 +30,7 @@ export function RoomPage() {
   const navigate = useNavigate();
   const client = useQueryClient();
   const workspace = useRoomWorkspace(roomId);
+  useDocumentTitle(workspace.room?.name ? `${workspace.room.name} · Parlor` : "房间 · Parlor");
   const { room, user, isEncrypted, myXmtpAddress, seats, pending, requests, search, statusView } = workspace;
   const isOwner = workspace.myRoomRole === "owner";
   const [prefill, setPrefill] = useState<{ text: string }>();
@@ -81,7 +83,7 @@ export function RoomPage() {
   const onPrefill = workspace.canSendNow ? (text: string) => setPrefill({ text }) : undefined;
   const approvedMessages = requests.joined.map((request) => ({
     id: `joined-${request.id}`, room_id: roomId, sender_id: "system",
-    content: `${request.displayName} 已加入加密群`, sender_type: "system" as const, msg_type: "system" as const,
+    content: `${request.displayName} 已加入房间`, sender_type: "system" as const, msg_type: "system" as const,
     actor: "human" as const, sourceSubtitle: "", created_at: request.decided_at || new Date().toISOString(),
   }));
 
@@ -104,7 +106,7 @@ export function RoomPage() {
         }) : undefined}
         notice={<>
           {workspace.showCrashBanner && <div className="wb-notice">
-            <AlertCircle size={17} /><span>本机 Agent（{workspace.crashedLocalSeats.map((seat) => seat.agentKey).join("、")}）异常退出。</span>
+            <AlertCircle size={17} /><span>电脑助手（{workspace.crashedLocalSeats.map((seat) => seat.agentKey).join("、")}）异常退出。</span>
             <HelperLink className="ui-button ui-button--secondary ui-button--sm" action="console">打开本机助手查看</HelperLink>
             <IconButton label="关闭提示" size="sm" onClick={workspace.dismissCrash}><X size={14} /></IconButton>
           </div>}

@@ -21,11 +21,11 @@ function LocalParallelVisual() {
         <MiniBar title="房间配对" />
         <div className="lp-pair-window__body">
           <div className="lp-pair-command">
-            <span>本机助手</span>
+            <span>电脑助手</span>
             <code>mapr up --pair 8K2M-4Q</code>
           </div>
           {[
-            ["Claude Code", "已检测到 · 沙箱运行"],
+            ["Claude Code", "已检测到 · 在你的电脑上运行"],
             ["Codex", "已申请入房"],
             ["Gemini CLI", "等待主人选择"],
           ].map(([name, state]) => (
@@ -52,7 +52,7 @@ function CloudPhoneVisual() {
       <img src={bierstadtPainting} alt="" aria-hidden="true" />
       <div className="lp-feature-art__wash lp-feature-art__wash--light" aria-hidden="true" />
       <div className="lp-mini-window lp-cloud-window">
-        <MiniBar title="云端 Agent 接入指令" />
+        <MiniBar title="云端助手接入指令" />
         <div className="lp-cloud-window__body">
           <div className="lp-terminal-line"><span>$</span> node mapr bridge --invite room/8k2m</div>
           <div className="lp-terminal-line lp-terminal-line--ok">✓ Grok Bot 已连接云端</div>
@@ -81,8 +81,8 @@ export function AgentKinds() {
           <div className="lp-feature">
             <div className="lp-feature__copy">
               <h2>本地和云端，在一个房间配合</h2>
-              <p>电脑端 Agent 在你电脑上运行，代码、密钥和命令都不离开本机。</p>
-              <p>云端 Agent 在云端运行，手机上也能审批和跟进。</p>
+              <p>电脑端助手在你的电脑上运行，代码、密钥和命令都不离开电脑。</p>
+              <p>云端助手在云端运行，手机上也能批准和跟进。</p>
               <a href="/agents.txt" target="_blank" rel="noreferrer">
                 了解加密方式 <ArrowRight size={14} strokeWidth={2} aria-hidden="true" />
               </a>
@@ -97,8 +97,8 @@ export function AgentKinds() {
           <div className="lp-feature lp-feature--flip">
             <CloudPhoneVisual />
             <div className="lp-feature__copy">
-              <h2>手机上也能直接拉起云端 Agent</h2>
-              <p>在手机上选好房间，把一次性接入指令发给云端 Agent。</p>
+              <h2>手机上也能直接叫醒云端助手</h2>
+              <p>在手机上选好房间，把一段一次性接入指令发给云端助手。</p>
               <p>它申请进房后，你点一下批准；离开电脑也能继续看进展。</p>
               <a href="/agents.txt" target="_blank" rel="noreferrer">
                 查看接入方式 <ArrowRight size={14} strokeWidth={2} aria-hidden="true" />

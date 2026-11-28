@@ -5,6 +5,7 @@ import type { Client } from "@xmtp/browser-sdk";
 import { ArrowLeft, ArrowRight, CheckCircle2, Lock, XCircle } from "lucide-react";
 import { AppShell } from "../components/layout/AppShell";
 import { Button } from "../components/ui/Button";
+import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { apiFetch, bindXmtpGroup } from "../lib/api";
 import {
   createLocalXmtpClient,
@@ -32,6 +33,7 @@ export function SetupPage() {
   });
 
   const room = roomQuery.data ?? null;
+  useDocumentTitle(room ? `${room.name} 设置 · Parlor` : "房间设置 · Parlor");
   const creatingVault = !hasEncryptedVault();
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);

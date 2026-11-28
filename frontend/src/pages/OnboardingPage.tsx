@@ -7,6 +7,7 @@ import type { RoomPermissionMember } from "../hubContracts.generated";
 import { fetchRooms } from "../lib/api";
 import { apiJson } from "../lib/apiError";
 import { listRoomSeats } from "../lib/localHelper";
+import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { useAuthStore } from "../stores/authStore";
 import "../components/rooms/Rooms.css";
 
@@ -301,6 +302,7 @@ export function OnboardingView({ embedded = false, onStartTemplate, onDismiss, p
 }
 
 export function OnboardingPage() {
+  useDocumentTitle("开始使用 · Parlor");
   const progress = useOnboardingProgress();
   return (
     <div className="wb-onb-shell">
