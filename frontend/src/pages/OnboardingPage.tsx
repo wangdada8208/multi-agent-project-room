@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ArrowRight, Cloud, Infinity as InfinityIcon, LayoutGrid, Link2 } from "lucide-react";
+import { AgentPromptSetupPicker } from "../components/AgentPromptSetupPicker";
 import { Button } from "../components/ui/Button";
 import { Tag } from "../components/ui/Tag";
 import { useAuthStore } from "../stores/authStore";
@@ -89,7 +90,7 @@ export function OnboardingView({ embedded = false, onStartTemplate }: Onboarding
   return (
     <div className={embedded ? "wb-onb wb-onb--embedded" : "wb-onb"}>
       <HeadingTag>欢迎，{userName}。先做一件事就能开始。</HeadingTag>
-      <p className="wb-onb__lead">两条路都只需一分钟，之后随时可以补上另一步。</p>
+      <p className="wb-onb__lead">一个人可以先把自己的 Agent 带进来；需要团队配合时，再发邀请链接拉同事和他们的 Agent 进同一个房间。</p>
 
       <div className="wb-onb-progress" aria-label="开始步骤">
         <span className="wb-onb-progress__step wb-onb-progress__step--active">
@@ -139,6 +140,8 @@ export function OnboardingView({ embedded = false, onStartTemplate }: Onboarding
           </span>
         </button>
       </div>
+
+      <AgentPromptSetupPicker compact />
 
       <form className="wb-onb-invite" onSubmit={handleInviteSubmit}>
         <Link2 size={16} strokeWidth={1.8} aria-hidden="true" />

@@ -452,9 +452,23 @@ it("uses the iPhone handoff card and never renders or opens a loopback link in t
   expect(panel?.querySelector<HTMLInputElement>('[role="switch"]')?.checked).toBe(true);
   expect(container.textContent).toContain("在电脑上继续接入");
   expect(container.textContent).toContain("复制电脑端链接");
+  expect(container.textContent).not.toContain("选客户端，复制专属提示词");
   expect(container.querySelector(".wb-local")).toBeNull();
   expect(container.innerHTML).not.toContain("127.0.0.1");
   expect(probeHelper).not.toHaveBeenCalled();
   expect(createPairingCode).not.toHaveBeenCalled();
   expect(openWindow).not.toHaveBeenCalled();
+});
+
+it("shows the client prompt picker with the selected room in the desktop Agent center", async () => {
+  vi.mocked(fetchRooms).mockResolvedValue([{ id: "room-42", name: "目标房间", description: "", created_at: "" }]);
+  await act(async () => root.render(<QueryClientProvider client={queryClient}>
+    <MemoryRouter initialEntries={["/agents?room=room-42"]}><AgentsPage /></MemoryRouter>
+  </QueryClientProvider>));
+  await advanceTime(2);
+
+  expect(container.textContent).toContain("选客户端，复制专属提示词");
+  const prompt = container.querySelector('[data-testid="agent-prompt-preview"]')?.textContent ?? "";
+  expect(prompt).toContain("目标房间：目标房间（room-42）");
+  expect(prompt).toContain("/prompts/claude-code.md");
 });
