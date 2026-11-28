@@ -9,7 +9,7 @@ import {
 } from "../../lib/localHelper";
 import { inboxAddress } from "../../lib/xmtpLocalIdentity";
 
-export type TimedPairingCode = PairingCode & { remainingSeconds: number };
+export type TimedPairingCode = PairingCode & { remainingSeconds: number; issuedAtMs?: number };
 
 function secondsUntil(expiresAt: string) {
   return Math.max(0, Math.ceil((Date.parse(expiresAt) - Date.now()) / 1000));
@@ -28,7 +28,7 @@ export function usePairingCode() {
     createPairingCode()
       .then((issued) => {
         request.current = "loaded";
-        setPairing({ ...issued, remainingSeconds: secondsUntil(issued.expires_at) });
+        setPairing({ ...issued, remainingSeconds: secondsUntil(issued.expires_at), issuedAtMs: Date.now() });
       })
       .catch((err) => {
         request.current = "idle";

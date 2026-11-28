@@ -17,18 +17,15 @@ import { pendingRequestsFrom } from "../lib/domain/pendingRequests";
 import { listRoomRedemptions, listRoomSeats } from "../lib/localHelper";
 import { useAuthStore } from "../stores/authStore";
 import type { Room } from "../types/chat";
-import { OnboardingView } from "./OnboardingPage";
+import {
+  isOnboardingDismissed,
+  markOnboardingDismissed,
+  OnboardingView,
+  useOnboardingProgress,
+} from "./OnboardingPage";
 import "../components/rooms/Rooms.css";
 
 type RoomFilter = "all" | "mine" | "pending";
-
-function isUserOnboarded(): boolean {
-  try {
-    return Boolean(localStorage.getItem("mapr-onboarded"));
-  } catch {
-    return false;
-  }
-}
 
 export function HomePage() {
   const navigate = useNavigate();
@@ -42,6 +39,7 @@ export function HomePage() {
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [actionError, setActionError] = useState("");
+  const [onboardingDismissed, setOnboardingDismissed] = useState(isOnboardingDismissed);
 
   useEffect(() => {
     if (searchParams.get("create") === "1") {
@@ -59,6 +57,7 @@ export function HomePage() {
     refetchIntervalInBackground: false,
   });
   const rooms: Room[] = roomsQuery.data ?? [];
+  const onboardingProgress = useOnboardingProgress();
 
   const ownedRooms = useMemo(
     () => rooms.filter((r) => Boolean(user?.id && r.created_by === user.id)),
@@ -179,8 +178,14 @@ export function HomePage() {
 
   const totalPending = attentionItems.length;
   const userName = user?.display_name || user?.username || "我";
-  const showFirstTimeOnboarding =
-    !roomsQuery.isLoading && !roomsQuery.isError && rooms.length === 0 && !isUserOnboarded();
+  const showOnboarding =
+    !roomsQuery.isLoading && !roomsQuery.isError && !onboardingDismissed && !onboardingProgress.allComplete;
+  const showFirstTimeOnboarding = showOnboarding && rooms.length === 0;
+
+  function dismissOnboarding() {
+    markOnboardingDismissed();
+    setOnboardingDismissed(true);
+  }
 
   return (
     <AppShell>
@@ -193,16 +198,18 @@ export function HomePage() {
               {totalPending > 0 ? ` · ${totalPending} 条待审批` : ""}
             </p>
           </div>
-          <div className="wb-rooms-head__actions">
-            <Link to="/agents" className="ui-button ui-button--secondary ui-button--md">
-              <Bot size={16} strokeWidth={1.8} />
-              <span>接入 Agent</span>
-            </Link>
-            <Button variant="primary" size="md" onClick={() => setDrawerOpen(true)}>
-              <Plus size={16} strokeWidth={2} />
-              <span>新建房间</span>
-            </Button>
-          </div>
+          {!showFirstTimeOnboarding && (
+            <div className="wb-rooms-head__actions">
+              <Link to="/agents" className="ui-button ui-button--secondary ui-button--md">
+                <Bot size={16} strokeWidth={1.8} />
+                <span>接入 Agent</span>
+              </Link>
+              <Button variant="primary" size="md" onClick={() => setDrawerOpen(true)}>
+                <Plus size={16} strokeWidth={2} />
+                <span>新建房间</span>
+              </Button>
+            </div>
+          )}
         </header>
 
         <AttentionStrip items={attentionItems} />
@@ -230,7 +237,12 @@ export function HomePage() {
         )}
 
         {showFirstTimeOnboarding && (
-          <OnboardingView embedded onStartTemplate={() => setDrawerOpen(true)} />
+          <OnboardingView
+            embedded
+            progress={onboardingProgress}
+            onStartTemplate={() => setDrawerOpen(true)}
+            onDismiss={dismissOnboarding}
+          />
         )}
 
         {!roomsQuery.isLoading && !roomsQuery.isError && rooms.length === 0 && !showFirstTimeOnboarding && (
@@ -250,6 +262,14 @@ export function HomePage() {
 
         {!roomsQuery.isLoading && !roomsQuery.isError && rooms.length > 0 && (
           <>
+            {showOnboarding && (
+              <OnboardingView
+                embedded
+                progress={onboardingProgress}
+                onStartTemplate={() => setDrawerOpen(true)}
+                onDismiss={dismissOnboarding}
+              />
+            )}
             <div className="wb-rooms-toolbar">
               <label className="wb-rooms-search">
                 <Search size={15} strokeWidth={1.9} className="wb-rooms-search__icon" aria-hidden="true" />
