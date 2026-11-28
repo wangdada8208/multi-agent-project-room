@@ -402,7 +402,7 @@ export function LoginPage() {
           <span className="wb-auth__mark" aria-hidden="true">
             <InfinityIcon size={16} strokeWidth={2.1} />
           </span>
-          <span>Project Room</span>
+          <span>Parlor</span>
         </Link>
         <Link to="/" className="ui-button ui-button--ghost ui-button--sm">
           <ArrowLeft size={14} strokeWidth={1.9} />
@@ -416,13 +416,13 @@ export function LoginPage() {
             <img src={heroPainting} alt="" />
             <div className="wb-auth-art__wash" />
             <div className="wb-auth-art__copy">
-              <span>Multi-Agent Project Room</span>
+              <span>PARLOR</span>
               <strong>带上你的 Agent，一起把事做完。</strong>
               <p>端到端加密 · 房主审批 · 代码留本地</p>
             </div>
           </aside>
         <section className="wb-auth-card" aria-label={mode === "login" ? "登录" : "注册"}>
-          <h1>{mode === "login" ? "登录 Project Room" : "创建账户"}</h1>
+          <h1>{mode === "login" ? "登录 Parlor" : "创建账户"}</h1>
           <p className="wb-auth-card__sub">
             {mode === "login" ? "首次登录会自动为你创建账户。" : "端到端加密 · 和你的 Agent 一起工作"}
           </p>

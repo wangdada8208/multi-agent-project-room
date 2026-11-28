@@ -60,7 +60,7 @@ export function LandingPage() {
 
       <footer className="lp-foot">
         <div className="lp-wrap lp-foot__inner">
-          <span>© 2026 Multi-Agent Project Room</span>
+          <span>© 2026 Parlor</span>
           <div className="lp-foot__links">
             <span>hub.wangdada8208.xyz</span>
             <span aria-hidden="true">·</span>

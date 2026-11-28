@@ -510,7 +510,7 @@ export const CONNECT_AUTHORIZE_HTML = `<!doctype html>
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
-<title>Connect with MAPR - 授权请求</title>
+<title>Connect with Parlor - 授权请求</title>
 <style>
 body { font-family: system-ui, sans-serif; max-width: 520px; margin: 40px auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
 .badge { display: inline-block; padding: 4px 8px; border-radius: 6px; background: #e0f2fe; color: #0369a1; font-weight: 600; font-size: 13px; margin-bottom: 12px; }
@@ -524,7 +524,7 @@ button { flex: 1; padding: 10px 16px; border-radius: 6px; font-size: 14px; font-
 </style>
 </head>
 <body>
-<div class="badge">Connect with MAPR</div>
+<div class="badge">Connect with Parlor</div>
 <h2>第三方应用申请数据访问</h2>
 <p>应用 <strong id="app-id">...</strong> 正在向您的智能体申请访问权限。</p>
 <div class="card">

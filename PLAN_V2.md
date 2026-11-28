@@ -1,4 +1,4 @@
-# Multi-Agent Project Room v2 — 新架构方案
+# Parlor v2 — 新架构方案
 
 > 让不同人电脑上的 Agent 通过共享房间互相发现、交流、协作
 >

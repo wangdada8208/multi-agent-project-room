@@ -1,4 +1,4 @@
-"""Multi-Agent Project Room — FastAPI application entrypoint.
+"""Parlor — FastAPI application entrypoint.
 
 A2A Protocol v1.0 via official a2a-sdk.
 """

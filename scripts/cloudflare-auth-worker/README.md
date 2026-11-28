@@ -52,7 +52,7 @@
    ```bash
    MAPR_EMAIL_PROVIDER="cloudflare_worker"
    MAPR_EMAIL_FROM_ADDRESS="noreply@notify.wangdada8208.xyz"
-   MAPR_EMAIL_FROM_NAME="Multi-Agent Project Room"
+   MAPR_EMAIL_FROM_NAME="Parlor"
    MAPR_EMAIL_WORKER_URL="https://auth-relay.wangdada8208.xyz/send-email"
    MAPR_EMAIL_WORKER_SECRET="<你刚生成的 64 位 RELAY_SECRET>"
 

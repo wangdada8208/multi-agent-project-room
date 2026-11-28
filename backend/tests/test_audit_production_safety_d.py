@@ -174,7 +174,7 @@ async def test_health_liveness_probe_is_lightweight_in_memory(client: AsyncClien
     assert resp.status_code == 200
     data = resp.json()
     assert data["status"] == "ok"
-    assert data["service"] == "Multi-Agent Project Room"
+    assert data["service"] == "Parlor"
     assert "database" not in data
 
 

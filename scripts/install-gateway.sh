@@ -1,10 +1,10 @@
 #!/bin/bash
-# Multi-Agent Project Room — One-click Gateway Installer
+# Parlor — One-click Gateway Installer
 # Usage: bash <(curl -sL https://raw.githubusercontent.com/wangdada8208/multi-agent-project-room/main/scripts/install-gateway.sh)
 
 set -e
 
-echo "🤖 Multi-Agent Project Room — Gateway 安装器"
+echo "🤖 Parlor — Gateway 安装器"
 echo "============================================"
 
 # Check for required tools

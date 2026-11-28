@@ -185,7 +185,7 @@ async def test_ws_agent_channel_and_task_matching(db: AsyncSession):
     agent_user, token_agent = await _create_test_user(db, "codex_bot", user_type="agent", display_name="Codex Bot")
     outsider, token_outsider = await _create_test_user(db, "outsider_agent_test")
 
-    room = Room(name="Project Room", transport="hub", created_by=owner.id)
+    room = Room(name="Parlor Test Room", transport="hub", created_by=owner.id)
     db.add(room)
     await db.flush()
     db.add(RoomPermission(room_id=room.id, user_id=owner.id, role="owner"))

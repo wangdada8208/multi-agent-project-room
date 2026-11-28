@@ -1,4 +1,4 @@
-# MAPR 本机助手一键安装脚本（Windows，PowerShell 5.1+）
+# Parlor 本机助手一键安装脚本（Windows，PowerShell 5.1+）
 #
 # 用法（网站「我的 Agent」页给出配对码后）：
 #   方式 A（推荐，能传参数）：
@@ -147,7 +147,7 @@ try {
 # ── 写 bin\mapr.cmd、bin\mapr-up.vbs、uninstall.ps1 ──
 $maprCmd = @'
 @echo off
-rem mapr — MAPR 本机助手命令行入口（install.ps1 生成，重复安装会重写本文件）
+rem mapr — Parlor 本机助手命令行入口（install.ps1 生成，重复安装会重写本文件）
 if /i "%~1"=="uninstall" goto uninstall
 node --experimental-strip-types "%USERPROFILE%\.mapr\pkg\src\cli.ts" %*
 exit /b %errorlevel%
@@ -185,7 +185,7 @@ shell.Run cmd, 0, False
 Set-Content -Path (Join-Path $BinDir 'mapr-up.vbs') -Value $vbs -Encoding ASCII
 
 $uninst = @'
-# MAPR 本机助手卸载（install.ps1 生成）
+# Parlor 本机助手卸载（install.ps1 生成）
 # 用法: powershell -File uninstall.ps1 [-Purge] [-Yes]
 [CmdletBinding()]
 param([switch]$Purge,[switch]$Yes)
@@ -219,7 +219,7 @@ $wsh = New-Object -ComObject WScript.Shell
 $lnk = $wsh.CreateShortcut($StartupLnk)
 $lnk.TargetPath = 'wscript.exe'
 $lnk.Arguments = '"' + (Join-Path $BinDir 'mapr-up.vbs') + '"'
-$lnk.Description = 'MAPR 本机助手（127.0.0.1:8790）'
+$lnk.Description = 'Parlor 本机助手（127.0.0.1:8790）'
 $lnk.Save()
 Write-Host "已写入开机自启：$StartupLnk（当前用户登录时生效，无需管理员）"
 

@@ -16,7 +16,7 @@ settings = get_settings()
 async def health() -> dict:
     return {
         "status": "ok",
-        "service": "Multi-Agent Project Room",
+        "service": "Parlor",
     }
 
 
@@ -28,7 +28,7 @@ async def readiness(db: AsyncSession = Depends(get_db)) -> JSONResponse:
             status_code=200,
             content={
                 "status": "ready",
-                "service": "Multi-Agent Project Room",
+                "service": "Parlor",
                 "database": "connected",
                 "revision": db_ready.get("revision"),
             },
@@ -37,7 +37,7 @@ async def readiness(db: AsyncSession = Depends(get_db)) -> JSONResponse:
         status_code=503,
         content={
             "status": "not ready",
-            "service": "Multi-Agent Project Room",
+            "service": "Parlor",
             "database": "unavailable",
             "code": db_ready.get("code", "DATABASE_UNAVAILABLE"),
             "reason": db_ready.get("reason"),
@@ -50,7 +50,7 @@ async def health_details() -> dict:
     db_status = await check_database_connection()
     return {
         "status": "ok",
-        "service": "Multi-Agent Project Room",
+        "service": "Parlor",
         "version": "1.0.0",
         "a2a_protocol_version": settings.a2a_protocol_version,
         "a2a_public_url": settings.a2a_public_url,

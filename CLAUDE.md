@@ -1,4 +1,4 @@
-# Multi-Agent Project Room — CLAUDE.md
+# Parlor — CLAUDE.md
 
 > **Agent 入口文件** — 当你加入这个项目时，从这里开始。
 
@@ -17,7 +17,7 @@ Step 4: 生产环境已成功迁移至北京服务器，服务在线（https://h
 
 ```
 当前阶段: 研发阶段 A–F 与第四轮审计修复全部交付并合并 main，剩余收尾事项于 2026-11-12 关闭（2026-11-12）
-总体进度: 阶段 A 至阶段 F（主人网关、协调者、连接器、代理自助接入与 Connect with MAPR）已全部完成并合入 main。生产库已迁移至 i90c20261017，北京生产 /health 为 200，自建 runner（multi-agent-runner-bj）在线。第四轮审计的 H1–H4 高危项与 CI 32 项失败根因已关闭（真实 CI：791 passed / 0 failed）。2026-11-12 主人一次性批准并收尾：接入层证书校验改严、main 合并门禁加固、生产库旧明文房间清理、alembic check 漂移治理、文档与验收状态同步。逐项证据见 docs/verification/2026-11-12-*.md。
+总体进度: 阶段 A 至阶段 F（主人网关、协调者、连接器、代理自助接入与 Connect with Parlor）已全部完成并合入 main。生产库已迁移至 i90c20261017，北京生产 /health 为 200，自建 runner（multi-agent-runner-bj）在线。第四轮审计的 H1–H4 高危项与 CI 32 项失败根因已关闭（真实 CI：791 passed / 0 failed）。2026-11-12 主人一次性批准并收尾：接入层证书校验改严、main 合并门禁加固、生产库旧明文房间清理、alembic check 漂移治理、文档与验收状态同步。逐项证据见 docs/verification/2026-11-12-*.md。
 ```
 
 > 注意：`docs/superpowers/plans/2026-09-23-00-总路线与执行规则.md` 第 8 节的旧进度表在 A–F 交付时未同步勾选；

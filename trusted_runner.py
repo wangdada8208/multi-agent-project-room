@@ -880,7 +880,7 @@ class TrustedRunner:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Multi-Agent Project Room — Trusted Runner")
+    parser = argparse.ArgumentParser(description="Parlor — Trusted Runner")
     parser.add_argument("--agent-name", required=True, help="智能体名称，例如 Codex-1")
     parser.add_argument("--server", default="http://localhost:8000", help="服务端地址，例如 https://hub.wangdada8208.xyz")
     parser.add_argument("--room-id", required=True, help="目标房间 ID")

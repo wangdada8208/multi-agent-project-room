@@ -1,1 +1,1 @@
-"""Multi-Agent Project Room demo backend."""
+"""Parlor backend."""

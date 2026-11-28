@@ -70,7 +70,7 @@ async function setupConnectGateway() {
   return { server, baseUrl, ledger };
 }
 
-test("End-to-End: third-party flight app requests calendar via Connect with MAPR, verifies Grant and receives busy slots", async () => {
+test("End-to-End: third-party flight app requests calendar via Connect with Parlor, verifies Grant and receives busy slots", async () => {
   const { server, baseUrl, ledger } = await setupConnectGateway();
 
   try {

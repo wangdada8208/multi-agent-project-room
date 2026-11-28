@@ -1,6 +1,6 @@
-# Connect with MAPR 开发者接入指南
+# Connect with Parlor 开发者接入指南
 
-> **Connect with MAPR** 是面向第三方 Web 应用和智能体服务的去中心化隐私授权协议。它允许外部应用向用户的专属智能体发起定向数据访问请求（如日历忙闲、出行客票凭证），并在主人明确单次批准后，获取带有密码学签名、经过严格脱敏的结构化凭据，而无需索取用户的完整邮箱密码或全量日历 OAuth 访问令牌。
+> **Connect with Parlor** 是面向第三方 Web 应用和智能体服务的去中心化隐私授权协议。它允许外部应用向用户的专属智能体发起定向数据访问请求（如日历忙闲、出行客票凭证），并在主人明确单次批准后，获取带有密码学签名、经过严格脱敏的结构化凭据，而无需索取用户的完整邮箱密码或全量日历 OAuth 访问令牌。
 
 ---
 
@@ -9,7 +9,7 @@
 ```text
 [ 第三方 Web 应用 ]               [ 本机主人网关 (127.0.0.1:8787) ]             [ 真实数据源 / 连接器 ]
         │                                         │                                      │
-        ├─ 1. 点击 Connect with MAPR 按钮 ───────►│                                      │
+        ├─ 1. 点击 Connect with Parlor 按钮 ───────►│                                      │
         │     GET /connect/authorize              │                                      │
         │     (app_id, scope, purpose)            ├─ 2. 呈现授权确认弹窗                 │
         │                                         │    (展示应用标识、申请范围与用途)    │
@@ -63,7 +63,7 @@ export function FlightBookingPage() {
       scope="calendar.free_busy"
       purpose="查询空闲时间以匹配最优商务出行航班"
       constraints={{ date_from: "2026-10-05", date_to: "2026-10-09" }}
-      buttonText="使用 MAPR 授权日历忙闲"
+      buttonText="使用 Parlor 授权日历忙闲"
       onSuccess={handleSuccess}
       onError={(err) => alert("授权失败: " + err.message)}
     />

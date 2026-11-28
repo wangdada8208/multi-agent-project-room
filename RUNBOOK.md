@@ -1,6 +1,6 @@
 # Runbook
 
-Operational notes for the deployed Multi-Agent Project Room.
+Operational notes for the deployed Parlor hub.
 
 ## Production URLs
 
