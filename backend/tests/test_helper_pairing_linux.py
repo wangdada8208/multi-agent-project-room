@@ -5,12 +5,14 @@ Only synthetic users and in-process requests; no external transport.
 from __future__ import annotations
 
 import asyncio
+import shlex
 from datetime import datetime, timedelta, timezone
 
 import pytest
 import pytest_asyncio
 from sqlalchemy import select
 
+from app.config import get_settings
 from app.core.security import create_access_token
 from app.helper.models import HelperCode, HelperDevice
 from app.models.user import User
@@ -47,6 +49,25 @@ async def _issue_code(client, owner):
 async def _pair(client, code, device="dev"):
     return await client.post(f"{BASE}/pair",
                              json={"code": code, "device_name": device, "platform": "linux"})
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("hub_origin", "web_origin"), [
+    ("https://hub.example.test", "https://hub.example.test"),
+    ("http://127.0.0.1:8000", "http://127.0.0.1:5173"),
+])
+async def test_api_install_command_uses_configured_origin(client, owner, monkeypatch, hub_origin, web_origin):
+    monkeypatch.setattr(get_settings(), "a2a_public_url", hub_origin)
+    response = await client.post(f"{BASE}/pairing-codes", headers={
+        **headers(owner), "Origin": web_origin, "X-Forwarded-Host": "untrusted.example.test",
+    })
+    assert response.status_code == 201
+    assert response.headers["cache-control"] == "no-store"
+    payload = response.json()
+    assert shlex.split(payload["install_command"]) == [
+        "curl", "-fsSL", f"{hub_origin}/install.sh", "|", "sh", "-s", "--",
+        "--pair", payload["code"], "--hub", hub_origin,
+    ]
 
 
 @pytest.mark.asyncio

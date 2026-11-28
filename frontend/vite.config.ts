@@ -1,9 +1,29 @@
-import { defineConfig } from "vite";
+import { defineConfig, type Plugin, type ViteDevServer } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 
+const downloadsWithoutSpaFallback: Plugin = {
+  name: "downloads-without-spa-fallback",
+  configureServer: ({ middlewares }) => serveDownloadsAsFiles(middlewares),
+  configurePreviewServer: ({ middlewares }) => serveDownloadsAsFiles(middlewares),
+};
+
+function serveDownloadsAsFiles(middlewares: ViteDevServer["middlewares"]) {
+  middlewares.use("/downloads", (request, response, next) => {
+    // Vite's static handlers can still serve the file. Its HTML fallback skips binary requests.
+    if ("headers" in request && typeof request.headers === "object") {
+      request.headers = { ...request.headers, accept: "application/octet-stream" };
+    }
+    if ("url" in request && typeof request.url === "string" && /\.tar\.gz(?:\?|$)/.test(request.url)) {
+      // Preserve the archive bytes when the static handler infers gzip as a transport encoding.
+      response.setHeader("Content-Encoding", "identity");
+    }
+    next();
+  });
+}
+
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [downloadsWithoutSpaFallback, react(), tailwindcss()],
   optimizeDeps: {
     exclude: ["@xmtp/wasm-bindings", "@xmtp/browser-sdk"],
   },

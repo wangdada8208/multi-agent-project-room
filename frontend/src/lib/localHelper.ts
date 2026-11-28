@@ -233,10 +233,41 @@ export function helperHandoffUrl(action: HelperHandoffAction): string {
 }
 
 /** 生成 Windows PowerShell 一键安装并配对本机助手命令。 */
-export function powershellInstallCommand(code: string, hubOrigin?: string): string {
-  const origin = (hubOrigin ?? window.location.origin).replace(/\/+$/, "");
-  return `iex "& { $(irm ${origin}/install.ps1 -UseBasicParsing) } -Pair ${code} -Hub ${origin}"`;
+export interface HelperInstallOrigins {
+  webOrigin: string;
+  hubOrigin: string;
 }
+
+export function helperPackageUrl(webOrigin: string): string {
+  return new URL("/downloads/xmtp-member-latest.tar.gz", webOrigin).href;
+}
+
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/gu, `'"'"'`)}'`;
+}
+
+export function shellInstallCommand(code: string, { webOrigin, hubOrigin }: HelperInstallOrigins): string {
+  const scriptUrl = new URL("/install.sh", webOrigin).href;
+  const packageEnv = new URL(webOrigin).origin === new URL(hubOrigin).origin
+    ? "" : `MAPR_PKG_URL=${shellQuote(helperPackageUrl(webOrigin))} `;
+  return `curl -fsSL ${shellQuote(scriptUrl)} | ${packageEnv}sh -s -- --pair ${shellQuote(code)} --hub ${shellQuote(hubOrigin)}`;
+}
+
+export function powershellInstallCommand(code: string, { webOrigin, hubOrigin }: HelperInstallOrigins): string {
+  const quote = (text: string) => `'${text.replace(/'/gu, "''")}'`;
+  const scriptUrl = new URL("/install.ps1", webOrigin).href;
+  const run = `& ([scriptblock]::Create((irm ${quote(scriptUrl)} -UseBasicParsing))) -Pair ${quote(code)} -Hub ${quote(hubOrigin)}`;
+  if (new URL(webOrigin).origin === new URL(hubOrigin).origin) return run;
+  return `& { $previousPkg = $env:MAPR_PKG_URL; try { $env:MAPR_PKG_URL = ${quote(helperPackageUrl(webOrigin))}; ${run} } finally { $env:MAPR_PKG_URL = $previousPkg } }`;
+}
+
+export type PairingCode = { code: string; expires_at: string };
+
+export function pairingCountdown(seconds: number): string {
+  return `有效期剩余 ${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
+}
+
+export const PAIRING_EXPIRED = "当前配对码已过期，请重新生成";
 
 // ── Hub（需要人类登录态，走 apiFetch 统一带令牌与请求编号） ──
 
@@ -263,13 +294,15 @@ async function readHubJson(res: Response, fallback: string): Promise<unknown> {
 }
 
 /** POST /api/v1/helpers/pairing-codes：发一次性配对码（10 分钟，10 个上限）。 */
-export async function createPairingCode(): Promise<{ code: string; expires_at: string; install_command: string }> {
+export async function createPairingCode(): Promise<PairingCode> {
   const res = await apiFetch("/api/v1/helpers/pairing-codes", { method: "POST" });
-  return (await readHubJson(res, "生成配对码失败，请重试")) as {
-    code: string;
-    expires_at: string;
-    install_command: string;
-  };
+  const data = await readHubJson(res, "生成配对码失败，请重试");
+  if (!data || typeof data !== "object" || !("code" in data) || !("expires_at" in data)
+      || typeof data.code !== "string" || !/^mpc_[\w-]+\.[\w-]+$/u.test(data.code)
+      || typeof data.expires_at !== "string" || !Number.isFinite(Date.parse(data.expires_at))) {
+    throw new Error("配对码响应无效，请重试");
+  }
+  return { code: data.code, expires_at: data.expires_at };
 }
 
 /** GET /api/v1/helpers：我的本机助手设备列表（含已吊销）。 */
