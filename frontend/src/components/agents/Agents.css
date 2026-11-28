@@ -86,6 +86,18 @@
 .wb-pairing header p, .wb-device-list p, .wb-pairing__link, .wb-pairing__demo { font-size: 13px; color: var(--text-2); }
 .wb-pairing__link { color: var(--text-link); }
 .wb-pairing__demo summary, .wb-local-install summary, .wb-connect-more summary { cursor: pointer; }
+.wb-pairing-status { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 9px 10px; border-radius: var(--r-md); background: var(--bg-subtle); font-size: 12.5px; color: var(--text-2); }
+.wb-pairing-status span + span { color: var(--text-1); }
+.wb-pairing-status .ui-button { margin-left: auto; min-height: 28px; }
+.wb-pairing-trouble { display: grid; gap: 10px; padding: 13px; border: 1px solid var(--border-2); border-radius: var(--r-lg); background: var(--bg-surface); }
+.wb-pairing-trouble h4 { font-size: 13.5px; font-weight: var(--fw-semibold); color: var(--text-1); }
+.wb-pairing-trouble p, .wb-pairing-trouble li { font-size: 12.5px; line-height: 19px; color: var(--text-2); }
+.wb-pairing-trouble ol { display: grid; gap: 9px; margin: 0; padding: 0; list-style: none; counter-reset: pairing-check; }
+.wb-pairing-trouble li { position: relative; display: grid; gap: 3px; padding-left: 28px; counter-increment: pairing-check; }
+.wb-pairing-trouble li::before { content: counter(pairing-check); position: absolute; left: 0; top: 0; width: 19px; height: 19px; border-radius: var(--r-full); background: var(--bg-muted); color: var(--text-1); display: grid; place-items: center; font-size: 11px; font-weight: var(--fw-semibold); }
+.wb-pairing-trouble strong { color: var(--text-1); font-weight: var(--fw-semibold); }
+.wb-pairing-trouble code { font-family: var(--font-mono); font-size: 11.5px; }
+.wb-pairing-trouble .ui-button { justify-self: start; margin-top: 3px; }
 .wb-desktop-notice { display: flex; gap: 12px; align-items: flex-start; margin-top: 20px; padding: 14px; background: var(--bg-surface); border-radius: var(--r-xl); border: 1px solid var(--border-1); }
 .wb-desktop-notice__icon { flex: none; display: grid; place-items: center; width: 40px; height: 40px; border-radius: var(--r-lg); color: var(--actor-local); background: var(--actor-local-bg); }
 .wb-desktop-notice h2 { font-size: 15px; font-weight: 600; }

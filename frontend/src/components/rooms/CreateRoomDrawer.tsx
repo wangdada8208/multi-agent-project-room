@@ -119,11 +119,6 @@ export function CreateRoomDrawer({ open, onClose, onCreated }: CreateRoomDrawerP
         ? await createRoomFromTemplate(selectedTplKey, trimmedName, overrides)
         : await createRoom(trimmedName, roomDesc.trim() || undefined);
 
-      try {
-        localStorage.setItem("mapr-onboarded", "1");
-      } catch {
-        // Ignore storage restrictions.
-      }
       track("room_create", created.id, {
         via: selectedTplKey ? "home_template_drawer" : "home_blank_drawer",
       });
