@@ -14,11 +14,14 @@
  * 令牌只在 "active" 时续约；续约失败不改判状态，旧令牌原样返回。
  * 任何返回值/错误都不带令牌、签名或响应原文。
  */
+import { explicitRevocation } from "../pairingCredentials.ts";
 
 export type CloudSeatState = "active" | "paused" | "removed" | "unknown";
 
 export interface CloudSeatCheck {
   state: CloudSeatState;
+  /** Credentials are safe to clear only after an explicit response from the seat API. */
+  confirmedRemoval?: true;
   /** Hub 回传的暂停/撤除时间戳（ISO 字符串），无则 null。 */
   pausedAt: string | null;
   removedAt: string | null;
@@ -78,7 +81,7 @@ export async function checkCloudSeat(
   const fetchImpl = options.fetchImpl ?? fetch;
   const timeoutMs = options.timeoutMs ?? REQUEST_TIMEOUT_MS;
   const seatPath = `/api/v1/agent-seats/${encodeURIComponent(options.seatId)}`;
-  const fail = (state: CloudSeatState, httpStatus: number): CloudSeatCheck => ({
+  const fail = (state: "removed" | "unknown" | "paused", httpStatus: number): CloudSeatCheck => ({
     state,
     pausedAt: null,
     removedAt: null,
@@ -88,7 +91,13 @@ export async function checkCloudSeat(
   });
 
   const res = await callSeatApi(base, "GET", seatPath, options.agentToken, fetchImpl, timeoutMs);
-  // fail-closed：403/404 一律按被撤处理——宁可误停，不可在被撤后继续跑。
+  const detail = res.body && typeof res.body === "object" && "detail" in res.body ? res.body.detail : null;
+  if (explicitRevocation(res.status, res.body) ||
+      (res.status === 403 && detail === "Agent account required") ||
+      (res.status === 404 && detail === "Seat not found")) {
+    return { ...fail("removed", res.status), confirmedRemoval: true };
+  }
+  // Preserve fail-closed on ambiguous 403/404 responses without deleting local credentials.
   if (res.status === 403 || res.status === 404) return fail("removed", res.status);
   if (res.status !== 200 || !res.body || typeof res.body !== "object") {
     return fail("unknown", res.status);
@@ -98,7 +107,7 @@ export async function checkCloudSeat(
   const pausedAt = typeof body.paused_at === "string" ? body.paused_at : null;
   const removedAt = typeof body.removed_at === "string" ? body.removed_at : null;
   if (removedAt || body.group_status === "removed") {
-    return { ...fail("removed", res.status), pausedAt, removedAt };
+    return { ...fail("removed", res.status), pausedAt, removedAt, confirmedRemoval: true };
   }
   if (pausedAt) {
     return { ...fail("paused", res.status), pausedAt };
@@ -108,6 +117,11 @@ export async function checkCloudSeat(
   let tokenRenewed = false;
   if (options.renewToken) {
     const renew = await callSeatApi(base, "POST", `${seatPath}/token`, options.agentToken, fetchImpl, timeoutMs);
+    if (explicitRevocation(renew.status, renew.body) ||
+        (renew.status === 409 && renew.body && typeof renew.body === "object" &&
+          "detail" in renew.body && renew.body.detail === "Seat removed")) {
+      return { ...fail("removed", renew.status), confirmedRemoval: true };
+    }
     const tok =
       renew.body && typeof renew.body === "object"
         ? (renew.body as Record<string, unknown>).agent_token
@@ -143,7 +157,7 @@ export function startCloudSeatPolling(
     intervalMs?: number;
     onToken?: (agentToken: string) => void;
     onPaused?: (paused: boolean) => void;
-    onRemoved?: () => void;
+    onRemoved?: (confirmed: boolean) => void | Promise<void>;
   }
 ): CloudSeatPoller {
   let stopped = false;
@@ -169,7 +183,7 @@ export function startCloudSeatPolling(
     if (res.state === "removed") {
       stopped = true;
       if (timer) clearInterval(timer);
-      options.onRemoved?.();
+      await options.onRemoved?.(res.confirmedRemoval === true);
       return;
     }
     if (res.state === "unknown") return;

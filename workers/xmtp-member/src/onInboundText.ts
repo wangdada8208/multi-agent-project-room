@@ -3,10 +3,13 @@ import { ingest, type LocalLoopState } from "./localLoop.ts";
 import { filterOutbound } from "./outboundFilter.ts";
 import { buildOwnerNote, type OwnerNote, type OwnerNoteAction } from "./ownerNote.ts";
 import { teamConfigPromptBlock } from "./rulesEngine.ts";
+import { trustFrame, type MessageSource } from "./trustFrame.ts";
 
 export interface OnInboundTextInput {
   state: LocalLoopState;
   text: string;
+  source?: MessageSource;
+  verifiedOwner?: string;
   /** 发送者是不是房里的另一个席位 Agent（连环护栏依据；未知按人类处理）。 */
   senderIsAgent?: boolean;
   peerNames?: string[];
@@ -47,7 +50,9 @@ export async function onInboundText(input: OnInboundTextInput): Promise<LocalLoo
     const rawReply = await composeReply({
       shouldReply: true,
       selfName: input.state.selfName,
-      inbound: input.text,
+      inbound: trustFrame(input.text, input.source ?? {
+        sender: "", role: "unknown", roomId: "", sentAt: "",
+      }, input.verifiedOwner),
       complete,
     });
 

@@ -2,6 +2,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { chmod, mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { EngineConfig } from "../engines/types.ts";
+import { memberAccess, type MemberAccess } from "../capabilities.ts";
 import type { HelperConfig, LocalAgent, SeatRecord, SeatStatus, SeatView } from "./types.ts";
 
 export const SEAT_PORT_BASE = 8791;
@@ -114,7 +115,8 @@ export function seatEnv(
   engine: EngineConfig,
   helper: Pick<HelperConfig, "hubOrigin">,
   paths: { dbDir: string; statePath: string },
-  xmtpEnv: string
+  xmtpEnv: string,
+  access?: MemberAccess,
 ): NodeJS.ProcessEnv {
   const env: Record<string, string> = {};
   for (const key of ["PATH", "HOME", "LANG"] as const) {
@@ -137,6 +139,14 @@ export function seatEnv(
   env.HUB_ROOM_ID = seat.roomId;
   env.HUB_TOKEN = seat.agentToken;
   env.MAPR_HELPER_SEAT_ID = seat.seatId;
+  env.MAPR_ROOM_NAME = seat.roomName;
+  if (seat.ownerXmtpAddress) env.MAPR_OWNER_XMTP_ADDRESS = seat.ownerXmtpAddress;
+  const mode = seat.responseMode ?? access?.mode;
+  if (mode) {
+    const selected = memberAccess([...access?.caps ?? []].join(","), mode);
+    env.MAPR_CAPS = [...selected.caps].join(",");
+    env.MAPR_RESPONSE_MODE = selected.mode;
+  }
   env.OWNER_NOTES_PORT = String(seat.consolePort);
   env.MEMBER_AGENT_KIND = engine.kind;
   env.MEMBER_AGENT_TIMEOUT_MS = String(engine.timeoutMs);
@@ -199,6 +209,7 @@ export interface SupervisorDeps {
   rootDir: string;
   /** 传给席位子进程的 XMTP_ENV（dev / production 等）。 */
   xmtpEnv: string;
+  access?: MemberAccess;
   /** 测试注入点：自定义退避间隔（毫秒）。默认 2s/4s/8s… 封顶 60s。 */
   restartDelayMs?: (consecutiveFailures: number) => number;
 }
@@ -334,7 +345,7 @@ export function createSeatSupervisor(deps: SupervisorDeps): SeatSupervisor {
     for (const dir of [paths.dbDir, path.dirname(paths.statePath), paths.sandboxDir]) {
       await mkdir(dir, { recursive: true, mode: 0o700 });
     }
-    const env = seatEnv(seat, agent, engine, helper, paths, deps.xmtpEnv);
+    const env = seatEnv(seat, agent, engine, helper, paths, deps.xmtpEnv, deps.access);
     const child = spawn(process.execPath, ["--experimental-strip-types", deps.memberEntry], {
       env,
       cwd: paths.seatDir,

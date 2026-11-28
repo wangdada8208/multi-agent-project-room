@@ -1,6 +1,7 @@
 import { consentTtl } from "./consentActions.ts";
 import type { ConsentQueue } from "./consentQueue.ts";
 import { validateActionParams } from "./connectors/actionSchemas.ts";
+import type { MessageSource } from "./trustFrame.ts";
 import { buildVerdictPrompt, nextStep, parseVerdict } from "./coordinator.ts";
 import {
   encodeEnvelope,
@@ -109,7 +110,7 @@ async function settleResponse(
 }
 
 export async function handleEnvelope(
-  input: { envelope: Envelope; sender: string; conversationId: string },
+  input: { envelope: Envelope; sender: string; conversationId: string; source?: MessageSource; verifiedOwner?: string },
   deps: HandleEnvelopeDeps
 ): Promise<HandleOutcome> {
   const self = deps.selfAddress.toLowerCase();
@@ -468,6 +469,8 @@ export async function handleEnvelope(
     if (deps.completeModel) {
       const prompt = buildTaskPrompt(env, {
         teamConfigMarkdown: deps.hubRoomSettings?.()?.teamConfigMarkdown,
+        source: input.source,
+        verifiedOwner: input.verifiedOwner,
       });
       const modelText = await deps.completeModel(prompt);
       const res = buildResult(env, modelText, sender);
@@ -488,6 +491,7 @@ export async function handleEnvelope(
       const settings = deps.hubRoomSettings?.() ?? null;
       const prompt = buildVerdictPrompt(record.task, env, {
         teamConfigMarkdown: settings?.teamConfigMarkdown,
+        source: input.source,
       });
       const modelText = await deps.completeModel(prompt);
       let outcome = parseVerdict(modelText);

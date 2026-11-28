@@ -80,6 +80,8 @@ export interface SeatRecord {
   xmtpAddress: string;
   xmtpGroupId: string | null;
   allowedSenders: string[];
+  ownerXmtpAddress?: string;
+  responseMode?: "active" | "watch";
   agentToken: string;
   consolePort: number;
   createdAt: string;

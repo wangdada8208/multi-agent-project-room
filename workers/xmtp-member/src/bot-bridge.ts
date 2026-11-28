@@ -12,6 +12,7 @@ import { generatePrivateKey, privateKeyToAccount, type LocalAccount } from "viem
 import { startCloudSeatPolling, type CloudSeatPoller } from "./helper/cloudSeat.ts";
 import { joinHubCall, parseInviteInput, signedProof } from "./inviteRegistration.ts";
 import { writeJsonSecure } from "./secureFile.ts";
+import { trustFrame } from "./trustFrame.ts";
 
 const DEFAULT_HUB = "https://hub.wangdada8208.xyz";
 const DEFAULT_STATE_DIR = path.join(os.homedir(), ".mapr-bot");
@@ -287,7 +288,7 @@ async function registerInvite(
 interface BridgeTextEvent {
   conversation?: { id?: string };
   getSenderAddress?: () => Promise<string | undefined>;
-  message?: { content?: unknown };
+  message?: { content?: unknown; sentAt?: Date };
 }
 
 interface BridgeAgent {
@@ -519,10 +520,11 @@ export async function runBridge(args: BridgeArgs, io: BridgeIO = consoleIO, deps
         const content = ctx.message?.content;
         const text = typeof content === "string" ? content : jsonObject(content).text;
         if (typeof text !== "string" || !text.trim()) return;
-        const ts = new Date().toISOString();
-        await appendFile(inboundFile, formatInboundLine(sender, text, ts) + "\n", { mode: 0o600 });
+        const ts = (ctx.message?.sentAt ?? new Date()).toISOString();
+        const frame = trustFrame(text, { sender, role: "unknown", roomId: seat?.room_id || roomGroup, sentAt: ts });
+        await appendFile(inboundFile, formatInboundLine(sender, frame, ts) + "\n", { mode: 0o600 });
         if (active.aborted || signal.aborted) return;
-        io.stdout(`<<< ${sender}: ${text}`);
+        io.stdout(`<<< ${sender}: ${frame}`);
         if (args.wakeUrl) {
           const headers = new Headers({ "Content-Type": "application/json" });
           try {
@@ -535,7 +537,7 @@ export async function runBridge(args: BridgeArgs, io: BridgeIO = consoleIO, deps
               headers,
               body: JSON.stringify({
                 event: "mapr.message", name: args.name, room_group_id: roomGroup,
-                sender, text, ts, inbound_file: inboundFile, outbox_dir: outboxDir,
+                sender, text: frame, ts, inbound_file: inboundFile, outbox_dir: outboxDir,
               }),
               redirect: "error",
               signal: AbortSignal.any([active, signal, AbortSignal.timeout(deps.wakeTimeoutMs ?? WAKE_TIMEOUT_MS)]),
@@ -547,7 +549,7 @@ export async function runBridge(args: BridgeArgs, io: BridgeIO = consoleIO, deps
           }
         }
         if (args.exec && !active.aborted && !signal.aborted) {
-          const reply = await execReply(args.exec, text, sender, AbortSignal.any([active, signal]), args.wakeKeyEnv);
+          const reply = await execReply(args.exec, frame, sender, AbortSignal.any([active, signal]), args.wakeKeyEnv);
           if (reply) await send(reply, active);
         }
       } catch {

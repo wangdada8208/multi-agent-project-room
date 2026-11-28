@@ -12,7 +12,7 @@ import { writeJsonSecure } from "../secureFile.ts";
 import { createSeatStore, type SeatStore, type SeatSupervisor } from "./seats.ts";
 import { HelperHttpError } from "./server.ts";
 import type { HelperConfig, SeatRecord } from "./types.ts";
-import type { HubClient } from "./hubClient.ts";
+import { createHubClient, type HubClient } from "./hubClient.ts";
 import { createHelperRuntime, parseUpArgs, restoreSeats } from "./up.ts";
 
 async function withTmp(fn: (dir: string) => Promise<void>): Promise<void> {
@@ -540,6 +540,37 @@ test("heartbeat：seats_to_stop 仍是物理删除，与 pause 语义严格分�
     assert.equal(await rt.store.get("seat-1"), null);
     await assert.rejects(() => stat(path.join(rootDir, "seats", "seat-1")));
     await assert.rejects(() => stat(ledgerFile), { code: "ENOENT" });
+  });
+});
+
+test("heartbeat retries a disconnect and clears only paired data on a confirmed invalidation", async () => {
+  await withTmp(async (rootDir) => {
+    await writePairedConfig(rootDir);
+    await writeFile(path.join(rootDir, "unrelated"), "keep");
+    const store = createSeatStore(rootDir);
+    await store.save(seatFixture("seat-1"));
+    const sup = fakeSup(store);
+    let calls = 0;
+    const runtime = await createHelperRuntime({
+      hubOrigin: "https://hub.example",
+      rootDir,
+      detectDeps: EMPTY_DETECT,
+      supervisor: sup.supervisor,
+      hubClientFactory: (origin, token) => createHubClient(origin, token, async () => {
+        calls++;
+        if (calls === 1) throw new Error("disconnected");
+        return Response.json({ detail: "Helper token invalid" }, { status: 401 });
+      }),
+    });
+    await runtime.heartbeat();
+    assert.ok((await store.get("seat-1"))?.agentToken);
+    assert.ok(runtime.deps.config()?.helperToken);
+    await Promise.all([runtime.heartbeat(), runtime.heartbeat()]);
+    assert.equal(await store.get("seat-1"), null);
+    assert.equal(runtime.deps.config()?.helperToken, "");
+    assert.equal(await readFile(path.join(rootDir, "unrelated"), "utf8"), "keep");
+    await runtime.heartbeat();
+    assert.equal(calls, 2);
   });
 });
 

@@ -1,5 +1,6 @@
 import { projectHubActivityEvent, projectHubCheckpoint, type SignedLedgerCheckpoint } from "../activity.ts";
 import type { HubActivityIngestResult, HubSafeActivityEvent } from "../hubContracts.generated.ts";
+import { explicitRevocation } from "../pairingCredentials.ts";
 import type {
   CreateSeatRequest,
   HeartbeatResponse,
@@ -17,9 +18,11 @@ import type {
  */
 export class HubError extends Error {
   readonly status: number;
-  constructor(status: number, message: string) {
+  readonly revoked: boolean;
+  constructor(status: number, message: string, revoked = false) {
     super(message);
     this.status = status;
+    this.revoked = revoked;
   }
 }
 
@@ -67,6 +70,7 @@ export function createHubClient(hubOrigin: string, helperToken: string | null, f
         headers,
         body: body === undefined ? undefined : JSON.stringify(body),
         signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+        redirect: "error",
       });
     } catch {
       // 网络层错误统一收敛成 HubError(0)，不把底层异常文本（可能含 URL/代理细节）带出去。
@@ -74,7 +78,10 @@ export function createHubClient(hubOrigin: string, helperToken: string | null, f
     }
     if (!res.ok) {
       // 只带状态码与路径：响应原文可能照抄请求内容（422），令牌与票据不外泄。
-      throw new HubError(res.status, `hub request failed: ${method} ${apiPath} -> ${res.status}`);
+      const revoked = apiPath === "/api/v1/helpers/me/heartbeat" &&
+        (res.status === 401 || res.status === 403) &&
+        explicitRevocation(res.status, await res.json().catch(() => null));
+      throw new HubError(res.status, `hub request failed: ${method} ${apiPath} -> ${res.status}`, revoked);
     }
     if (res.status === 204) return undefined as T;
     try {
