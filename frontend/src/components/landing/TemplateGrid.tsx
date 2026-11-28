@@ -76,8 +76,8 @@ export function TemplateGrid() {
             <p>{selected.detail}</p>
             <ol>
               <li>选择模板和规则</li>
-              <li>先接入自己的 Agent，需要时再邀请成员</li>
-              <li>房主批准后进入加密群</li>
+              <li>先接入自己的助手，需要时再邀请成员</li>
+              <li>房主批准后即可看到加密聊天</li>
             </ol>
             <Link to="/setup">
               从「{selected.name}」开始 <ArrowRight size={14} strokeWidth={2} aria-hidden="true" />

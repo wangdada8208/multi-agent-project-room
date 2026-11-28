@@ -1,13 +1,17 @@
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { Bot, Code, Folder, Hand, Infinity, LayoutGrid, Lightbulb, LogOut, Plus, Scale, SlidersHorizontal, User, Workflow } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { useCallback, useState, type ReactNode } from "react";
 import { Link, NavLink } from "react-router-dom";
 import { fetchRooms } from "../../lib/api";
 import { roomTemplateKey } from "../../lib/roomTemplate";
 import { redemptionsKey } from "../../hooks/room/usePendingRequests";
 import { listRoomRedemptions } from "../../lib/localHelper";
 import { getThemePreference, setThemePreference, type ThemePreference } from "../../lib/theme";
+import { useGlobalShortcuts } from "../../hooks/useGlobalShortcuts";
 import { useAuthStore } from "../../stores/authStore";
+import { useWorkspaceUiStore } from "../../stores/workspaceUiStore";
+import { CommandPalette, ShortcutHelp } from "../CommandPalette";
+import { CreateRoomDrawer } from "../rooms/CreateRoomDrawer";
 import { Avatar } from "../ui/Avatar";
 import "./AppShell.css";
 
@@ -32,7 +36,45 @@ export function AppShell({ children, roomId, pending }: { children: ReactNode; r
   const count = [...byRoom.values()].reduce((total, item) => total + item, 0);
   const pendingRoom = [...byRoom].find(([, value]) => value > 0)?.[0] ?? roomId;
   const [theme, setTheme] = useState(getThemePreference);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const createRoomOpen = useWorkspaceUiStore((state) => state.createRoomOpen);
+  const openCreateRoom = useWorkspaceUiStore((state) => state.openCreateRoom);
+  const closeCreateRoom = useWorkspaceUiStore((state) => state.closeCreateRoom);
   const name = user?.display_name || user?.username || "我的账号";
+
+  const focusRoomSearch = useCallback(() => {
+    const input = document.querySelector<HTMLInputElement>("[data-shortcut-room-search]");
+    if (input) {
+      input.focus();
+      input.select();
+      return;
+    }
+    setPaletteOpen(true);
+  }, []);
+
+  const closeTopLayer = useCallback(() => {
+    if (paletteOpen) {
+      setPaletteOpen(false);
+      return true;
+    }
+    if (shortcutsOpen) {
+      setShortcutsOpen(false);
+      return true;
+    }
+    return false;
+  }, [paletteOpen, shortcutsOpen]);
+
+  useGlobalShortcuts({
+    toggleCommandPalette: () => setPaletteOpen((open) => !open),
+    focusRoomSearch,
+    openCreateRoom,
+    closeTopLayer,
+    showShortcutHelp: () => {
+      setPaletteOpen(false);
+      setShortcutsOpen(true);
+    },
+  });
 
   const account = (mobile: boolean) => (
     <details className={mobile ? "app-account app-account--mobile" : "app-account"}>
@@ -62,7 +104,7 @@ export function AppShell({ children, roomId, pending }: { children: ReactNode; r
         </Link>
         <nav className="app-rail__nav" aria-label="主导航">
           <NavLink to="/home" title="房间"><LayoutGrid size={17} /><span>房间</span></NavLink>
-          <NavLink to="/agents" title="接入 Agent"><Bot size={17} /><span>接入 Agent</span></NavLink>
+          <NavLink to="/agents" title="接入助手"><Bot size={17} /><span>接入助手</span></NavLink>
           <Link to={pendingRoom ? `/rooms/${encodeURIComponent(pendingRoom)}?panel=members` : "/home"} title="待审批">
             <Hand size={17} /><span>待审批</span>{count > 0 && <b className="workbench-count">{count}</b>}
           </Link>
@@ -80,9 +122,22 @@ export function AppShell({ children, roomId, pending }: { children: ReactNode; r
         {account(false)}
       </aside>
       <main className="app-shell__main">{children}</main>
+      <CommandPalette
+        open={paletteOpen}
+        rooms={rooms}
+        pendingRoomId={pendingRoom}
+        onClose={() => setPaletteOpen(false)}
+        onCreateRoom={openCreateRoom}
+        onShowShortcuts={() => {
+          setPaletteOpen(false);
+          setShortcutsOpen(true);
+        }}
+      />
+      <ShortcutHelp open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
+      <CreateRoomDrawer open={createRoomOpen} onClose={closeCreateRoom} />
       {!roomId && <nav className="app-mobile-tabs" aria-label="主导航">
         <NavLink to="/home"><LayoutGrid size={20} />房间{count > 0 && <span className="workbench-count">{count}</span>}</NavLink>
-        <NavLink to="/agents"><Bot size={20} />接入 Agent</NavLink>
+        <NavLink to="/agents"><Bot size={20} />接入助手</NavLink>
         {account(true)}
       </nav>}
     </div>

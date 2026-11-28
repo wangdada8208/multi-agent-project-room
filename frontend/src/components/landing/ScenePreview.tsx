@@ -40,8 +40,8 @@ const SCENARIOS: Record<ScenarioKey, ScenarioContent> = {
     label: "单人工作台",
     caption: "一个人 1 分钟开干",
     roomTitle: "个人发布冲刺",
-    roomMeta: "1 位主人 · 3 个 Agent · XMTP 群已绑定",
-    systemLine: "你的 3 个 Agent 已就位 · 密钥留在本机",
+    roomMeta: "1 位主人 · 3 个助手 · 端到端加密已开启",
+    systemLine: "你的 3 个助手已就位 · 密钥留在本机",
     rooms: [
       { name: "个人发布冲刺", meta: "Claude Code · Codex", active: true },
       { name: "周报与材料整理", meta: "Gemini CLI", active: false },
@@ -50,24 +50,24 @@ const SCENARIOS: Record<ScenarioKey, ScenarioContent> = {
     ],
     members: [
       { actor: "me", name: "王达", state: "房主", online: true },
-      { actor: "local", name: "Claude Code", state: "本机沙箱", online: true },
-      { actor: "local", name: "Codex", state: "本机沙箱", online: true },
-      { actor: "local", name: "Gemini CLI", state: "本机沙箱", online: true },
+      { actor: "local", name: "Claude Code", state: "在这台电脑上运行", online: true },
+      { actor: "local", name: "Codex", state: "在这台电脑上运行", online: true },
+      { actor: "local", name: "Gemini CLI", state: "在这台电脑上运行", online: true },
       { actor: "cloud", name: "Grok Bot", state: "云端在线", online: true },
     ],
     cliLines: [
       "$ mapr agents pair --room release-sprint",
-      "✓ Claude Code 已在本机沙箱中就绪",
+      "✓ Claude Code 已准备就绪",
       "✓ Codex 已加入你的加密房间",
-      "› 1 位主人 · 3 个 Agent 正在分工",
+      "› 1 位主人 · 3 个助手正在分工",
     ],
-    memberNote: "一个人的多个 Agent 也在同一个加密房间里分工。",
+    memberNote: "一个人的多个助手也在同一个加密房间里分工。",
   },
   team: {
     label: "团队项目房",
     caption: "发链接随时拉人",
     roomTitle: "支付回调评审",
-    roomMeta: "4 位成员 · XMTP 群已绑定",
+    roomMeta: "4 位成员 · 端到端加密已开启",
     systemLine: "林溪 的 Codex 已加入 · 房主已批准",
     rooms: [
       { name: "支付回调评审", meta: "Claude Code · Codex", active: true },
@@ -84,11 +84,11 @@ const SCENARIOS: Record<ScenarioKey, ScenarioContent> = {
     ],
     cliLines: [
       "$ mapr agents pair --room payment-review",
-      "✓ Claude Code 已在本机沙箱中就绪",
-      "✓ Codex 已申请加入加密群",
+      "✓ Claude Code 已准备就绪",
+      "✓ Codex 已申请加入房间",
       "› 等待房主批准 Muse 入房…",
     ],
-    memberNote: "私密代码留在本机，密文不进 Hub 日志。",
+    memberNote: "私密代码留在本机，平台看不到聊天内容。",
   },
 };
 
@@ -121,15 +121,15 @@ function SoloMessages() {
       <div className="lp-msg">
         <Avatar actor="local" name="Claude Code" size="sm" />
         <div>
-          <div className="lp-msg__head"><span className="lp-msg__name">Claude Code</span><Tag>电脑端 · 本机沙箱</Tag><span className="lp-msg__time">21:06</span></div>
-          <div className="lp-msg__body">已在沙箱跑完回归。问题出在验证码输入框没有清空旧状态，我会先补测试再改。</div>
+          <div className="lp-msg__head"><span className="lp-msg__name">Claude Code</span><Tag>电脑端 · 在你的电脑上运行</Tag><span className="lp-msg__time">21:06</span></div>
+          <div className="lp-msg__body">已在电脑保护环境里跑完回归。问题出在验证码输入框没有清空旧状态，我会先补测试再改。</div>
         </div>
       </div>
 
       <div className="lp-msg">
         <Avatar actor="local" name="Codex" size="sm" />
         <div>
-          <div className="lp-msg__head"><span className="lp-msg__name">Codex</span><Tag>电脑端 · 本机沙箱</Tag><span className="lp-msg__time">21:07</span></div>
+          <div className="lp-msg__head"><span className="lp-msg__name">Codex</span><Tag>电脑端 · 在你的电脑上运行</Tag><span className="lp-msg__time">21:07</span></div>
           <div className="lp-msg__body">diff 里还有一处重复分支。你先补回归，我同步检查是否影响移动端。</div>
         </div>
       </div>
@@ -164,7 +164,7 @@ function TeamMessages() {
       <div className="lp-msg">
         <Avatar actor="cloud" name="Grok Bot" size="sm" />
         <div>
-          <div className="lp-msg__head"><span className="lp-msg__name">Grok Bot</span><Tag>云端 Agent</Tag><span className="lp-msg__time">10:07</span></div>
+          <div className="lp-msg__head"><span className="lp-msg__name">Grok Bot</span><Tag>云端助手</Tag><span className="lp-msg__time">10:07</span></div>
           <div className="lp-msg__body">Stripe 失败重试最长持续 3 天。先返回 2xx 再异步处理，过期时间设 72 小时刚好覆盖。</div>
         </div>
       </div>
@@ -238,7 +238,7 @@ export function ScenePreview() {
                     <Avatar actor="human" name="团队" size="sm" />
                     <div className="lp-banner__txt">
                       <strong>随时变成团队房</strong>
-                      <small>发一条邀请链接，同事和他们的 Agent 就能加入</small>
+                      <small>发一条邀请链接，同事和他们的助手就能加入</small>
                     </div>
                     <Tag>邀请链接</Tag>
                   </div>
@@ -249,7 +249,7 @@ export function ScenePreview() {
                       {museApproved ? (
                         <><strong>Muse 已加入房间</strong><small>可以在消息里 @Muse 了</small></>
                       ) : (
-                        <><strong>Muse</strong> 申请加入房间<small>云端 Agent · 邀请链接</small></>
+                        <><strong>Muse</strong> 申请加入房间<small>云端助手 · 邀请链接</small></>
                       )}
                     </div>
                     {museApproved ? (
@@ -261,7 +261,7 @@ export function ScenePreview() {
                 )}
                 <div className="lp-composer-box" aria-hidden="true">
                   <AtSign size={13} strokeWidth={1.9} />
-                  <span>发消息，输入 @ 召唤 Agent…</span>
+                  <span>发消息，输入 @ 呼叫助手…</span>
                   <span className="lp-composer-box__send"><ArrowUp size={13} strokeWidth={2.2} /></span>
                 </div>
               </div>

@@ -9,34 +9,34 @@ export const AGENT_PROMPT_CLIENTS = [
   {
     id: "claude-code",
     label: "Claude Code",
-    access: "本机终端 / 本地 MCP 接入",
+    access: "在你的电脑上运行",
     promptFile: "claude-code.md",
     installCommand: "npm install -g @anthropic-ai/claude-code && claude",
   },
   {
     id: "codex",
     label: "Codex",
-    access: "本机终端 / 本地 MCP 接入",
+    access: "在你的电脑上运行",
     promptFile: "codex.md",
     installCommand: "npm install -g @openai/codex && codex",
   },
   {
     id: "gemini-cli",
     label: "Gemini CLI",
-    access: "本机终端 / 本地 MCP 接入",
+    access: "在你的电脑上运行",
     promptFile: "gemini-cli.md",
     installCommand: "npm install -g @google/gemini-cli && gemini",
   },
   {
     id: "mcp-local",
-    label: "Claude Desktop / 通用 MCP 客户端",
-    access: "通过本地助手 MCP 桥接",
+    label: "Claude 桌面版 / 其他桌面助手",
+    access: "在你的电脑上运行",
     promptFile: "mcp-local.md",
   },
   {
     id: "cloud-webhook",
-    label: "Grok Bot / 云端 Webhook",
-    access: "云端自定义接口接入",
+    label: "Grok Bot / 云端助手",
+    access: "手机和网页直接用",
     promptFile: "cloud-webhook.md",
   },
 ] as const;
@@ -107,7 +107,7 @@ export function buildAgentPrompt(context: AgentPromptContext): string {
       : "在电脑上检查本机助手 http://127.0.0.1:8790/api/hello；未安装或未配对时，把备用安装/配对命令交给人类。";
   const pairLine = cloud ? "" : context.localPaired
     ? "\n- 本机助手已配对，可直接加入目标房间"
-    : `\n- 配对码：${pair || "<未提供。若本机助手未配对，请让人类在 Parlor 的「接入 Agent」页生成一次性配对码>"}`;
+    : `\n- 配对码：${pair || "<未提供。若本机助手未配对，请让人类在 Parlor 的「接入助手」页生成一次性配对码>"}`;
   const hubLine = webOrigin === origin ? "" : `\n- Hub API：${origin}`;
   const inviteLine = invite ? `\n- 邀请链接：${invite}` : "";
   const install = !cloud && pair && !context.localPaired ? `\n\n备用安装 / 配对命令：\n${buildFallbackCommand(context)}` : "";
@@ -136,7 +136,7 @@ export function buildFallbackCommand(context: AgentPromptContext): string {
   const pair = context.pairingCode?.trim() || "<配对码>";
 
   if (context.clientId === "cloud-webhook") {
-    const invite = context.inviteUrl?.trim() || "<邀请链接：在 Parlor 的「接入 Agent」页生成>";
+    const invite = context.inviteUrl?.trim() || "<邀请链接：在 Parlor 的「接入助手」页生成>";
     return [
       "# 云端桥接（在云端 Agent 的终端执行）",
       `curl -fsSL ${doubleQuote(helperPackageUrl(webOrigin))} -o /tmp/mapr.tar.gz`,
@@ -196,7 +196,7 @@ export function AgentPromptSetupPicker({
     <section className={`agent-prompt-setup${compact ? " agent-prompt-setup--compact" : ""}${mobile ? " agent-prompt-setup--mobile" : ""}`} aria-labelledby="agent-prompt-setup-title">
       <div className="agent-prompt-setup__head">
         <div>
-          <h2 id="agent-prompt-setup-title">选客户端，复制专属提示词</h2>
+          <h2 id="agent-prompt-setup-title">选助手，复制一段话发给它</h2>
         </div>
       </div>
 
@@ -220,23 +220,26 @@ export function AgentPromptSetupPicker({
         <div className="agent-prompt-setup__detail-head">
           <div>
             <strong>{selected.label}</strong>
-            <span>推荐方式：复制给 Agent 的专属提示词</span>
+            <span>复制这段话发给你的助手，它就会自己连进来</span>
           </div>
           {copyDisabled ? <Button size="sm" disabled>复制专属提示词</Button>
             : <CopyButton text={prompt} label="复制专属提示词" />}
         </div>
-        {mobile && !cloud && <p className="agent-prompt-setup__status">本机终端工具需在电脑上运行。可复制提示词发到电脑。</p>}
+        {mobile && !cloud && <p className="agent-prompt-setup__status">这个助手需要在电脑上运行。你可以先复制这段话，发到电脑上继续。</p>}
         {issued && !expired && <p className="agent-prompt-setup__status" role="timer">{pairingCountdown(issued.remainingSeconds)}</p>}
         {managedPairing && (expired || managedPairing.pairingError) && <div className="agent-prompt-setup__status">
           <p role="status">{expired ? PAIRING_EXPIRED : managedPairing.pairingError}</p>
           <Button size="sm" onClick={() => managedPairing.ensurePairing(true)}>重新生成配对码</Button>
         </div>}
         {managedPairing && !issued && !managedPairing.pairingError && <p className="agent-prompt-setup__status" role="status">正在准备配对码…</p>}
-        <pre className="agent-prompt-setup__prompt" data-testid="agent-prompt-preview">{prompt}</pre>
-        <div className="agent-prompt-setup__doclinks" aria-label="静态接入文档">
-          <a href={promptUrl} target="_blank" rel="noreferrer">客户端说明</a>
-          <a href={skillUrl} target="_blank" rel="noreferrer">安全与协议说明</a>
-        </div>
+        <details className="agent-prompt-setup__prompt-details">
+          <summary>查看要复制的完整说明（写给助手的技术内容）</summary>
+          <pre className="agent-prompt-setup__prompt" data-testid="agent-prompt-preview">{prompt}</pre>
+          <div className="agent-prompt-setup__doclinks" aria-label="静态接入文档">
+            <a href={promptUrl} target="_blank" rel="noreferrer">客户端说明</a>
+            <a href={skillUrl} target="_blank" rel="noreferrer">安全与协议说明</a>
+          </div>
+        </details>
         {(cloud || (!localPaired && !mobile)) && <details className="agent-prompt-setup__fallback" open={!compact}>
           <summary>{cloud ? "备用方式：云端桥接命令" : "备用方式：终端安装 / 配对命令"}</summary>
           {!copyDisabled && <pre>{fallbackCommand}</pre>}

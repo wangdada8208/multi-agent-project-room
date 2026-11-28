@@ -12,6 +12,7 @@ import {
   sendEmailCode,
 } from "../lib/api";
 import heroPainting from "../assets/paintings/hero-mist-valley.webp";
+import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { useAuthStore } from "../stores/authStore";
 import "./LoginPage.css";
 
@@ -183,6 +184,7 @@ function OtpCodeInput({
 }
 
 export function LoginPage() {
+  useDocumentTitle("登录 · Parlor");
   const [searchParams] = useSearchParams();
   const initialMode = searchParams.get("mode") === "register" ? "register" : "login";
   const nextPath = resolveSafeNext(searchParams.get("next"));

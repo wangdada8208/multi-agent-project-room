@@ -1,0 +1,92 @@
+.error-boundary {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: var(--s-6);
+  background: var(--bg-canvas);
+  color: var(--text-1);
+  font: var(--fs-body)/var(--lh-body) var(--font-sans);
+}
+.error-boundary__card {
+  width: min(100%, 520px);
+  display: grid;
+  gap: var(--s-4);
+  padding: var(--s-8);
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-2xl);
+  background: var(--bg-raised);
+  box-shadow: var(--sh-3);
+}
+.error-boundary__icon {
+  display: grid;
+  place-items: center;
+  width: var(--s-12);
+  height: var(--s-12);
+  border-radius: var(--r-lg);
+  background: var(--bg-subtle);
+  color: var(--text-1);
+}
+.error-boundary__card h1 {
+  font-size: var(--fs-h2);
+  line-height: var(--lh-h2);
+  letter-spacing: var(--tracking-display);
+}
+.error-boundary__card p {
+  color: var(--text-2);
+}
+.error-boundary__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+}
+.error-boundary__button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-2);
+  min-height: 38px;
+  padding-inline: var(--s-4);
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-md);
+  background: var(--bg-surface);
+  color: var(--text-1);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  text-decoration: none;
+  cursor: pointer;
+}
+.error-boundary__button--primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-fg);
+}
+.error-boundary__button:hover {
+  background: var(--bg-subtle);
+}
+.error-boundary__button--primary:hover {
+  background: var(--accent-hover);
+}
+.error-boundary__button:focus-visible,
+.error-boundary__details summary:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+.error-boundary__details {
+  color: var(--text-2);
+  font-size: var(--fs-sm);
+}
+.error-boundary__details summary {
+  cursor: pointer;
+  border-radius: var(--r-sm);
+}
+.error-boundary__details pre {
+  max-height: 180px;
+  overflow: auto;
+  margin-top: var(--s-2);
+  padding: var(--s-3);
+  border-radius: var(--r-md);
+  background: var(--bg-subtle);
+  color: var(--text-2);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

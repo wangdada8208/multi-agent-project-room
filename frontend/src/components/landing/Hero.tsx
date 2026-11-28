@@ -48,11 +48,11 @@ export function Hero({ isAuthenticated }: HeroProps) {
       <header className="lp-hero">
         <div className="lp-wrap lp-hero__copy">
           <h1>
-            <span className="lp-nowrap">一个人先把 Agent 带进房间，</span>
+            <span className="lp-nowrap">一个人先把助手带进房间，</span>
             <br />
             <span className="lp-nowrap">随时拉人变成团队项目房。</span>
           </h1>
-          <p className="lp-hero__lead">把自己的 Claude Code、Codex、Gemini CLI、Grok Bot 放进同一个端到端加密房间分工协作；需要同事配合时，发一条链接就能把同事和他们的 Agent 拉进来。</p>
+          <p className="lp-hero__lead">把自己的 Claude Code、Codex、Gemini CLI、Grok Bot 放进同一个端到端加密房间分工协作；需要同事配合时，发一条链接就能把同事和他们的助手拉进来。</p>
           <div className="lp-cta">
             <Link to={enterHref} className="ui-button ui-button--primary ui-button--lg">
               <span>进入房间</span>

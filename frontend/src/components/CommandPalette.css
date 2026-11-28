@@ -1,0 +1,176 @@
+.command-palette-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  display: grid;
+  align-items: start;
+  justify-items: center;
+  padding: calc(var(--s-16) + var(--safe-top)) var(--s-4) var(--s-4);
+  background: var(--bg-overlay);
+}
+.command-palette,
+.shortcut-help {
+  width: min(100%, 560px);
+  overflow: hidden;
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-xl);
+  background: var(--bg-raised);
+  color: var(--text-1);
+  box-shadow: var(--sh-pop);
+  font: var(--fs-body)/var(--lh-body) var(--font-sans);
+}
+.command-palette__search {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-height: 52px;
+  padding-inline: var(--s-4) var(--s-2);
+  border-bottom: 1px solid var(--border-1);
+  color: var(--text-2);
+}
+.command-palette__search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text-1);
+  font: var(--fs-lg)/var(--lh-lg) var(--font-sans);
+}
+.command-palette__search input::placeholder {
+  color: var(--text-3);
+}
+.command-palette__search button,
+.shortcut-help header button {
+  display: grid;
+  place-items: center;
+  width: var(--s-8);
+  height: var(--s-8);
+  border: 0;
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+}
+.command-palette__search button:hover,
+.shortcut-help header button:hover {
+  background: var(--bg-hover);
+  color: var(--text-1);
+}
+.command-palette__list {
+  max-height: min(420px, calc(100dvh - 180px));
+  overflow: auto;
+  padding: var(--s-2);
+}
+.command-palette__item {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  width: 100%;
+  min-height: 48px;
+  padding: var(--s-2) var(--s-3);
+  border: 0;
+  border-radius: var(--r-lg);
+  background: transparent;
+  color: var(--text-1);
+  text-align: left;
+  cursor: pointer;
+}
+.command-palette__item--active {
+  background: var(--bg-muted);
+}
+.command-palette__icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: var(--s-8);
+  height: var(--s-8);
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-md);
+  background: var(--bg-surface);
+  color: var(--text-2);
+}
+.command-palette__copy {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+}
+.command-palette__copy strong,
+.command-palette__copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.command-palette__copy strong {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+}
+.command-palette__copy small {
+  color: var(--text-3);
+  font-size: var(--fs-caption);
+}
+.command-palette kbd,
+.shortcut-help kbd {
+  padding: 2px 6px;
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-sm);
+  background: var(--bg-subtle);
+  color: var(--text-2);
+  font: var(--fs-caption)/var(--lh-caption) var(--font-mono);
+}
+.command-palette__empty {
+  padding: var(--s-6);
+  color: var(--text-2);
+  text-align: center;
+}
+.shortcut-help {
+  padding: var(--s-5);
+}
+.shortcut-help header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--s-4);
+  margin-bottom: var(--s-4);
+}
+.shortcut-help h2 {
+  font-size: var(--fs-h2);
+  line-height: var(--lh-h2);
+  letter-spacing: var(--tracking-display);
+}
+.shortcut-help header p,
+.shortcut-help__note {
+  color: var(--text-2);
+  font-size: var(--fs-sm);
+}
+.shortcut-help ul {
+  display: grid;
+  gap: var(--s-2);
+  list-style: none;
+}
+.shortcut-help li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-4);
+  padding: var(--s-3);
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-md);
+  background: var(--bg-surface);
+}
+.shortcut-help li span {
+  color: var(--text-1);
+}
+.shortcut-help__note {
+  margin-top: var(--s-4);
+}
+.command-palette button:focus-visible,
+.shortcut-help button:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+@media (max-width: 640px) {
+  .command-palette-backdrop {
+    padding-top: calc(var(--s-8) + var(--safe-top));
+  }
+}

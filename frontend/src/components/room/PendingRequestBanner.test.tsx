@@ -41,7 +41,7 @@ it("keeps the owner banner before the scroll region through approval, group sync
     act(() => click("批准入房"));
     expect(onDecide).toHaveBeenCalledWith(agent, true);
     render([human], "Muse");
-    expect(container.querySelector(".wb-pending--syncing")?.textContent).toContain("正在把 Muse 加入加密群");
+    expect(container.querySelector(".wb-pending--syncing")?.textContent).toContain("正在让 Muse 看到加密聊天");
     expect(container.querySelector(".wb-pending")?.nextElementSibling?.textContent).toBe("正文");
     render([human]);
     act(() => click("拒绝"));
