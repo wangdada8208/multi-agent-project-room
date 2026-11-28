@@ -7,6 +7,7 @@ import {
   HOUSE_RULE_DECISION_LABEL,
   parseTemplateRoles,
   SCOPE_LABELS,
+  type ParsedTemplateRole,
   type TemplateOverrideDraft,
 } from "./templateMeta";
 
@@ -16,6 +17,52 @@ export interface TemplateRulesPreviewProps {
   customizing: boolean;
   onToggleCustomizing: () => void;
   onChangeDraft: (updater: (prev: TemplateOverrideDraft) => TemplateOverrideDraft) => void;
+}
+
+function humanRoleName(name: string): string {
+  const cleaned = name
+    .replace(/\s*\([^)]*\)/gu, "")
+    .replace(/(?:\s+[A-Za-z][A-Za-z-]*)+$/u, "")
+    .trim();
+  return cleaned || name;
+}
+
+function sentence(value: string): string {
+  const cleaned = value.trim().replace(/\s*\bAgents?\b\s*/giu, "助手");
+  return /[。！？.!?]$/u.test(cleaned) ? cleaned : `${cleaned}。`;
+}
+
+function buildTemplateSummaries(
+  description: string | null | undefined,
+  roles: readonly ParsedTemplateRole[],
+  scopeEntries: readonly (readonly [string, HouseRuleDecision])[],
+  notes: readonly string[],
+  rounds: number | undefined,
+): string[] {
+  const summaries: string[] = [];
+  if (description?.trim()) {
+    summaries.push(sentence(description));
+  } else {
+    const roleNames = roles.map((role) => humanRoleName(role.name)).filter(Boolean).slice(0, 3);
+    if (roleNames.length === 1) summaries.push(`这个模板会安排${roleNames[0]}帮你处理房间事务。`);
+    if (roleNames.length > 1) summaries.push(`这个模板会安排${roleNames.join("、")}一起协作。`);
+  }
+
+  if (scopeEntries.some(([, decision]) => decision === "ask")) {
+    summaries.push("助手要查看或使用你的其他账号前，都会先问你。");
+  }
+
+  const gmailDecision = scopeEntries.find(([scope]) => scope === "gmail.send")?.[1];
+  if (gmailDecision === "cannot") summaries.push("不会替你对外发邮件。");
+  if (gmailDecision === "ask") summaries.push("要发邮件前，也必须先问你。");
+
+  if (summaries.length < 3 && notes.length > 0) {
+    summaries.push(`还附带 ${notes.length} 条房间建议，可在详情中查看。`);
+  }
+  if (summaries.length < 3 && rounds != null) {
+    summaries.push(`讨论最多进行 ${rounds} 轮，避免一直停不下来。`);
+  }
+  return summaries.slice(0, 3);
 }
 
 export function TemplateRulesPreview({
@@ -53,7 +100,9 @@ export function TemplateRulesPreview({
   const roles = parseTemplateRoles(activeDraft.team_config_markdown);
   const scopeEntries = Object.entries(activeDraft.house_rules.scopes);
   const notes = activeDraft.house_rules.notes;
-  const rounds = activeDraft.default_max_rounds ?? template.default_max_rounds;
+  const rounds = activeDraft.default_max_rounds ?? template.default_max_rounds ?? undefined;
+  const summaries = buildTemplateSummaries(template.description, roles, scopeEntries, notes, rounds);
+  const hasAdvancedDetails = roles.length > 0 || scopeEntries.length > 0 || notes.length > 0;
 
   return (
     <div className="wb-preview-box">
@@ -65,45 +114,64 @@ export function TemplateRulesPreview({
         </small>
       </header>
 
-      {roles.length > 0 && (
+      {summaries.length > 0 && (
         <section className="wb-preview-box__section">
-          <h5>分工</h5>
-          <div className="wb-preview-roles">
-            {roles.map((role) => (
-              <div key={role.name} className="wb-preview-role">
-                <strong>{role.name}</strong>
-                <span>{role.summary}</span>
-              </div>
+          <h5>这个模板会做什么</h5>
+          <ul className="wb-preview-summary">
+            {summaries.map((summary) => (
+              <li key={summary}>{summary}</li>
             ))}
-          </div>
+          </ul>
         </section>
       )}
 
-      {(scopeEntries.length > 0 || notes.length > 0) && (
+      {hasAdvancedDetails && (
         <section className="wb-preview-box__section">
-          <h5>Agent 行为规则</h5>
-          {scopeEntries.length > 0 && (
-            <div className="wb-preview-rules">
-              {scopeEntries.map(([scope, decision]) => (
-                <div key={scope} className="wb-preview-rule">
-                  <span className="wb-preview-rule__scope">
-                    {SCOPE_LABELS[scope] ?? scope}
-                    <code>{scope}</code>
-                  </span>
-                  <Tag tone={decision === "cannot" ? "warn" : "neutral"}>
-                    {HOUSE_RULE_DECISION_LABEL[decision] ?? decision}
-                  </Tag>
+          <details className="wb-preview-advanced">
+            <summary>查看完整分工和设置细节</summary>
+            <div className="wb-preview-advanced__body">
+              {roles.length > 0 && (
+                <div>
+                  <h5>分工</h5>
+                  <div className="wb-preview-roles">
+                    {roles.map((role) => (
+                      <div key={role.name} className="wb-preview-role">
+                        <strong>{role.name}</strong>
+                        <span>{role.summary}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              ))}
+              )}
+
+              {scopeEntries.length > 0 && (
+                <div>
+                  <h5>助手行为规则</h5>
+                  <div className="wb-preview-rules">
+                    {scopeEntries.map(([scope, decision]) => (
+                      <div key={scope} className="wb-preview-rule">
+                        <span className="wb-preview-rule__scope">
+                          <span className="wb-preview-rule__label">{SCOPE_LABELS[scope] ?? "自定义外部能力"}</span>
+                          <code>{scope}</code>
+                        </span>
+                        <Tag tone={decision === "cannot" ? "warn" : "neutral"}>
+                          {HOUSE_RULE_DECISION_LABEL[decision] ?? decision}
+                        </Tag>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {notes.length > 0 && (
+                <ul className="wb-preview-notes">
+                  {notes.map((note, idx) => (
+                    <li key={`${idx}-${note}`}>{note}</li>
+                  ))}
+                </ul>
+              )}
             </div>
-          )}
-          {notes.length > 0 && (
-            <ul className="wb-preview-notes">
-              {notes.map((note, idx) => (
-                <li key={`${idx}-${note}`}>{note}</li>
-              ))}
-            </ul>
-          )}
+          </details>
         </section>
       )}
 

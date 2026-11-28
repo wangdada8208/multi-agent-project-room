@@ -63,6 +63,11 @@ interface RuleScopeDraft {
   decision: HouseRuleDecision;
 }
 
+type GeneratedInviteLink = {
+  url: string;
+  copyState: "copied" | "manual";
+};
+
 function houseRulesFromDraft(scopes: RuleScopeDraft[], notes: string): HouseRules {
   const scopeMap: Record<string, HouseRuleDecision> = {};
   for (const row of scopes) {
@@ -140,7 +145,7 @@ export function PermissionsPanel({
   const [invRequiresApproval, setInvRequiresApproval] = useState(Boolean(section));
   const [invScopeChecks, setInvScopeChecks] = useState<string[]>([]);
   const [invCustomScope, setInvCustomScope] = useState("");
-  const [inviteLink, setInviteLink] = useState("");
+  const [generatedInvite, setGeneratedInvite] = useState<GeneratedInviteLink | null>(null);
   const [creatingLink, setCreatingLink] = useState(false);
   const [linkError, setLinkError] = useState("");
   const [invites, setInvites] = useState<RoomInviteView[]>([]);
@@ -373,7 +378,7 @@ export function PermissionsPanel({
   async function handleGenerateInviteLink() {
     setCreatingLink(true);
     setLinkError("");
-    setInviteLink("");
+    setGeneratedInvite(null);
     try {
       const { kept, dropped } = sanitizeScopes([
         ...invScopeChecks,
@@ -386,9 +391,17 @@ export function PermissionsPanel({
         role: inviteRole === "viewer" ? "viewer" : "member",
         proposed_scopes: kept,
       });
-      setInviteLink(
-        `${window.location.origin}/rooms/${roomId}?invite=${encodeURIComponent(invite.token)}`,
-      );
+      const url = `${window.location.origin}/rooms/${encodeURIComponent(roomId)}?invite=${encodeURIComponent(invite.token)}`;
+      let copyState: GeneratedInviteLink["copyState"] = "manual";
+      try {
+        if (typeof navigator !== "undefined" && navigator.clipboard) {
+          await navigator.clipboard.writeText(url);
+          copyState = "copied";
+        }
+      } catch {
+        copyState = "manual";
+      }
+      setGeneratedInvite({ url, copyState });
       if (dropped.length > 0) {
         setLinkError(`已忽略不支持的授权范围：${dropped.join("、")}`);
       }
@@ -508,77 +521,73 @@ export function PermissionsPanel({
         >
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <Shield size={14} strokeWidth={1.9} style={{ color: "var(--info)" }} />
-            <strong style={{ fontSize: 13, color: "var(--text-1)" }}>邀请成员进入加密群</strong>
+            <strong style={{ fontSize: 13, color: "var(--text-1)" }}>创建邀请链接</strong>
           </div>
           <p style={{ fontSize: 12, color: "var(--text-2)", lineHeight: 1.5 }}>
-            生成可复用的加密入群链接；受邀人登录并签名后可获得房间权限并加入加密群。
+            对方打开链接、登录后即可加入。
           </p>
 
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-            <label style={{ fontSize: 12, color: "var(--text-1)", display: "flex", alignItems: "center", gap: 4 }}>
-              可用次数
+          <div role="radiogroup" aria-label="受邀人角色" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text-1)" }}>受邀人可以做什么</span>
+            <label
+              style={{
+                display: "flex",
+                alignItems: "flex-start",
+                gap: 8,
+                padding: "8px 10px",
+                borderRadius: 9,
+                border: "1px solid var(--border-1)",
+                background: inviteRole === "member" ? "var(--bg-surface)" : "transparent",
+                cursor: "pointer",
+              }}
+            >
               <input
-                className="input"
-                type="number"
-                min={1}
-                max={32}
-                value={invMaxUses}
-                onChange={(e) => setInvMaxUses(Number(e.target.value))}
-                style={{ width: 64, fontSize: 12.5 }}
+                type="radio"
+                name={`invite-role-${roomId}`}
+                checked={inviteRole === "member"}
+                onChange={() => setInviteRole("member")}
               />
+              <span style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                <strong style={{ fontSize: 12.5, color: "var(--text-1)" }}>可以一起聊并带自己的助手</strong>
+                <small style={{ fontSize: 11.5, color: "var(--text-2)" }}>适合一起工作的成员</small>
+              </span>
             </label>
-            <label style={{ fontSize: 12, color: "var(--text-1)", display: "flex", alignItems: "center", gap: 4 }}>
+            <label
+              style={{
+                display: "flex",
+                alignItems: "flex-start",
+                gap: 8,
+                padding: "8px 10px",
+                borderRadius: 9,
+                border: "1px solid var(--border-1)",
+                background: inviteRole === "viewer" ? "var(--bg-surface)" : "transparent",
+                cursor: "pointer",
+              }}
+            >
               <input
-                type="checkbox"
-                checked={invRequiresApproval}
-                onChange={(e) => setInvRequiresApproval(e.target.checked)}
+                type="radio"
+                name={`invite-role-${roomId}`}
+                checked={inviteRole === "viewer"}
+                onChange={() => setInviteRole("viewer")}
               />
-              需房主批准
+              <span style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                <strong style={{ fontSize: 12.5, color: "var(--text-1)" }}>只能看</strong>
+                <small style={{ fontSize: 11.5, color: "var(--text-2)" }}>适合只需要阅读进度的人</small>
+              </span>
             </label>
-            <label style={{ fontSize: 12, color: "var(--text-1)", display: "flex", alignItems: "center", gap: 4 }}>
-              角色
-              <select
-                className="role-select"
-                value={inviteRole}
-                onChange={(e) => setInviteRole(e.target.value as typeof inviteRole)}
-              >
-                <option value="member">成员</option>
-                <option value="viewer">观察者</option>
-              </select>
-            </label>
+            <span style={{ fontSize: 11.5, color: "var(--text-3)", lineHeight: 1.45 }}>
+              只有房主可以管理房间；邀请链接不会交出管理权。
+            </span>
           </div>
 
-          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            <span style={{ fontSize: 12, color: "var(--text-2)" }}>
-              建议授权范围（仅元数据建议，不授予实际权限；本机规则才是权威）：
-            </span>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              {KNOWN_SCOPE_OPTIONS.map((scope) => (
-                <label
-                  key={scope}
-                  style={{ fontSize: 12, color: "var(--text-1)", display: "flex", alignItems: "center", gap: 3 }}
-                >
-                  <input
-                    type="checkbox"
-                    checked={invScopeChecks.includes(scope)}
-                    onChange={(e) =>
-                      setInvScopeChecks((prev) =>
-                        e.target.checked ? [...prev, scope] : prev.filter((s) => s !== scope),
-                      )
-                    }
-                  />
-                  <code style={{ fontSize: 11 }}>{scope}</code>
-                </label>
-              ))}
-            </div>
+          <label style={{ fontSize: 12.5, color: "var(--text-1)", display: "flex", alignItems: "center", gap: 6 }}>
             <input
-              className="input"
-              value={invCustomScope}
-              onChange={(e) => setInvCustomScope(e.target.value)}
-              placeholder="自定义范围（空格或逗号分隔；支付/凭据类范围会被自动忽略）"
-              style={{ fontSize: 12, fontFamily: "var(--font-mono-compact)" }}
+              type="checkbox"
+              checked={invRequiresApproval}
+              onChange={(e) => setInvRequiresApproval(e.target.checked)}
             />
-          </div>
+            需要房主批准后才能加入
+          </label>
 
           <button
             type="button"
@@ -588,12 +597,12 @@ export function PermissionsPanel({
             style={{ width: "100%", justifyContent: "center" }}
           >
             <Link2 size={14} strokeWidth={2} />
-            <span>{creatingLink ? "正在生成…" : "生成加密入群邀请链接"}</span>
+            <span>{creatingLink ? "正在生成…" : "生成并复制邀请链接"}</span>
           </button>
 
           {linkError && <p className="panel-error">{linkError}</p>}
 
-          {inviteLink && (
+          {generatedInvite && (
             <div
               style={{
                 display: "flex",
@@ -605,6 +614,9 @@ export function PermissionsPanel({
                 border: "1px solid var(--border-1)",
               }}
             >
+              <span style={{ fontSize: 12, color: generatedInvite.copyState === "copied" ? "var(--ok)" : "var(--text-1)" }}>
+                {generatedInvite.copyState === "copied" ? "邀请链接已复制" : "邀请链接已生成，请复制"}
+              </span>
               <code
                 style={{
                   fontSize: 11.5,
@@ -613,108 +625,178 @@ export function PermissionsPanel({
                   lineHeight: 1.45,
                 }}
               >
-                {inviteLink}
+                {generatedInvite.url}
               </code>
               <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                <CopyButton text={inviteLink} label="复制邀请链接" />
+                <CopyButton text={generatedInvite.url} label={generatedInvite.copyState === "copied" ? "再次复制" : "复制邀请链接"} />
               </div>
             </div>
           )}
 
-          {invites.length > 0 && (
-            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text-1)" }}>已有邀请</span>
-              {invites.map((inv) => {
-                const canRevoke =
-                  !inv.revoked_at && !inv.is_expired && (inv.use_count ?? 0) < (inv.max_uses ?? 1);
-                return (
-                  <div
-                    key={inv.token}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 6,
-                      fontSize: 11.5,
-                      color: "var(--text-2)",
-                      padding: "4px 0",
-                    }}
-                  >
-                    <code style={{ fontFamily: "var(--font-mono-compact)", flex: 1, overflow: "hidden", textOverflow: "ellipsis" }}>
-                      {inv.token.slice(0, 10)}…
-                    </code>
-                    <span>{inviteStatusLabel(inv)}</span>
-                    {inv.requires_approval && <span>· 需批准</span>}
-                    {inv.role === "viewer" && <span>· 观察者</span>}
-                    {canRevoke && (
-                      <button
-                        type="button"
-                        className="btn btn-ghost btn-sm"
-                        disabled={revokingToken === inv.token}
-                        onClick={() => void handleRevokeInvite(inv.token)}
-                        style={{ fontSize: 11, padding: "2px 8px" }}
-                      >
-                        {revokingToken === inv.token ? "吊销中…" : "吊销"}
-                      </button>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
+          <details style={{ borderTop: "1px solid var(--border-1)", paddingTop: 10 }}>
+            <summary style={{ cursor: "pointer", fontSize: 12, fontWeight: 600, color: "var(--text-1)" }}>
+              高级选项
+            </summary>
+            <div style={{ display: "flex", flexDirection: "column", gap: 12, marginTop: 10 }}>
+              <label style={{ fontSize: 12, color: "var(--text-1)", display: "flex", alignItems: "center", gap: 4 }}>
+                可用次数
+                <input
+                  className="input"
+                  type="number"
+                  min={1}
+                  max={32}
+                  value={invMaxUses}
+                  onChange={(e) => setInvMaxUses(Number(e.target.value))}
+                  style={{ width: 64, fontSize: 12.5 }}
+                />
+              </label>
 
-          <div
-            style={{
-              paddingTop: 10,
-              borderTop: "1px solid var(--border-1)",
-              display: "flex",
-              flexDirection: "column",
-              gap: 6,
-            }}
-          >
-            <label
-              style={{
-                fontSize: 12,
-                fontWeight: 600,
-                color: "var(--text-1)",
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 5,
-              }}
-            >
-              <KeyRound size={13} strokeWidth={1.8} style={{ color: "var(--text-2)" }} />
-              <span>按加密地址直接拉人入群</span>
-            </label>
-            <div style={{ display: "flex", gap: 6 }}>
-              <input
-                className="input"
-                value={directAddress}
-                onChange={(e) => setDirectAddress(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && directAddress.trim() && void handleDirectAdd()}
-                placeholder="0x 开头的 42 位加密地址"
-                style={{ fontSize: 12.5, fontFamily: "var(--font-mono-compact)" }}
-              />
-              <button
-                type="button"
-                className="btn btn-ghost btn-sm"
-                disabled={addingDirect || !directAddress.trim() || !xmtpClient || !xmtpGroupId}
-                onClick={() => void handleDirectAdd()}
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                <span style={{ fontSize: 12, color: "var(--text-2)" }}>
+                  建议授权范围（仅元数据建议，不授予实际权限；本机规则才是权威）：
+                </span>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  {KNOWN_SCOPE_OPTIONS.map((scope) => (
+                    <label
+                      key={scope}
+                      style={{ fontSize: 12, color: "var(--text-1)", display: "flex", alignItems: "center", gap: 3 }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={invScopeChecks.includes(scope)}
+                        onChange={(e) =>
+                          setInvScopeChecks((prev) =>
+                            e.target.checked ? [...prev, scope] : prev.filter((s) => s !== scope),
+                          )
+                        }
+                      />
+                      <code style={{ fontSize: 11 }}>{scope}</code>
+                    </label>
+                  ))}
+                </div>
+                <input
+                  className="input"
+                  value={invCustomScope}
+                  onChange={(e) => setInvCustomScope(e.target.value)}
+                  placeholder="自定义范围（空格或逗号分隔；支付/凭据类范围会被自动忽略）"
+                  style={{ fontSize: 12, fontFamily: "var(--font-mono-compact)" }}
+                />
+              </div>
+
+              {invites.length > 0 && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text-1)" }}>已有邀请</span>
+                  {invites.map((inv) => {
+                    const canRevoke =
+                      !inv.revoked_at && !inv.is_expired && (inv.use_count ?? 0) < (inv.max_uses ?? 1);
+                    return (
+                      <div
+                        key={inv.token}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 6,
+                          fontSize: 11.5,
+                          color: "var(--text-2)",
+                          padding: "4px 0",
+                        }}
+                      >
+                        <code style={{ fontFamily: "var(--font-mono-compact)", flex: 1, overflow: "hidden", textOverflow: "ellipsis" }}>
+                          {inv.token.slice(0, 10)}…
+                        </code>
+                        <span>{inviteStatusLabel(inv)}</span>
+                        {inv.requires_approval && <span>· 需批准</span>}
+                        {inv.role === "viewer" && <span>· 观察者</span>}
+                        {canRevoke && (
+                          <button
+                            type="button"
+                            className="btn btn-ghost btn-sm"
+                            disabled={revokingToken === inv.token}
+                            onClick={() => void handleRevokeInvite(inv.token)}
+                            style={{ fontSize: 11, padding: "2px 8px" }}
+                          >
+                            {revokingToken === inv.token ? "吊销中…" : "吊销"}
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              <div
+                style={{
+                  paddingTop: 10,
+                  borderTop: "1px solid var(--border-1)",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 6,
+                }}
               >
-                {addingDirect ? "拉群中…" : "拉入加密群"}
-              </button>
+                <label
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 600,
+                    color: "var(--text-1)",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 5,
+                  }}
+                >
+                  <KeyRound size={13} strokeWidth={1.8} style={{ color: "var(--text-2)" }} />
+                  <span>按加密地址直接拉人入群</span>
+                </label>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <input
+                    className="input"
+                    value={directAddress}
+                    onChange={(e) => setDirectAddress(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && directAddress.trim() && void handleDirectAdd()}
+                    placeholder="0x 开头的 42 位加密地址"
+                    style={{ fontSize: 12.5, fontFamily: "var(--font-mono-compact)" }}
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    disabled={addingDirect || !directAddress.trim() || !xmtpClient || !xmtpGroupId}
+                    onClick={() => void handleDirectAdd()}
+                  >
+                    {addingDirect ? "拉群中…" : "拉入加密群"}
+                  </button>
+                </div>
+                {!xmtpClient && (
+                  <span style={{ fontSize: 11.5, color: "var(--text-2)" }}>
+                    请先在聊天区解锁你的本机加密身份以启用直接拉群。
+                  </span>
+                )}
+                {directFeedback && (
+                  <p className={directFeedback.kind === "ok" ? "ok-text" : "panel-error"} style={{ fontSize: 12 }}>
+                    {directFeedback.text}
+                  </p>
+                )}
+              </div>
+
+              <div
+                style={{
+                  paddingTop: 10,
+                  borderTop: "1px solid var(--border-1)",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 6,
+                  alignItems: "flex-start",
+                }}
+              >
+                <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text-1)" }}>复制房间地址</span>
+                <span style={{ fontSize: 11.5, color: "var(--text-2)", lineHeight: 1.45 }}>
+                  房间地址本身不授予入房权限，只适合发给已经获得授权的成员。
+                </span>
+                <CopyButton text={`${window.location.origin}/rooms/${encodeURIComponent(roomId)}`} label="复制房间地址" />
+              </div>
             </div>
-            {!xmtpClient && (
-              <span style={{ fontSize: 11.5, color: "var(--text-2)" }}>
-                请先在聊天区解锁你的本机加密身份以启用直接拉群。
-              </span>
-            )}
-            {directFeedback && (
-              <p className={directFeedback.kind === "ok" ? "ok-text" : "panel-error"} style={{ fontSize: 12 }}>
-                {directFeedback.text}
-              </p>
-            )}
-          </div>
+          </details>
         </div>
       )}
+
 
       {/* ── 房主待审批的入群申请 ── */}
       {!section && effectiveIsOwner && redemptions.length > 0 && (
