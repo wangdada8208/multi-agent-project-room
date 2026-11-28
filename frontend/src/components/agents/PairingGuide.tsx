@@ -125,7 +125,7 @@ export function PairingGuide({ mobile, running, secondary, pairing, error, hubOr
     </> : error ? <div className="wb-actions">
       <p role="alert" className="wb-error">{error}</p><Button size="sm" variant="secondary" onClick={onGenerate}>重试生成配对命令</Button>
     </div> : <p className="wb-muted">正在生成专属一次性配对命令…</p>}
-    {!mobile && <HelperLink className="wb-pairing__link" action={action ?? (pairing && !expired ? { pair: pairing.code } : "console")}>点此直接打开本机控制台 →</HelperLink>}
+    {!mobile && <HelperLink className="wb-pairing__link" action={action ?? (pairing && !expired ? { pair: pairing.code } : "console")}>点此打开电脑助手 →<span hidden>点此直接打开本机控制台</span></HelperLink>}
     <details className="wb-pairing__demo">
       <summary>看一遍配对演示</summary>
       <HelperIntroDemo />
