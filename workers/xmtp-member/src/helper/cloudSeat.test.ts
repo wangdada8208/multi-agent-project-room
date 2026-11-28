@@ -67,6 +67,7 @@ test("checkCloudSeat: 403/404 fail-closed 按 removed；5xx/网络错误/坏响�
     const fetchImpl = fakeFetch(async () => jsonRes(status, { detail: "nope" }));
     const res = await checkCloudSeat({ hubOrigin: "https://hub.example", seatId: SEAT, agentToken: TOKEN, fetchImpl });
     assert.equal(res.state, "removed", `http ${status}`);
+    assert.equal(res.confirmedRemoval, undefined);
     assert.equal(res.httpStatus, status);
   }
   for (const status of [401, 500, 502]) {
@@ -89,6 +90,26 @@ test("checkCloudSeat: 请求带 Bearer 令牌，URL 不泄露令牌原文", asyn
   });
   await checkCloudSeat({ hubOrigin: "https://hub.example", seatId: SEAT, agentToken: TOKEN, fetchImpl });
   assert.equal(auth, `Bearer ${TOKEN}`);
+});
+
+test("a confirmed credential invalidation stops polling and waits for cleanup", async () => {
+  let checks = 0;
+  let cleaned = false;
+  const fetchImpl = fakeFetch(async () => {
+    checks++;
+    if (checks === 1) throw new Error("transient disconnect");
+    return jsonRes(401, { detail: { code: "invalidated" } });
+  });
+  const poller = startCloudSeatPolling({
+    hubOrigin: "https://hub.example", seatId: SEAT, agentToken: TOKEN, fetchImpl,
+    onRemoved: async (confirmed) => { await Promise.resolve(); cleaned = confirmed; },
+  });
+  await poller.checkNow();
+  assert.equal(cleaned, false);
+  await poller.checkNow();
+  await poller.checkNow();
+  assert.equal(cleaned, true);
+  assert.equal(checks, 2);
 });
 
 test("startCloudSeatPolling: removed 时触发 onRemoved 且自动停止", async () => {
