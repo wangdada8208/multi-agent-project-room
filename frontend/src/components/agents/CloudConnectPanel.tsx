@@ -3,6 +3,7 @@ import { useId, useState } from "react";
 import { Link } from "react-router-dom";
 import { useCloudInvite } from "../../hooks/agents/useCloudInvite";
 import type { CloudAgentPreset } from "../../lib/agentPresets";
+import { formatConnectionError } from "../../lib/localHelper";
 import type { Room } from "../../types/chat";
 import { CopyButton } from "../CopyButton";
 import { RequestActions } from "../room/PendingRequestBanner";
@@ -71,7 +72,7 @@ function CloudSteps({ preset, roomId, hubOrigin, defaultApproval }: Parameters<t
         loading={invite.createInvite.isPending} onClick={() => invite.createInvite.mutate(invite.requiresApproval)}>
         {command ? "重新生成" : "生成接入指令"}
       </Button>
-      {invite.createInvite.error && <p className="wb-error" role="alert">{invite.createInvite.error.message}</p>}
+      {invite.createInvite.error && <p className="wb-error" role="alert">{formatConnectionError(invite.createInvite.error, "server", "生成接入指令失败，请重试。")}</p>}
     </section>
     <section className="wb-connect-step">
       <h4><span>2</span>复制接入指令</h4>
@@ -110,7 +111,7 @@ function CloudSteps({ preset, roomId, hubOrigin, defaultApproval }: Parameters<t
         <RequestActions request={request} busy={decide.isPending} onDecide={(_, approved) => decide.mutate({ id: request.id, approved })} />
       </div>)}
       {invite.readError && <p className="wb-error" role="status">暂时无法读取入驻状态。请确认你是目标房间的房主。</p>}
-      {decide.error && <p className="wb-error" role="alert">{decide.error.message}</p>}
+      {decide.error && <p className="wb-error" role="alert">{formatConnectionError(decide.error, "server", "处理入房申请失败，请重试。")}</p>}
       {seat && <div className="wb-connect-request wb-connect-request--approved" role="status">
         <strong>{seat.agent_display_name} 已入驻当前房间</strong>
         {seat.group_status !== "added" && <p><LockKeyhole size={13} />已接入。打开房间后，房主设备会让它看到加密聊天。</p>}

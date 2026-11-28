@@ -269,6 +269,32 @@ export function pairingCountdown(seconds: number): string {
 
 export const PAIRING_EXPIRED = "当前配对码已过期，请重新生成";
 
+export type ConnectionErrorTarget = "local-helper" | "server";
+
+export const CONNECTION_ERROR_MESSAGE: Record<ConnectionErrorTarget, string> = {
+  "local-helper": "暂时连不上本地助手，确认电脑上的连接程序已经启动后再试。",
+  server: "暂时连不上服务器，检查网络连接后再试。",
+};
+
+export function isNativeConnectivityError(err: unknown): boolean {
+  if (err instanceof TypeError) return true;
+  if (!(err instanceof Error)) return false;
+  const name = err.name.toLowerCase();
+  const message = err.message.toLowerCase();
+  return name === "networkerror" || name === "timeouterror"
+    || message.includes("failed to fetch")
+    || message.includes("load failed")
+    || message.includes("networkerror")
+    || message.includes("network error")
+    || message.includes("network request failed");
+}
+
+export function formatConnectionError(err: unknown, target: ConnectionErrorTarget, fallback: string): string {
+  if (isNativeConnectivityError(err)) return CONNECTION_ERROR_MESSAGE[target];
+  if (err instanceof Error && err.message.trim()) return err.message;
+  return fallback;
+}
+
 // ── Hub（需要人类登录态，走 apiFetch 统一带令牌与请求编号） ──
 
 export class HubHttpError extends Error {
@@ -454,6 +480,9 @@ export function formatInviteAcceptError(err: unknown): string {
   const status = (err as { status?: number } | null)?.status;
   const rawMessage = err instanceof Error ? err.message : "";
   const lower = rawMessage.toLowerCase();
+  if (isNativeConnectivityError(err)) {
+    return CONNECTION_ERROR_MESSAGE.server;
+  }
   if (status === 409 || lower.includes("already redeemed")) {
     return "该入群邀请链接已被使用，请向房主索取新的邀请链接。";
   }

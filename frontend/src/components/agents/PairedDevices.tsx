@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Laptop } from "lucide-react";
-import { listMyHelpers, revokeHelper } from "../../lib/localHelper";
+import { formatConnectionError, listMyHelpers, revokeHelper } from "../../lib/localHelper";
 import { Button } from "../ui/Button";
 import { ConfirmInline } from "../ui/ConfirmInline";
 
@@ -23,7 +23,7 @@ export function PairedDevices() {
     <p>吊销后，对应电脑上的席位将随助手下次心跳停止。</p>
     {devices.isPending && <p className="wb-muted">正在读取设备…</p>}
     {devices.isSuccess && !devices.data.length && <p className="wb-muted">暂无已配对设备。</p>}
-    {(devices.error || revoke.error) && <p className="wb-error" role="alert">{(devices.error || revoke.error)?.message}</p>}
+    {(devices.error || revoke.error) && <p className="wb-error" role="alert">{formatConnectionError(devices.error || revoke.error, "server", "设备操作失败，请重试。")}</p>}
     {devices.data?.map((device) => <article key={device.id} className="wb-seat">
       <div className="wb-seat__info"><strong>{device.device_name}</strong>
         <small>{device.platform} · {device.revoked ? "已吊销" : device.last_seen_at ? `最近在线 ${new Date(device.last_seen_at).toLocaleString("zh-CN")}` : "从未在线"}</small>
