@@ -10,6 +10,9 @@
 #   --uninstall      撤掉开机自启、停掉本机助手进程，保留 ~/.mapr 数据
 #   --purge          在卸载基础上连 ~/.mapr 数据一起删除（会询问确认，--yes 跳过）
 #   --yes            跳过 --purge 的确认（管道里运行、无法交互时使用）
+#   --auto-install-node
+#                    检测不到合格 Node 时，把官方 Node 22 装进 ~/.mapr/runtime/node
+#                    （只写用户目录，不用 sudo，不改系统 Node）；默认不自动安装
 #   -h, --help       显示本说明
 #
 # 环境变量：
@@ -40,17 +43,26 @@ say()  { printf '%s\n' "$*"; }
 warn() { printf '警告: %s\n' "$*" >&2; }
 die()  { printf '错误: %s\n' "$*" >&2; exit 1; }
 
+# 输出给「复制粘贴」用的 shell 参数：单引号包裹，原字符串里的单引号按 POSIX 惯例转义。
+shell_quote() {
+  sq=$(printf '%s' "$1" | sed "s/'/'\\\\''/g")
+  printf "'%s'" "$sq"
+}
+
 usage() {
   cat <<'USAGE'
 Parlor 本机助手一键安装（Linux + macOS）
 
-用法: curl -fsSL <Hub>/install.sh | sh -s -- [--pair <配对码>] [--hub <Hub 地址>]
+用法: curl -fsSL <Hub>/install.sh | sh -s -- [--pair <配对码>] [--hub <Hub 地址>] [--auto-install-node]
 
   --pair <配对码>   装好后立即执行 `mapr up --pair <配对码>` 完成配对
   --hub <Hub 地址>  默认 https://hub.wangdada8208.xyz（或环境变量 MAPR_HUB_ORIGIN）
   --uninstall      撤自启、停进程，保留 ~/.mapr 数据
   --purge          卸载并删除 ~/.mapr 全部数据（默认询问，--yes 跳过）
   --yes            跳过 --purge 的确认
+  --auto-install-node
+                   缺 Node 或版本太低时，把官方 Node 22 装进 ~/.mapr/runtime/node
+                   （只写用户目录，不改系统 Node）；默认不自动安装
   -h, --help       显示本说明
 
 环境变量: MAPR_HUB_ORIGIN、MAPR_PKG_URL（发布包地址，默认 <Hub>/downloads/xmtp-member-latest.tar.gz）
@@ -64,6 +76,7 @@ PAIR_CODE=""
 DO_UNINSTALL=0
 DO_PURGE=0
 ASSUME_YES=0
+AUTO_INSTALL_NODE=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --pair)      PAIR_CODE="${2:?--pair 需要一个配对码参数}"; shift 2 ;;
@@ -71,6 +84,7 @@ while [ $# -gt 0 ]; do
     --uninstall) DO_UNINSTALL=1; shift ;;
     --purge)     DO_PURGE=1; shift ;;
     --yes|-y)    ASSUME_YES=1; shift ;;
+    --auto-install-node) AUTO_INSTALL_NODE=1; shift ;;
     -h|--help)   usage; exit 0 ;;
     *) die "不认识的参数: $1（--help 看用法）" ;;
   esac
@@ -108,22 +122,161 @@ for c in curl tar; do
   command -v "$c" >/dev/null 2>&1 || die "缺少 $c 命令，请先安装后再运行。"
 done
 
-command -v node >/dev/null 2>&1 || die "检测不到 Node.js。
-本机助手需要 Node.js $NODE_MIN 或更高版本，本脚本不会自动安装。
-任选一种方式装好 node 后重新运行这条命令：
-  · 官网 https://nodejs.org/ 下载 22 LTS（或更新）
-  · nvm 用户：nvm install 22
-  · macOS Homebrew 用户：brew install node@22"
-command -v npm >/dev/null 2>&1 || die "检测不到 npm（应随 Node.js 一起安装）。请装好 Node.js 后重试。"
+# 之前用 --auto-install-node 装过的 Node 只服务 Parlor，不要求用户改 PATH。
+if [ -x "$MAPR_ROOT/runtime/node/bin/node" ]; then
+  case ":$PATH:" in
+    *":$MAPR_ROOT/runtime/node/bin:"*) ;;
+    *) PATH="$MAPR_ROOT/runtime/node/bin:$PATH"; export PATH ;;
+  esac
+fi
 
-node_ver=$(node -v 2>/dev/null | sed 's/^v//')
-node_major=${node_ver%%.*}
-node_rest=${node_ver#*.}
-node_minor=${node_rest%%.*}
-case "$node_major" in ''|*[!0-9]*) die "无法解析 node 版本号：$node_ver" ;; esac
-case "$node_minor" in ''|*[!0-9]*) node_minor=0 ;; esac
-if [ "$node_major" -lt 22 ] || { [ "$node_major" -eq 22 ] && [ "$node_minor" -lt 6 ]; }; then
-  die "Node.js 版本太低（当前 v${node_ver}，需要 >= ${NODE_MIN}）。请升级后重新运行。"
+node_version_value() {
+  node -v 2>/dev/null | sed 's/^v//'
+}
+
+node_satisfies() {
+  nv=$(node_version_value)
+  nv_major=${nv%%.*}
+  nv_rest=${nv#*.}
+  nv_minor=${nv_rest%%.*}
+  case "$nv_major" in ''|*[!0-9]*) return 1 ;; esac
+  case "$nv_minor" in ''|*[!0-9]*) nv_minor=0 ;; esac
+  [ "$nv_major" -gt 22 ] || { [ "$nv_major" -eq 22 ] && [ "$nv_minor" -ge 6 ]; }
+}
+
+detect_node_problem() {
+  if ! command -v node >/dev/null 2>&1; then
+    printf '%s\n' missing
+  elif ! command -v npm >/dev/null 2>&1; then
+    printf '%s\n' npm-missing
+  elif ! node_satisfies; then
+    printf '%s\n' old
+  fi
+}
+
+node_platform() {
+  np_arch=$(uname -m 2>/dev/null || echo unknown)
+  case "$OS:$np_arch" in
+    Linux:x86_64|Linux:amd64) printf '%s\n' linux-x64 ;;
+    Linux:aarch64|Linux:arm64) printf '%s\n' linux-arm64 ;;
+    Darwin:x86_64) printf '%s\n' darwin-x64 ;;
+    Darwin:arm64) printf '%s\n' darwin-arm64 ;;
+    *) return 1 ;;
+  esac
+}
+
+verify_sha256() {
+  vs_file=$1
+  vs_sum=$2
+  if command -v sha256sum >/dev/null 2>&1; then
+    printf '%s  %s\n' "$vs_sum" "$vs_file" | sha256sum -c - >/dev/null 2>&1
+  elif command -v shasum >/dev/null 2>&1; then
+    printf '%s  %s\n' "$vs_sum" "$vs_file" | shasum -a 256 -c - >/dev/null 2>&1
+  else
+    return 1
+  fi
+}
+
+# 显式 --auto-install-node 才走这里：从 nodejs.org 下载带 SHA256 校验的官方包，
+# 只写 ~/.mapr/runtime/node；不碰 /usr/local、不使用 sudo、也不修改系统 Node。
+auto_install_node() {
+  ai_platform=$(node_platform) || {
+    warn "这台机器的系统和芯片组合暂不支持自动安装 Node。请用下面的手动指引。"
+    return 1
+  }
+  ai_tmp=$(mktemp -d "${TMPDIR:-/tmp}/mapr-node.XXXXXX") || return 1
+  ai_ok=0
+  ai_base_url="https://nodejs.org/dist/latest-v22.x"
+  say "检测到 --auto-install-node：正在把官方 Node 22 安装到 $MAPR_ROOT/runtime/node（不修改系统目录）…"
+
+  if curl -fsSL --retry 3 --retry-delay 2 -o "$ai_tmp/SHASUMS256.txt" "$ai_base_url/SHASUMS256.txt"; then
+    ai_line=$(grep "node-v[0-9.]*-${ai_platform}\.tar\.gz$" "$ai_tmp/SHASUMS256.txt" 2>/dev/null | sed -n '1p' || true)
+    ai_sum=${ai_line%% *}
+    ai_file=${ai_line##* }
+    if [ -n "$ai_sum" ] && [ -n "$ai_file" ] && [ "$ai_sum" != "$ai_file" ]; then
+      if curl -fsSL --retry 3 --retry-delay 2 -o "$ai_tmp/$ai_file" "$ai_base_url/$ai_file"; then
+        if verify_sha256 "$ai_tmp/$ai_file" "$ai_sum"; then
+          mkdir -p "$ai_tmp/ex"
+          ai_dir=${ai_file%.tar.gz}
+          if tar -xzf "$ai_tmp/$ai_file" -C "$ai_tmp/ex" && [ -x "$ai_tmp/ex/$ai_dir/bin/node" ]; then
+            mkdir -p "$MAPR_ROOT/runtime"
+            rm -rf "$MAPR_ROOT/runtime/node.new" "$MAPR_ROOT/runtime/node.old"
+            if mv "$ai_tmp/ex/$ai_dir" "$MAPR_ROOT/runtime/node.new"; then
+              if [ -d "$MAPR_ROOT/runtime/node" ]; then mv "$MAPR_ROOT/runtime/node" "$MAPR_ROOT/runtime/node.old"; fi
+              if mv "$MAPR_ROOT/runtime/node.new" "$MAPR_ROOT/runtime/node"; then
+                rm -rf "$MAPR_ROOT/runtime/node.old"
+                PATH="$MAPR_ROOT/runtime/node/bin:$PATH"
+                export PATH
+                hash -r 2>/dev/null || true
+                if command -v node >/dev/null 2>&1 && command -v npm >/dev/null 2>&1 && node_satisfies; then
+                  ai_ok=1
+                fi
+              elif [ -d "$MAPR_ROOT/runtime/node.old" ]; then
+                mv "$MAPR_ROOT/runtime/node.old" "$MAPR_ROOT/runtime/node"
+              fi
+            fi
+          fi
+        fi
+      fi
+    fi
+  fi
+
+  rm -rf "$ai_tmp"
+  if [ "$ai_ok" = "1" ]; then
+    say "Node.js $(node -v 2>/dev/null) 已装好，只供 Parlor 使用。"
+    return 0
+  fi
+  warn "自动安装 Node 没有成功。已保留系统现状，未写入系统目录。"
+  return 1
+}
+
+print_node_guidance() {
+  pg_problem=$1
+  pg_current=$(node_version_value 2>/dev/null || true)
+  case "$pg_problem" in
+    missing) pg_first="检测不到 Node.js。" ;;
+    npm-missing) pg_first="检测不到 npm（它应随 Node.js 一起安装）。" ;;
+    old) pg_first="Node.js 版本太低（当前 v${pg_current}，需要 >= ${NODE_MIN}）。" ;;
+    *) pg_first="Node.js 环境不可用。" ;;
+  esac
+  printf '错误: %s\n' "$pg_first" >&2
+  printf '本机助手需要 Node.js %s 或更高版本。\n' "$NODE_MIN" >&2
+
+  if [ "$AUTO_INSTALL_NODE" = "1" ]; then
+    printf '%s\n' "自动安装没有成功。检查网络或代理后，重新运行刚才那条命令；也可以打开 https://nodejs.org/en/download 手动安装 Node 22 LTS（或更新）。" >&2
+    exit 1
+  fi
+
+  pg_cmd=""
+  if command -v brew >/dev/null 2>&1; then
+    pg_cmd="brew install node"
+  elif command -v fnm >/dev/null 2>&1; then
+    pg_cmd="fnm install 22 && fnm use 22"
+  elif [ -n "${NVM_DIR:-}" ] && [ -f "$NVM_DIR/nvm.sh" ]; then
+    pg_cmd="export NVM_DIR=$(shell_quote "$NVM_DIR") && . $(shell_quote "$NVM_DIR/nvm.sh") && nvm install 22"
+  elif [ -f "$HOME/.nvm/nvm.sh" ]; then
+    pg_cmd="export NVM_DIR=$(shell_quote "$HOME/.nvm") && . $(shell_quote "$HOME/.nvm/nvm.sh") && nvm install 22"
+  else
+    pg_url="$HUB/install.sh"
+    pg_cmd="curl -fsSL $(shell_quote "$pg_url") | sh -s -- --auto-install-node --hub $(shell_quote "$HUB")"
+    if [ -n "$PAIR_CODE" ]; then
+      pg_cmd="$pg_cmd --pair $(shell_quote "$PAIR_CODE")"
+    fi
+  fi
+
+  printf '复制这一行安装 Node 22 或更新：\n  %s\n' "$pg_cmd" >&2
+  printf '%s\n' '装完后，重新粘贴刚才那条 Parlor 配对命令即可继续。' >&2
+  printf '%s\n' '如果上面的命令不能用，打开 https://nodejs.org/en/download 安装 Node 22 LTS（或更新）。' >&2
+  exit 1
+}
+
+node_problem=$(detect_node_problem)
+if [ -n "$node_problem" ] && [ "$AUTO_INSTALL_NODE" = "1" ]; then
+  auto_install_node || true
+  node_problem=$(detect_node_problem)
+fi
+if [ -n "$node_problem" ]; then
+  print_node_guidance "$node_problem"
 fi
 
 # ── 下载并解开发布包到 ~/.mapr/pkg/（升级时整包替换） ──
@@ -173,7 +326,12 @@ if [ "${1:-}" = "uninstall" ]; then
   shift
   exec sh "$MAPR_ROOT/uninstall.sh" "$@"
 fi
-exec node --experimental-strip-types "$MAPR_ROOT/pkg/src/cli.ts" "$@"
+if [ -x "$MAPR_ROOT/runtime/node/bin/node" ]; then
+  MAPR_NODE="$MAPR_ROOT/runtime/node/bin/node"
+else
+  MAPR_NODE=node
+fi
+exec "$MAPR_NODE" --experimental-strip-types "$MAPR_ROOT/pkg/src/cli.ts" "$@"
 MAPR_EOF
 chmod 755 "$MAPR_ROOT/bin/mapr"
 
