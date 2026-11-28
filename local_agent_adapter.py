@@ -36,6 +36,7 @@ from urllib.parse import urlencode
 import httpx
 import websockets
 from local_agent_reliable import ReliableAgentMixin, _run_supervised_sync
+from trusted_runner import trust_frame
 
 
 def _friendly_ai_failure(agent_name: str, stderr: str) -> Optional[str]:
@@ -412,7 +413,7 @@ class LocalAgentAdapter(ReliableAgentMixin):
             response = quick_response
         else:
             print(f"  💬 Processing task from room {origin_room} ({sender_name}) ({len(content)} chars)")
-            response = await self._run_local_ai(self._build_prompt(content))
+            response = await self._run_local_ai(self._build_prompt(content, data, room_id=origin_room))
 
         # Send response with target_room for cross-room routing
         await self._maybe_create_approval(origin_room, task_id, content, response)
@@ -621,7 +622,7 @@ class LocalAgentAdapter(ReliableAgentMixin):
         else:
             # Call local AI
             print(f"  💬 Processing ({len(content)} chars)")
-            response = await self._run_local_ai(self._build_prompt(content))
+            response = await self._run_local_ai(self._build_prompt(content, msg, room_id=self.room))
 
         # Send response
         task_id = msg.get("task_id") or data.get("task_id")
@@ -743,7 +744,7 @@ class LocalAgentAdapter(ReliableAgentMixin):
 
         await ws.send(json.dumps({"type": "typing", "sender_id": self.agent_id}))
         print(f"  🔁 Dialogue {dialogue_id[:8]} from {sender_name} ({len(content)} chars)")
-        response = await self._run_local_ai(self._build_dialogue_prompt(sender_name or "peer", content, dialogue))
+        response = await self._run_local_ai(self._build_dialogue_prompt(content, dialogue, msg))
         response = self._trim_dialogue_response(response)
         if _is_dialogue_stop(response):
             await self._send_dialogue_message(dialogue_id, sender_name, response)
@@ -797,15 +798,15 @@ class LocalAgentAdapter(ReliableAgentMixin):
         for dialogue_id in dialogue_ids:
             await self._end_dialogue(dialogue_id, reason)
 
-    def _build_dialogue_prompt(self, peer_name: str, content: str, dialogue: dict) -> str:
+    def _build_dialogue_prompt(self, content: str, dialogue: dict, message: dict) -> str:
         """Prompt for fast peer-to-peer dialogue turns."""
         return (
-            f"你是 {self.agent_name}，正在和 {peer_name} 进行一个短时 Agent 对话。"
+            f"你是 {self.agent_name}，正在进行一个短时 Agent 对话。"
             "请直接接上对方的话，中文回复 1-3 句，保持具体、快速、可执行。"
             "不要声称自己没有聊天室或 WebSocket 工具；不要写 @ 名字。"
             "如果你认为对话应结束，在最后写“我这边结束”。"
             f"\n当前轮次：{dialogue.get('current_turn', 0)}/{dialogue.get('max_turns', self.max_dialogue_turns)}"
-            f"\n{peer_name}：{content}"
+            f"\n{trust_frame(content, message, room_id=dialogue.get('room_id') or '')}"
         )
 
     def _trim_dialogue_response(self, response: str) -> str:
@@ -814,12 +815,13 @@ class LocalAgentAdapter(ReliableAgentMixin):
         compact = " ".join(lines)
         return compact[:600] or f"收到，我这边继续配合。"
 
-    def _build_prompt(self, content: str) -> str:
+    def _build_prompt(self, content: str, message: dict | None = None, *, room_id: str = "") -> str:
         """Keep the chat prompt intentionally small for faster CLI responses."""
         return (
             f"你是 {self.agent_name}，Parlor 的代码协作 Agent。"
             "请优先用中文简短回复，默认 1-3 句；只有用户明确要求实现/检查/修改代码时才展开。"
-            f"\n聊天室消息：{content}"
+            "\n聊天室消息："
+            + trust_frame(content, message, room_id=room_id or self.room, verified_owner_id=os.getenv("MAPR_OWNER_USER_ID"))
         )
 
     # ── Local AI ──────────────────────────────────────

@@ -201,9 +201,11 @@ test("签名入席、等待审批和群绑定、席位续约及暂停/恢复/移
   await f.emit("own text", "group-1", proofInputs[0].address);
   await f.emit(" ");
   await f.emit("active inbound");
-  assert.deepEqual(f.sent, ["active inbound"]);
   assert.equal(wakes.length, 1);
   const event = JSON.parse((await readFile(inboundFile, "utf8")).trim());
+  assert.match(event.text, /^<<<parlor-untrusted\n/);
+  assert.equal(JSON.parse(event.text.split("\n")[1]).text, "active inbound");
+  assert.deepEqual(f.sent, [event.text]);
   assert.deepEqual(wakes[0].body, {
     event: "mapr.message", name: "Grokbot", room_group_id: "group-1",
     inbound_file: inboundFile, outbox_dir: outboxDir, ...event,
@@ -221,7 +223,7 @@ test("签名入席、等待审批和群绑定、席位续约及暂停/恢复/移
   seatState = "unknown";
   await sleep(100);
   await f.emit("unknown while paused");
-  assert.deepEqual(f.sent, ["active inbound"]);
+  assert.deepEqual(f.sent, [event.text]);
   assert.deepEqual(await readdir(outboxDir), ["reply.txt"]);
   assert.equal(wakes.length, 1);
   assert.equal((await readFile(inboundFile, "utf8")).trim().split("\n").length, 1);
@@ -230,7 +232,8 @@ test("签名入席、等待审批和群绑定、席位续约及暂停/恢复/移
   await until(() => f.log.some((line) => line.includes("已恢复")));
   await f.emit("resumed inbound");
   await until(() => f.sent.includes("queued outbound"));
-  assert.ok(f.sent.includes("resumed inbound"));
+  assert.ok(f.sent.some((text) => text.startsWith("<<<parlor-untrusted\n") &&
+    JSON.parse(text.split("\n")[1]).text === "resumed inbound"));
   assert.equal(wakes.length, 2);
   seatState = "removed";
   await run;
