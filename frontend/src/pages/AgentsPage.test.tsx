@@ -114,8 +114,7 @@ beforeEach(() => {
   vi.mocked(probeHelper).mockReset().mockResolvedValue({ state: "blocked" });
   vi.mocked(createPairingCode).mockResolvedValue({
     code: "mpc_test.code",
-    expires_at: "2099-01-01T00:00:00Z",
-    install_command: "test pairing command for the terminal",
+    expires_at: new Date(Date.now() + 600_000).toISOString(),
   });
   vi.mocked(listLocalAgents).mockResolvedValue([]);
   vi.mocked(listLocalSeats).mockResolvedValue([]);
@@ -219,7 +218,7 @@ describe("AgentJoinSection preset configuration", () => {
       expect(window.location.href).toBe(url);
       expect(container.textContent).toContain("当前为手机或平板浏览器");
       expect(container.textContent).toContain("复制下方命令到电脑「终端」");
-      expect(container.textContent).toContain("test pairing command for the terminal");
+      expect(container.textContent).toContain("--pair 'mpc_test.code'");
       expect(container.querySelector('a[href*="127.0.0.1:8790"]')).toBeNull();
     },
   );
@@ -254,7 +253,7 @@ describe("AgentJoinSection preset configuration", () => {
 
     expect(openWindow).not.toHaveBeenCalled();
     expect(container.querySelector("#install-pair-section")?.textContent).toContain(
-      "test pairing command for the terminal",
+      "--pair 'mpc_test.code'",
     );
   });
 
@@ -441,34 +440,87 @@ it("keeps the Hub open and shows recovery instructions if a seat join cannot rea
   expect(container.textContent).toContain("请确认电脑上的本机助手已启动，并在浏览器中允许本地网络访问");
 });
 
-it("uses the iPhone handoff card and never renders or opens a loopback link in the Agent center", async () => {
-  vi.spyOn(navigator, "userAgent", "get").mockReturnValue(mobileUA);
+async function renderAgents(path = "/agents?room=room-42") {
   vi.mocked(fetchRooms).mockResolvedValue([{ id: "room-42", name: "目标房间", description: "", created_at: "" }]);
   await act(async () => root.render(<QueryClientProvider client={queryClient}>
-    <MemoryRouter initialEntries={["/agents?room=room-42&agent=muse"]}><AgentsPage /></MemoryRouter>
+    <MemoryRouter initialEntries={[path]}><AgentsPage /></MemoryRouter>
   </QueryClientProvider>));
   await advanceTime(2);
+}
+
+it("defaults to a copyable cloud prompt on iPhone and shows computer guidance only for local clients", async () => {
+  vi.spyOn(navigator, "userAgent", "get").mockReturnValue(mobileUA);
+  await renderAgents("/agents?room=room-42&agent=muse");
   const panel = container.querySelector('section[aria-label="Muse 云端接入"]');
   expect(panel?.querySelector<HTMLInputElement>('[role="switch"]')?.checked).toBe(true);
-  expect(container.textContent).toContain("在电脑上继续接入");
-  expect(container.textContent).toContain("复制电脑端链接");
-  expect(container.textContent).not.toContain("选客户端，复制专属提示词");
+  expect(container.querySelector('[role="radio"][aria-checked="true"]')?.textContent).toContain("Grok Bot");
+  const prompt = container.querySelector('[data-testid="agent-prompt-preview"]');
+  expect(prompt?.textContent).toContain("目标房间：目标房间（room-42）");
+  expect(prompt?.textContent).not.toContain("配对码：");
+  expect(container.textContent).not.toContain("本机终端工具需在电脑上运行");
   expect(container.querySelector(".wb-local")).toBeNull();
-  expect(container.innerHTML).not.toContain("127.0.0.1");
+  expect(container.querySelector('a[href*="127.0.0.1:8790"]')).toBeNull();
+  const writeText = vi.fn().mockResolvedValue(undefined);
+  Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+  try {
+    await clickButton(container, "复制专属提示词");
+    expect(writeText).toHaveBeenCalledExactlyOnceWith(prompt?.textContent);
+    await act(async () => container.querySelector<HTMLButtonElement>('[role="radio"]:nth-child(2)')?.click());
+    expect(container.textContent).toContain("本机终端工具需在电脑上运行");
+    await advanceTime(1600);
+    await clickButton(container, "复制专属提示词");
+    expect(writeText).toHaveBeenLastCalledWith(prompt?.textContent);
+    expect(prompt?.textContent).toContain("Claude Code");
+  } finally {
+    Reflect.deleteProperty(navigator, "clipboard");
+  }
   expect(probeHelper).not.toHaveBeenCalled();
   expect(createPairingCode).not.toHaveBeenCalled();
   expect(openWindow).not.toHaveBeenCalled();
 });
 
-it("shows the client prompt picker with the selected room in the desktop Agent center", async () => {
-  vi.mocked(fetchRooms).mockResolvedValue([{ id: "room-42", name: "目标房间", description: "", created_at: "" }]);
-  await act(async () => root.render(<QueryClientProvider client={queryClient}>
-    <MemoryRouter initialEntries={["/agents?room=room-42"]}><AgentsPage /></MemoryRouter>
-  </QueryClientProvider>));
-  await advanceTime(2);
+it("shares pairing, refresh and expiry between the desktop prompt, both commands and helper handoff", async () => {
+  vi.mocked(createPairingCode).mockResolvedValueOnce({
+    code: "mpc_first.code", expires_at: new Date(Date.now() + 2000).toISOString(),
+  }).mockResolvedValueOnce({
+    code: "mpc_second.code", expires_at: new Date(Date.now() + 600_000).toISOString(),
+  });
+  await renderAgents();
+  const preview = () => container.querySelector('[data-testid="agent-prompt-preview"]')?.textContent;
+  const fallback = () => container.querySelector(".agent-prompt-setup__fallback pre")?.textContent;
+  const guide = container.querySelector("#install-pair-section");
+  if (!guide) throw new Error("missing pairing guide");
+  const command = () => guide.querySelector(".wb-pairing__command")?.textContent;
+  const handoff = () => helperLink("点此直接打开本机控制台");
+  expect(createPairingCode).toHaveBeenCalledTimes(1);
+  expect(preview()).toContain("目标房间：目标房间（room-42）");
+  expect(preview()).toContain("配对码：mpc_first.code");
+  expect(fallback()).toContain("mpc_first.code");
+  expect(command()).toContain("mpc_first.code");
+  expect(handoff()).toContain("#pair=mpc_first.code");
+  expect([...container.querySelectorAll('[role="timer"]')].map((el) => el.textContent))
+    .toEqual(["有效期剩余 00:02", "有效期剩余 00:02"]);
 
-  expect(container.textContent).toContain("选客户端，复制专属提示词");
-  const prompt = container.querySelector('[data-testid="agent-prompt-preview"]')?.textContent ?? "";
-  expect(prompt).toContain("目标房间：目标房间（room-42）");
-  expect(prompt).toContain("/prompts/claude-code.md");
+  await advanceTime(2000);
+  expect(container.textContent?.match(/当前配对码已过期，请重新生成/gu)).toHaveLength(2);
+  expect(handoff()).toBe(`${HELPER_ORIGIN}/`);
+  const disabled = [...container.querySelectorAll("button:disabled")].map((el) => el.textContent?.trim());
+  expect(disabled).toEqual(expect.arrayContaining(["复制专属提示词", "复制备用命令", "一键复制终端配对命令"]));
+
+  await clickButton(guide, "重新生成配对码");
+  expect(createPairingCode).toHaveBeenCalledTimes(2);
+  expect(preview()).toContain("配对码：mpc_second.code");
+  expect(fallback()).toContain("mpc_second.code");
+  expect(command()).toContain("mpc_second.code");
+  expect(handoff()).toContain("#pair=mpc_second.code");
+  expect(container.textContent).not.toContain("mpc_first.code");
+});
+
+it("explains that a paired desktop helper can join directly", async () => {
+  vi.mocked(probeHelper).mockResolvedValue(runningProbe);
+  await renderAgents();
+  const prompt = container.querySelector('[data-testid="agent-prompt-preview"]')?.textContent;
+  expect(prompt).toContain("本机助手已配对，可直接加入目标房间");
+  expect(prompt).not.toContain("<未提供");
+  expect(createPairingCode).not.toHaveBeenCalled();
 });

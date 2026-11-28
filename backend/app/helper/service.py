@@ -19,6 +19,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import secrets
+import shlex
 import time
 import uuid
 from collections import defaultdict, deque
@@ -285,7 +286,10 @@ async def issue_pairing_code(db: AsyncSession, owner: User, hub_origin: str) -> 
                       code_hash=code_hash, code_salt=code_salt,
                       expires_at=expires, created_at=now))
     await db.commit()
-    install_command = f"curl -fsSL {hub_origin}/install.sh | sh -s -- --pair {code}"
+    install_command = (
+        f"curl -fsSL {shlex.quote(hub_origin + '/install.sh')} | "
+        f"sh -s -- --pair {shlex.quote(code)} --hub {shlex.quote(hub_origin)}"
+    )
     return PairingCodeResponse(code=code, expires_at=expires.isoformat(),
                                install_command=install_command)
 

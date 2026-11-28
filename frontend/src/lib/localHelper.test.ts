@@ -5,6 +5,7 @@ import {
   acceptRoomInvite,
   approveRedemption,
   bindMyXmtpAddress,
+  createPairingCode,
   createRoomInvite,
   denyRedemption,
   formatInviteAcceptError,
@@ -21,6 +22,7 @@ import {
   resolvePresetOpenDecision,
   resumeRoomSeat,
   revokeRoomInvite,
+  shellInstallCommand,
   type HelperHello,
   type HelperProbe,
 } from "./localHelper";
@@ -213,12 +215,40 @@ describe("helperHandoffUrl", () => {
   });
 });
 
-describe("powershellInstallCommand", () => {
-  it("builds a PowerShell one-liner with trimmed hub origin and pairing code", () => {
-    expect(powershellInstallCommand("mpc_123.abc", "https://hub.wangdada8208.xyz///")).toBe(
-      'iex "& { $(irm https://hub.wangdada8208.xyz/install.ps1 -UseBasicParsing) } -Pair mpc_123.abc -Hub https://hub.wangdada8208.xyz"',
-    );
+describe("helper install commands", () => {
+  it.each([
+    { hubOrigin: "https://parlor.example", webOrigin: "https://parlor.example" },
+    { hubOrigin: "http://127.0.0.1:8000", webOrigin: "http://127.0.0.1:5173" },
+  ])("downloads scripts from $webOrigin and pairs with $hubOrigin", ({ hubOrigin, webOrigin }) => {
+    const code = "mpc_123.abc";
+    const shell = shellInstallCommand(code, { hubOrigin, webOrigin });
+    const powershell = powershellInstallCommand(code, { hubOrigin, webOrigin });
+    expect(shell).toContain(`curl -fsSL '${webOrigin}/install.sh'`);
+    expect(shell).toContain(`--pair '${code}' --hub '${hubOrigin}'`);
+    expect(powershell).toContain(`irm '${webOrigin}/install.ps1' -UseBasicParsing`);
+    expect(powershell).toContain(`-Pair '${code}' -Hub '${hubOrigin}'`);
+    const packageUrl = `'${webOrigin}/downloads/xmtp-member-latest.tar.gz'`;
+    if (hubOrigin === webOrigin) {
+      expect(shell).not.toContain("MAPR_PKG_URL");
+      expect(powershell).not.toContain("MAPR_PKG_URL");
+    } else {
+      expect(shell).toContain(`MAPR_PKG_URL=${packageUrl} sh`);
+      expect(powershell).toContain(`$env:MAPR_PKG_URL = ${packageUrl}`);
+    }
   });
+});
+
+it("uses the Hub pairing code and expiry without taking a command from the response", async () => {
+  const fetch = vi.spyOn(globalThis, "fetch");
+  try {
+    const issued = { code: "mpc_123.abc", expires_at: "2099-01-01T00:10:00Z" };
+    fetch.mockResolvedValueOnce(Response.json({ ...issued, install_command: "ignore me" }));
+    await expect(createPairingCode()).resolves.toEqual(issued);
+    fetch.mockResolvedValueOnce(Response.json({ ...issued, expires_at: "invalid" }));
+    await expect(createPairingCode()).rejects.toThrow("配对码响应无效");
+  } finally {
+    fetch.mockRestore();
+  }
 });
 
 describe("room invite Hub API helpers", () => {
