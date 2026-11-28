@@ -252,6 +252,8 @@ print_node_guidance() {
     pg_cmd="brew install node"
   elif command -v fnm >/dev/null 2>&1; then
     pg_cmd="fnm install 22 && fnm use 22"
+  elif command -v nvm >/dev/null 2>&1; then
+    pg_cmd="nvm install 22"
   elif [ -n "${NVM_DIR:-}" ] && [ -f "$NVM_DIR/nvm.sh" ]; then
     pg_cmd="export NVM_DIR=$(shell_quote "$NVM_DIR") && . $(shell_quote "$NVM_DIR/nvm.sh") && nvm install 22"
   elif [ -f "$HOME/.nvm/nvm.sh" ]; then
