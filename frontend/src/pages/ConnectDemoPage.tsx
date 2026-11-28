@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { AlertCircle, CheckCircle2, Infinity as InfinityIcon, Plane, Receipt, ShieldCheck } from "lucide-react";
+import { AgentPromptSetupPicker } from "../components/AgentPromptSetupPicker";
 import { ConnectButton } from "../components/ConnectButton";
 
 export function ConnectDemoPage() {
@@ -111,6 +112,8 @@ export function ConnectDemoPage() {
             )}
           </div>
         </div>
+
+        <AgentPromptSetupPicker />
 
         <div className="card connect-demo__card connect-demo__spec">
           <h3>
