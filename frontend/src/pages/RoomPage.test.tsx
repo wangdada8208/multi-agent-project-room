@@ -7,7 +7,7 @@ import { isHex, recoverMessageAddress } from "viem";
 import { generatePrivateKey } from "viem/accounts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useAuthStore } from "../stores/authStore";
-import { hasUnlockedXmtpKey, inboxAddress } from "../lib/xmtpLocalIdentity";
+import { hasUnlockedXmtpKey, inboxAddress, lockXmtpIdentity } from "../lib/xmtpLocalIdentity";
 import { RoomPage } from "./RoomPage";
 
 const sdk = vi.hoisted(() => ({
@@ -42,6 +42,7 @@ beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   vi.spyOn(navigator, "userAgent", "get").mockReturnValue("iPhone");
   vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
+  lockXmtpIdentity();
   roomTransport = "xmtp";
   roomRole = "owner";
   roomStatusCode = 200;
@@ -94,6 +95,7 @@ afterEach(() => {
   client.clear();
   container.remove();
   useAuthStore.setState(undoSession);
+  lockXmtpIdentity();
   vi.useRealTimers();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
@@ -140,7 +142,7 @@ describe("room security and state integration", () => {
     expect(calls("/api/v1/rooms/room")).toHaveLength(1);
   });
 
-  it("sends one signed nonce after acceptance, shows one pending card and clears the key on exit", async () => {
+  it("sends one signed nonce after acceptance, shows one pending card and keeps the in-memory unlock across room exits", async () => {
     roomRole = "member";
     await renderRoom("/rooms/room?invite=sample-invite");
     expect(calls("/api/v1/invites/sample-invite/accept")).toHaveLength(1);
@@ -161,7 +163,7 @@ describe("room security and state integration", () => {
     expect(container.textContent).not.toContain("当前加密身份尚未加入此房间加密群");
     expect(container.querySelector('a[href^="http://127.0.0.1"]')).toBeNull();
     await act(async () => root.render(null));
-    expect(hasUnlockedXmtpKey()).toBe(false);
+    expect(hasUnlockedXmtpKey()).toBe(true);
   });
 
   it("keeps encrypted messages and search text off the Hub, hides files and share, and pauses mobile helper navigation", async () => {

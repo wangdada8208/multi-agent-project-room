@@ -6,6 +6,7 @@ import type { RawXmtpMessage } from "../../lib/domain/displayMessages";
 import type { XmtpSessionEvent } from "../../lib/domain/xmtpSession";
 import type { RoomXmtpClient } from "./useXmtpSession";
 import type { DecodedMessage } from "@xmtp/browser-sdk";
+import { XMTP_NETWORK_ERROR_MESSAGE } from "../../lib/xmtpLocalIdentity";
 
 const emptyMessages: RawXmtpMessage[] = [];
 const emptyAddresses: Record<string, string> = {};
@@ -90,9 +91,9 @@ export function useXmtpMessages(client: RoomXmtpClient | null, groupId: string |
             }).catch(() => {});
           }
         }
-        if (active) dispatch({ type: "failed", message: "加密连接已断开，请重新连接" });
-      } catch (err) {
-        if (active) dispatch({ type: "failed", message: err instanceof Error ? err.message : "加密连接失败" });
+        if (active) dispatch({ type: "failed", message: XMTP_NETWORK_ERROR_MESSAGE, reason: "stream" });
+      } catch {
+        if (active) dispatch({ type: "failed", message: XMTP_NETWORK_ERROR_MESSAGE, reason: "stream" });
       } finally {
         stop?.();
         stop = undefined;

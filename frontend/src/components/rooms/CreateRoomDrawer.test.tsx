@@ -151,7 +151,7 @@ describe("CreateRoomDrawer", () => {
       expect(host.textContent).toContain("审查者 Reviewer");
       expect(host.textContent).toContain("查看日程空闲");
       expect(host.textContent).toContain("不允许");
-      expect(host.textContent).toContain("房间默认端到端加密");
+      expect(host.textContent).toContain("创建后自动开启端到端加密");
 
       const nameInput = host.querySelector<HTMLInputElement>("#wb-create-room-name")!;
       expect(nameInput.value).toMatch(/^代码评审 · \d+月\d+日$/);

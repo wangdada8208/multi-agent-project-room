@@ -1,14 +1,16 @@
 import { Check, LockKeyhole, ShieldCheck } from "lucide-react";
 import { useId } from "react";
 import { CopyButton } from "../CopyButton";
+import { Button } from "../ui/Button";
 
 export interface EncryptionDetailsProps {
   ready: boolean;
   groupId?: string | null;
   address?: string;
+  onLock?: () => void;
 }
 
-export function EncryptionDetails({ ready, groupId, address }: EncryptionDetailsProps) {
+export function EncryptionDetails({ ready, groupId, address, onLock }: EncryptionDetailsProps) {
   return <div className="wb-privacy">
     <h4><ShieldCheck size={17} />{ready ? "已端到端加密" : "端到端加密"}</h4>
     <ul>
@@ -16,6 +18,10 @@ export function EncryptionDetails({ ready, groupId, address }: EncryptionDetails
       <li><Check size={14} />服务器只负责房间和成员管理，看不到聊天正文。</li>
       <li><Check size={14} />新成员由房主的设备加入加密群。</li>
     </ul>
+    {address && onLock && <div className="wb-privacy__session">
+      <span>本机加密身份已解锁</span>
+      <Button variant="secondary" size="sm" onClick={onLock}>立即锁定</Button>
+    </div>}
     <details><summary>技术详情</summary>
       <dl>
         <dt>协议</dt><dd>XMTP · MLS 群组</dd>

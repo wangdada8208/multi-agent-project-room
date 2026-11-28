@@ -45,9 +45,10 @@ export function useRoomWorkspace(roomId: string) {
   const { sendMessage } = useWebSocket(roomId, room?.transport, roomReadyForQueries && (!inviteAcceptError || Boolean(room)));
   const { track } = useAnalytics();
 
-  const { session, xmtpClient, setUnlockedKey, listenRetry, dispatch, restartListener, reconnect, myXmtpAddress, draftKeyMaterial,
+  const { session, xmtpClient, setUnlockedKey, lock, listenRetry, dispatch, restartListener, reconnect, myXmtpAddress, draftKeyMaterial,
     bindingGroup, bindGroup: handleQuickBindGroup } = useXmtpSession({
       roomId, groupId: room?.xmtp_group_id, enabled: isEncrypted && !permissionsQuery.isPending, refreshRoom: roomQuery.refetch,
+      autoBind: myRoomRole === "owner",
     });
   const { rawXmtpMessages, inboxAddresses, updateInboxMap } = useXmtpMessages(xmtpClient, room?.xmtp_group_id, listenRetry, dispatch);
   const { refetch: refetchSeats, data: seats = emptySeats } = roomSeatsQuery;
@@ -228,7 +229,7 @@ export function useRoomWorkspace(roomId: string) {
 
   return {
     room, user, template, isEncrypted, roomError, roomLoaded: roomQuery.isSuccess, isObserver, myRoomRole, permissionsQuery,
-    invite, inviteAccepting, inviteAcceptError, retryInvite, session, xmtpClient, setUnlockedKey, reconnect,
+    invite, inviteAccepting, inviteAcceptError, retryInvite, session, xmtpClient, setUnlockedKey, lock, reconnect,
     myXmtpAddress, draftKeyMaterial, bindingGroup, handleQuickBindGroup, seats, participants, tasks,
     search, displayMessages, displayMessageById, statusView, candidates, onlineAgentNames, starterChips,
     notifEnabled, toggleNotifications,

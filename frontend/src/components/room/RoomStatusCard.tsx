@@ -37,15 +37,20 @@ export function RoomStatusCard({ view, address, roomId, accepted, binding, canBi
       </section>;
     case "enableGroup":
     case "waitForGroup":
-      return <section className="wb-status">
+      return <section className="wb-status" role={binding ? "status" : undefined}>
         <LockKeyhole size={24} />
-        <strong>{view.kind === "enableGroup" ? "这个房间还没启用加密对话" : "等房主打开房间启用加密对话"}</strong>
-        {view.kind === "enableGroup" && <><p>启用后，此设备会自动把待入群的成员加入加密群。</p>
+        <strong>{view.kind === "enableGroup"
+          ? binding ? "正在开启端到端加密…" : "这个房间还没启用加密对话"
+          : "等房主打开房间启用加密对话"}</strong>
+        {view.kind === "enableGroup" && (binding ? (
+          <p>首次开启通常需要几秒，完成后即可直接发消息。</p>
+        ) : <>
+          <p>启用后，此设备会自动把待入群的成员加入加密群。</p>
           <div className="wb-actions">
             <Button size="sm" loading={binding} disabled={!canBind} onClick={onBind}>立即启用</Button>
             <Link to={`/setup/${encodeURIComponent(roomId)}`}>打开完整配置向导</Link>
           </div>
-        </>}
+        </>)}
       </section>;
     case "awaitingApproval":
     case "awaitingAdd":
@@ -58,16 +63,20 @@ export function RoomStatusCard({ view, address, roomId, accepted, binding, canBi
         {address && <details><summary>我的加密身份</summary><code>{address}</code> <CopyButton text={address} label="复制我的加密地址" /></details>}
       </section>;
     case "inviteError":
-    case "error":
+    case "error": {
+      const bindFailed = view.kind === "error" && view.reason === "bind";
       return <section className="wb-status" role="alert">
-        <strong>{view.kind === "error" ? "加密连接中断" : "邀请链接核销失败"}</strong>
+        <strong>{view.kind === "error" ? bindFailed ? "端到端加密开启失败" : "加密连接中断" : "邀请链接核销失败"}</strong>
         <p>{view.message}</p>
         <div className="wb-actions">
           {view.kind === "inviteError" && onRetryInvite && <Button size="sm" onClick={onRetryInvite}>重试核销</Button>}
-          <Button variant="secondary" size="sm" onClick={onReconnect}>重新连接</Button>
+          {view.kind === "error" && bindFailed
+            ? <Button size="sm" loading={binding} disabled={!canBind} onClick={onBind}>重试开启</Button>
+            : <Button variant="secondary" size="sm" onClick={onReconnect}>{view.kind === "error" ? "重试连接" : "重新连接"}</Button>}
           {address && <CopyButton text={address} label="复制我的加密地址" />}
         </div>
       </section>;
+    }
     case "ready":
       return <section className="wb-status">
         <ShieldCheck size={24} /><strong>端到端加密对话已就绪</strong>

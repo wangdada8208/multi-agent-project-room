@@ -2,10 +2,49 @@ import { bytesToHex, hexToBytes } from "viem";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { Client, IdentifierKind, type Signer } from "@xmtp/browser-sdk";
 import { xmtpEnvFromVite } from "./xmtpEnv";
+import { currentUnlockedXmtpKey, lockXmtpIdentity } from "./xmtpUnlockSession";
+
+export {
+  clearUnlockedXmtpKey,
+  currentUnlockedXmtpKey,
+  hasUnlockedXmtpKey,
+  lockXmtpIdentity,
+  rememberUnlockedXmtpKey,
+  SESSION_UNLOCK_STORAGE_KEY,
+  setUnlockedXmtpKey,
+} from "./xmtpUnlockSession";
 
 export const LEGACY_STORAGE_KEY = "mapr-xmtp-inbox-key";
 export const VAULT_STORAGE_KEY = "mapr-xmtp-vault";
 export const DEFAULT_PBKDF2_ITERATIONS = 310000;
+export const XMTP_NETWORK_ERROR_MESSAGE = "暂时连不上加密网络，请稍后重试";
+export const XMTP_BIND_ERROR_MESSAGE = "暂时无法开启端到端加密，请稍后重试。";
+
+const identityErrorMessages = {
+  "incorrect-password": "口令不对，请检查大小写后重试，或点下方重设本机加密身份",
+  "missing-vault": "没有找到本机加密身份，请设置新口令",
+  "unsupported-vault": "本机加密身份版本不受支持，请重设本机加密身份",
+  "password-too-short": "新口令至少需要 10 个字符",
+  "invalid-legacy-identity": "原加密身份已损坏，请先恢复备份，不能自动替换身份",
+  "identity-save-failed": "无法把加密身份保存到当前浏览器，请检查浏览器存储设置后重试",
+} as const;
+
+export type XmtpIdentityErrorCode = keyof typeof identityErrorMessages;
+
+export class XmtpIdentityError extends Error {
+  readonly code: XmtpIdentityErrorCode;
+
+  constructor(code: XmtpIdentityErrorCode) {
+    super(identityErrorMessages[code]);
+    this.name = "XmtpIdentityError";
+    this.code = code;
+  }
+}
+
+export function xmtpIdentityErrorMessage(error: unknown): string {
+  if (error instanceof XmtpIdentityError) return error.message;
+  return "无法解锁本机加密身份，请稍后重试";
+}
 
 export interface EncryptedKeyVault {
   version: 1;
@@ -27,19 +66,28 @@ export async function unlockOrCreateInboxKey(
   iterations = DEFAULT_PBKDF2_ITERATIONS,
 ): Promise<string> {
   if (loadEncryptedVault(storage)) return unlockPrivateKey(password, storage);
-  if (password.length < 10) throw new Error("新口令至少需要 10 个字符");
+  if (password.length < 10) throw new XmtpIdentityError("password-too-short");
   const legacy = storage.getItem(LEGACY_STORAGE_KEY);
   if (legacy && !/^0x[0-9a-fA-F]{64}$/.test(legacy)) {
-    throw new Error("原加密身份已损坏，请先恢复备份，不能自动替换身份");
+    throw new XmtpIdentityError("invalid-legacy-identity");
   }
   const key = legacy || generatePrivateKey();
   // Validate the legacy identity before changing storage.
-  inboxAddress(key);
-  await storeEncryptedKey(key, password, storage, iterations);
-  const confirmed = await unlockPrivateKey(password, storage);
-  if (confirmed !== key) throw new Error("身份保存校验失败，原身份仍保留");
-  storage.removeItem(LEGACY_STORAGE_KEY);
-  return confirmed;
+  try {
+    inboxAddress(key);
+  } catch {
+    throw new XmtpIdentityError("invalid-legacy-identity");
+  }
+  try {
+    await storeEncryptedKey(key, password, storage, iterations);
+    const confirmed = await unlockPrivateKey(password, storage);
+    if (confirmed !== key) throw new XmtpIdentityError("identity-save-failed");
+    storage.removeItem(LEGACY_STORAGE_KEY);
+    return confirmed;
+  } catch (error) {
+    if (error instanceof XmtpIdentityError && error.code !== "incorrect-password") throw error;
+    throw new XmtpIdentityError("identity-save-failed");
+  }
 }
 
 export async function deriveKey(
@@ -101,7 +149,7 @@ export async function decryptPrivateKey(
   password: string,
 ): Promise<string> {
   if (vault.version !== 1) {
-    throw new Error(`Unsupported vault version: ${vault.version}`);
+    throw new XmtpIdentityError("unsupported-vault");
   }
   const salt = hexToBytes(vault.salt as `0x${string}`);
   const iv = hexToBytes(vault.iv as `0x${string}`);
@@ -117,7 +165,7 @@ export async function decryptPrivateKey(
     const dec = new TextDecoder();
     return dec.decode(decryptedBuffer);
   } catch {
-    throw new Error("Decryption failed: incorrect password or corrupted vault");
+    throw new XmtpIdentityError("incorrect-password");
   }
 }
 
@@ -166,7 +214,7 @@ export async function unlockPrivateKey(
 ): Promise<string> {
   const vault = loadEncryptedVault(storage);
   if (!vault) {
-    throw new Error("No encrypted vault found in storage");
+    throw new XmtpIdentityError("missing-vault");
   }
   return decryptPrivateKey(vault, password);
 }
@@ -196,31 +244,23 @@ export async function createLocalXmtpClient(privateKey: string): Promise<Client<
   return Client.create(signer, { env } as any);
 }
 
-// ── 已解锁身份的会话内持有（仅内存，不落盘、不进 Hub） ──────────────
+// ── 已解锁身份的会话内持有（内存优先；显式选择后可限 sessionStorage 恢复） ──────────────
 
-let unlockedPrivateKey: string | null = null;
-
-/**
- * 由解锁流程在内存中登记私钥，仅用于本地 EIP-191 签名。
- * 密钥绝不写入 DOM / localStorage / Hub。
- */
-export function setUnlockedXmtpKey(privateKey: string | null): void {
-  unlockedPrivateKey = privateKey;
-}
-
-export function clearUnlockedXmtpKey(): void {
-  unlockedPrivateKey = null;
-}
-
-export function hasUnlockedXmtpKey(): boolean {
-  return unlockedPrivateKey !== null;
+/** 破坏性重设本机加密身份：删除加密 vault、旧明文遗留值与所有解锁态。 */
+export function resetLocalXmtpIdentity(
+  storage: Pick<Storage, "removeItem"> | undefined = typeof localStorage !== "undefined" ? localStorage : undefined,
+): void {
+  storage?.removeItem(VAULT_STORAGE_KEY);
+  storage?.removeItem(LEGACY_STORAGE_KEY);
+  lockXmtpIdentity();
 }
 
 /** 已解锁身份的以太坊地址；未解锁或密钥损坏时返回 null。 */
 export function unlockedXmtpAddress(): string | null {
-  if (!unlockedPrivateKey) return null;
+  const privateKey = currentUnlockedXmtpKey();
+  if (!privateKey) return null;
   try {
-    return inboxAddress(unlockedPrivateKey);
+    return inboxAddress(privateKey);
   } catch {
     return null;
   }
@@ -231,9 +271,10 @@ export function unlockedXmtpAddress(): string | null {
  * 仅当本机加密身份已解锁时可用；私钥不离开本模块。
  */
 export async function signXmtpMessage(message: string): Promise<string> {
-  if (!unlockedPrivateKey) {
+  const privateKey = currentUnlockedXmtpKey();
+  if (!privateKey) {
     throw new Error("加密身份未解锁：请先在聊天区输入口令解锁本机加密身份");
   }
-  const account = privateKeyToAccount(unlockedPrivateKey as `0x${string}`);
+  const account = privateKeyToAccount(privateKey as `0x${string}`);
   return account.signMessage({ message });
 }
