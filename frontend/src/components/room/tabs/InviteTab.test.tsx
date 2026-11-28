@@ -67,17 +67,28 @@ describe("InviteTab decluttered encrypted invite flow", () => {
   it("shows only role, approval, and one invite action before a closed advanced details section", async () => {
     await flush();
 
-    expect(host.textContent).toContain("可发消息与带 Agent 协作");
+    expect(host.textContent).toContain("可以一起聊并带自己的助手");
     expect(host.textContent).toContain("只能看");
     expect(host.textContent).toContain("需要房主批准");
     expect(host.textContent).toContain("生成并复制邀请链接");
-    const details = host.querySelector("details");
+    const panel = host.querySelector(".panel-section");
+    const details = panel?.querySelector("details");
     expect(details).not.toBeNull();
     expect(details?.hasAttribute("open")).toBe(false);
     expect(details?.querySelector("summary")?.textContent).toContain("高级选项");
     expect(details?.textContent).toContain("gmail.send");
     expect(details?.textContent).toContain("可用次数");
     expect(details?.innerHTML).toContain("0x 开头的 42 位加密地址");
+
+    details?.remove();
+    const primaryText = panel?.textContent ?? "";
+    expect(primaryText).not.toContain("Agent");
+    expect(primaryText).not.toContain("gmail.send");
+    expect(primaryText).not.toContain("calendar.free_busy");
+    expect(primaryText).not.toContain("scope");
+    expect(primaryText).not.toContain("0x");
+    expect(primaryText).not.toContain("XMTP");
+    expect(primaryText).not.toContain("签名");
   });
 
   it("generates and copies the encrypted invite link in one click", async () => {

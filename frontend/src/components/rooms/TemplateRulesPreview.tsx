@@ -27,37 +27,40 @@ function humanRoleName(name: string): string {
   return cleaned || name;
 }
 
-function joinAlternatives(items: readonly string[]): string {
-  const unique = [...new Set(items)];
-  if (unique.length <= 1) return unique[0] ?? "使用外部能力";
-  return `${unique.slice(0, -1).join("、")}或${unique[unique.length - 1]}`;
+function sentence(value: string): string {
+  const cleaned = value.trim().replace(/\s*\bAgents?\b\s*/giu, "助手");
+  return /[。！？.!?]$/u.test(cleaned) ? cleaned : `${cleaned}。`;
 }
 
 function buildTemplateSummaries(
+  description: string | null | undefined,
   roles: readonly ParsedTemplateRole[],
   scopeEntries: readonly (readonly [string, HouseRuleDecision])[],
   notes: readonly string[],
   rounds: number | undefined,
 ): string[] {
   const summaries: string[] = [];
-  const roleNames = roles.map((role) => humanRoleName(role.name)).filter(Boolean).slice(0, 3);
-  if (roleNames.length === 1) summaries.push(`${roleNames[0]}负责协作。`);
-  if (roleNames.length > 1) summaries.push(`${roleNames.join("、")}分工协作。`);
+  if (description?.trim()) {
+    summaries.push(sentence(description));
+  } else {
+    const roleNames = roles.map((role) => humanRoleName(role.name)).filter(Boolean).slice(0, 3);
+    if (roleNames.length === 1) summaries.push(`这个模板会安排${roleNames[0]}帮你处理房间事务。`);
+    if (roleNames.length > 1) summaries.push(`这个模板会安排${roleNames.join("、")}一起协作。`);
+  }
 
-  const askLabels = scopeEntries
-    .filter(([scope, decision]) => decision === "ask" && scope !== "gmail.send")
-    .map(([scope]) => SCOPE_LABELS[scope] ?? "使用外部能力");
-  if (askLabels.length > 0) summaries.push(`${joinAlternatives(askLabels)}前，都会先问主人。`);
+  if (scopeEntries.some(([, decision]) => decision === "ask")) {
+    summaries.push("助手要查看或使用你的其他账号前，都会先问你。");
+  }
 
   const gmailDecision = scopeEntries.find(([scope]) => scope === "gmail.send")?.[1];
-  if (gmailDecision === "cannot") summaries.push("不会替主人对外发邮件。");
-  if (gmailDecision === "ask") summaries.push("对外发邮件前也必须得到主人当场批准。");
+  if (gmailDecision === "cannot") summaries.push("不会替你对外发邮件。");
+  if (gmailDecision === "ask") summaries.push("要发邮件前，也必须先问你。");
 
   if (summaries.length < 3 && notes.length > 0) {
     summaries.push(`还附带 ${notes.length} 条房间建议，可在详情中查看。`);
   }
   if (summaries.length < 3 && rounds != null) {
-    summaries.push(`默认最多 ${rounds} 轮，避免讨论失控。`);
+    summaries.push(`讨论最多进行 ${rounds} 轮，避免一直停不下来。`);
   }
   return summaries.slice(0, 3);
 }
@@ -98,7 +101,7 @@ export function TemplateRulesPreview({
   const scopeEntries = Object.entries(activeDraft.house_rules.scopes);
   const notes = activeDraft.house_rules.notes;
   const rounds = activeDraft.default_max_rounds ?? template.default_max_rounds ?? undefined;
-  const summaries = buildTemplateSummaries(roles, scopeEntries, notes, rounds);
+  const summaries = buildTemplateSummaries(template.description, roles, scopeEntries, notes, rounds);
   const hasAdvancedDetails = roles.length > 0 || scopeEntries.length > 0 || notes.length > 0;
 
   return (
@@ -125,7 +128,7 @@ export function TemplateRulesPreview({
       {hasAdvancedDetails && (
         <section className="wb-preview-box__section">
           <details className="wb-preview-advanced">
-            <summary>查看完整分工与机器范围</summary>
+            <summary>查看完整分工和设置细节</summary>
             <div className="wb-preview-advanced__body">
               {roles.length > 0 && (
                 <div>
@@ -143,7 +146,7 @@ export function TemplateRulesPreview({
 
               {scopeEntries.length > 0 && (
                 <div>
-                  <h5>Agent 行为规则</h5>
+                  <h5>助手行为规则</h5>
                   <div className="wb-preview-rules">
                     {scopeEntries.map(([scope, decision]) => (
                       <div key={scope} className="wb-preview-rule">

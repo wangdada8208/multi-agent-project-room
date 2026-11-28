@@ -524,7 +524,7 @@ export function PermissionsPanel({
             <strong style={{ fontSize: 13, color: "var(--text-1)" }}>创建邀请链接</strong>
           </div>
           <p style={{ fontSize: 12, color: "var(--text-2)", lineHeight: 1.5 }}>
-            对方打开链接、登录并签名后即可加入加密房间。
+            对方打开链接、登录后即可加入。
           </p>
 
           <div role="radiogroup" aria-label="受邀人角色" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -548,7 +548,7 @@ export function PermissionsPanel({
                 onChange={() => setInviteRole("member")}
               />
               <span style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                <strong style={{ fontSize: 12.5, color: "var(--text-1)" }}>可发消息与带 Agent 协作</strong>
+                <strong style={{ fontSize: 12.5, color: "var(--text-1)" }}>可以一起聊并带自己的助手</strong>
                 <small style={{ fontSize: 11.5, color: "var(--text-2)" }}>适合一起工作的成员</small>
               </span>
             </label>
@@ -576,7 +576,7 @@ export function PermissionsPanel({
               </span>
             </label>
             <span style={{ fontSize: 11.5, color: "var(--text-3)", lineHeight: 1.45 }}>
-              可管理房间仅限房主本人，邀请链接不会交出管理权。
+              只有房主可以管理房间；邀请链接不会交出管理权。
             </span>
           </div>
 

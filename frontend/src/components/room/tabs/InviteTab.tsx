@@ -44,7 +44,7 @@ export function InviteTab({ permissions }: { permissions: PermissionsPanelProps 
         </>}
     </section>
     <section className="wb-panel-card">
-      <h3><Cloud size={16} />快速接入云端 Agent</h3>
+      <h3><Cloud size={16} />快速接入云端助手</h3>
       {AGENT_PRESETS.filter((preset) => preset.mode === "cloud-agent").map((preset) => <div key={preset.id} className="wb-quick-agent">
         <div><strong>{preset.title}</strong><small>手机可用</small></div>
         {isOwner ? <Button variant="secondary" size="sm" onClick={() => setCloud(cloud?.id === preset.id ? null : preset)}>
@@ -54,7 +54,7 @@ export function InviteTab({ permissions }: { permissions: PermissionsPanelProps 
       {cloud && <CloudAgentConnectPanel preset={cloud} compact roomId={roomId} roomName={room?.name} roomsLoaded
         onRoomChange={() => {}} hubOrigin={apiUrl("").replace(/\/$/u, "") || window.location.origin} onClose={() => setCloud(null)} />}
     </section>
-    <Link className="wb-add" to={path}><Laptop size={16} />接入电脑端 Agent</Link>
+    <Link className="wb-add" to={path}><Laptop size={16} />接入电脑端助手</Link>
     {!isEncrypted && isOwner && <section className="wb-panel-card">
       <h3>只读分享</h3>
       <p>分享链接 72 小时内有效。</p>
