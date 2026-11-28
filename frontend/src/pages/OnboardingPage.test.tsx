@@ -106,9 +106,9 @@ describe("Q07 real onboarding progress", () => {
     });
 
     expect(container.querySelector('[aria-label="第 1 步：开第一个房间，已完成"]')).not.toBeNull();
-    expect(container.querySelector('[aria-label="第 2 步：接入一个 Agent，未完成"]')).not.toBeNull();
-    expect(container.querySelector('[aria-label="第 3 步：邀请成员，未完成"]')).not.toBeNull();
-    expect(container.textContent).toContain("去接入 Agent");
+    expect(container.querySelector('[aria-label="第 2 步：接入一个智能助手，未完成"]')).not.toBeNull();
+    expect(container.querySelector('[aria-label="第 3 步：邀请一位同事，未完成"]')).not.toBeNull();
+    expect(container.textContent).toContain("去接入智能助手");
   });
 
   it("moves to the invite step only after a real agent seat exists", async () => {
@@ -116,9 +116,9 @@ describe("Q07 real onboarding progress", () => {
       progress: progress({ roomCount: 1, hasAgentSeat: true, firstRoomId: "room-1" }),
     });
 
-    expect(container.querySelector('[aria-label="第 2 步：接入一个 Agent，已完成"]')).not.toBeNull();
-    expect(container.querySelector('[aria-label="第 3 步：邀请成员，未完成"]')).not.toBeNull();
-    expect(container.querySelector('a[href="/rooms/room-1?panel=invite"]')?.textContent).toContain("去邀请成员");
+    expect(container.querySelector('[aria-label="第 2 步：接入一个智能助手，已完成"]')).not.toBeNull();
+    expect(container.querySelector('[aria-label="第 3 步：邀请一位同事，未完成"]')).not.toBeNull();
+    expect(container.querySelector('a[href="/rooms/room-1?panel=invite"]')?.textContent).toContain("去邀请一位同事");
   });
 
   it("uses an explicit dismiss control instead of click-based graduation", async () => {

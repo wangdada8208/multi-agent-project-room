@@ -19,33 +19,33 @@ import { Segmented } from "../ui/Segmented";
 export const PAIRING_TROUBLESHOOT_AFTER_SECONDS = 75;
 
 function probeStatusLabel(probe: HelperProbe | null): string {
-  if (!probe) return "正在首次探测";
-  if (probe.state === "running") return "已检测到本机助手";
-  if (probe.state === "blocked") return "浏览器拦截了本机访问";
-  return "未检测到本机助手";
+  if (!probe) return "正在第一次检查";
+  if (probe.state === "running") return "已经找到电脑助手";
+  if (probe.state === "blocked") return "浏览器暂时无法访问电脑助手";
+  return "还没有找到电脑助手";
 }
 
 function TroubleshootingCard({ onGenerate }: { onGenerate: () => void }) {
   return (
     <section className="wb-pairing-trouble" aria-label="本地配对排查">
-      <h4>等待超过 {PAIRING_TROUBLESHOOT_AFTER_SECONDS} 秒，仍未检测到本机助手</h4>
-      <p>后台仍会自动探测。先按顺序检查这 4 件事，完成后点「立即重新检测」。</p>
+      <h4>等了 {PAIRING_TROUBLESHOOT_AFTER_SECONDS} 秒，还没有找到电脑助手</h4>
+      <p>页面会继续自动检查。请按顺序确认这 4 件事，确认后点「立即重新检查」。</p>
       <ol>
         <li>
-          <strong>命令是否完整运行</strong>
-          <span>确认整行命令已粘贴到「终端」并按回车，终端没有停在确认或密码输入。</span>
+          <strong>命令有没有完整运行</strong>
+          <span>确认整行命令已经粘贴到电脑「终端」并按回车；如果终端还在等待确认或密码，请先完成那一步。</span>
         </li>
         <li>
-          <strong>是否装有 Node 22+</strong>
-          <span>在终端运行 <code>node --version</code>；低于 v22 时先升级 Node。</span>
+          <strong>电脑有没有装好运行环境</strong>
+          <span>在终端输入 <code>node --version</code> 后按回车。如果没有显示 v22 或更高版本，请先安装 Node 22+（这是配对命令需要的运行环境）。</span>
         </li>
         <li>
-          <strong>是否在同一台电脑上运行</strong>
-          <span>命令必须在当前浏览器所在电脑的终端执行，不是在另一台设备或云终端。</span>
+          <strong>命令是不是在这台电脑上运行</strong>
+          <span>命令必须在当前浏览器所在电脑的终端里运行，不是在另一台电脑或网页里的终端。</span>
         </li>
         <li>
           <strong>点此重新生成配对码</strong>
-          <span>旧配对码可能已过期或已经使用。生成后请重新复制整行命令。</span>
+          <span>这条命令可能会过期，也可能已经用过。生成新命令后，请重新复制整行命令。</span>
           <Button type="button" variant="secondary" size="sm" onClick={onGenerate}>
             点此重新生成配对码
           </Button>
@@ -92,7 +92,7 @@ export function PairingGuide({ mobile, running, secondary, pairing, error, hubOr
   return <section className={`wb-pairing${highlighted ? " step-one-highlight" : ""}`}>
     <header>
       <div>
-        <h3><Terminal size={17} />{helperRunning ? "本地助手已连接" : secondary ? "连接另一台电脑" : "第 1 步：在电脑「终端」运行配对命令"}</h3>
+        <h3><Terminal size={17} />{helperRunning ? "电脑助手已连接" : secondary ? "连接另一台电脑" : "第 1 步：在电脑「终端」运行配对命令"}</h3>
         <p>在电脑的终端粘贴配对命令。每台电脑只需配对一次。</p>
       </div>
       <Segmented label="切换操作系统" options={[{ value: "unix", label: "macOS / Linux" }, { value: "windows", label: "Windows" }]} value={platform} onChange={setPlatform} />
@@ -109,15 +109,15 @@ export function PairingGuide({ mobile, running, secondary, pairing, error, hubOr
       {expired ? <p className="wb-muted" role="status">{PAIRING_EXPIRED}</p> : <>
         <p className="wb-muted" role="timer">{pairingCountdown(pairing.remainingSeconds)}</p>
         {!showTroubleshooting && (
-          <p className="wb-muted">{mobile ? "请将配对命令复制到电脑的「终端」执行。" : "正在等待本机助手连接… 终端运行成功后此页面会自动刷新。"}</p>
+          <p className="wb-muted">{mobile ? "请将配对命令复制到电脑的「终端」执行。" : "正在等待电脑助手连接… 终端命令运行成功后，这个页面会自动更新。"}</p>
         )}
       </>}
       {!mobile && (
         <div className="wb-pairing-status" role="status">
           <span>已等待 {helper.waitingSeconds} 秒</span>
-          <span>最近探测：{helper.manualRetrying ? "正在重新检测…" : probeStatusLabel(helper.probe)}</span>
+          <span>最近一次检查：{helper.manualRetrying ? "正在重新检查…" : probeStatusLabel(helper.probe)}</span>
           <Button type="button" variant="ghost" size="sm" disabled={helper.manualRetrying} onClick={retryDetection}>
-            {helper.manualRetrying ? "正在检测…" : "立即重新检测"}
+            {helper.manualRetrying ? "正在检查…" : "立即重新检查"}
           </Button>
         </div>
       )}

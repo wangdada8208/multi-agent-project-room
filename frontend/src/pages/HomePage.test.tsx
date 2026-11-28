@@ -120,9 +120,9 @@ describe("Q07 homepage onboarding visibility", () => {
     await flushQueries();
 
     expect(container.querySelector('[aria-label="第 1 步：开第一个房间，已完成"]')).not.toBeNull();
-    expect(container.querySelector('[aria-label="第 2 步：接入一个 Agent，未完成"]')).not.toBeNull();
-    expect(container.querySelector('[aria-label="第 3 步：邀请成员，未完成"]')).not.toBeNull();
-    expect(container.textContent).toContain("去接入 Agent");
+    expect(container.querySelector('[aria-label="第 2 步：接入一个智能助手，未完成"]')).not.toBeNull();
+    expect(container.querySelector('[aria-label="第 3 步：邀请一位同事，未完成"]')).not.toBeNull();
+    expect(container.textContent).toContain("去接入智能助手");
   });
 
   it("hides the guide only after room, agent seat, and second human member are all real", async () => {

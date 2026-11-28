@@ -94,23 +94,23 @@ describe("Q14 pairing wait feedback", () => {
     await advanceTime(15_000);
 
     expect(container.textContent).toContain("已等待 15 秒");
-    expect(container.textContent).toContain("最近探测：浏览器拦截了本机访问");
-    expect(buttonByText("立即重新检测")).toBeTruthy();
+    expect(container.textContent).toContain("最近一次检查：浏览器暂时无法访问电脑助手");
+    expect(buttonByText("立即重新检查")).toBeTruthy();
   });
 
   it("switches to an actionable troubleshooting card after waiting ninety seconds", async () => {
     await renderGuide();
     await advanceTime(74_000);
-    expect(container.textContent).not.toContain("仍未检测到本机助手");
+    expect(container.textContent).not.toContain("等了 75 秒，还没有找到电脑助手");
 
     await advanceTime(16_000);
 
-    expect(container.textContent).toContain("仍未检测到本机助手");
-    expect(container.textContent).toContain("命令是否完整运行");
-    expect(container.textContent).toContain("是否装有 Node 22+");
-    expect(container.textContent).toContain("是否在同一台电脑上运行");
+    expect(container.textContent).toContain("等了 75 秒，还没有找到电脑助手");
+    expect(container.textContent).toContain("命令有没有完整运行");
+    expect(container.textContent).toContain("电脑有没有装好运行环境");
+    expect(container.textContent).toContain("命令是不是在这台电脑上运行");
     expect(container.textContent).toContain("点此重新生成配对码");
-    expect(container.textContent).not.toContain("正在等待本机助手连接… 终端运行成功后此页面会自动刷新。");
+    expect(container.textContent).not.toContain("正在等待电脑助手连接… 终端命令运行成功后，这个页面会自动更新。");
   });
 
   it("manually retries detection and renders the fresh probe result", async () => {
@@ -119,12 +119,12 @@ describe("Q14 pairing wait feedback", () => {
     const callsBefore = vi.mocked(probeHelper).mock.calls.length;
     vi.mocked(probeHelper).mockResolvedValue(runningProbe);
 
-    await act(async () => buttonByText("立即重新检测").click());
+    await act(async () => buttonByText("立即重新检查").click());
     await act(async () => {
       await Promise.resolve();
     });
 
     expect(vi.mocked(probeHelper).mock.calls.length).toBeGreaterThan(callsBefore);
-    expect(container.textContent).toContain("最近探测：已检测到本机助手");
+    expect(container.textContent).toContain("最近一次检查：已经找到电脑助手");
   });
 });

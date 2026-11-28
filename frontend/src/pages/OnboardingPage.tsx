@@ -143,8 +143,8 @@ export function useOnboardingProgress(enabled = true): OnboardingProgress {
 export function onboardingSteps(progress: Pick<OnboardingProgress, "roomCount" | "hasAgentSeat" | "hasInvitedMember">): OnboardingStep[] {
   return [
     { key: "room", index: 1, label: "开第一个房间", done: progress.roomCount > 0 },
-    { key: "agent", index: 2, label: "接入一个 Agent", done: progress.hasAgentSeat },
-    { key: "invite", index: 3, label: "邀请成员", done: progress.hasInvitedMember },
+    { key: "agent", index: 2, label: "接入一个智能助手", done: progress.hasAgentSeat },
+    { key: "invite", index: 3, label: "邀请一位同事", done: progress.hasInvitedMember },
   ];
 }
 
@@ -205,7 +205,7 @@ export function OnboardingView({ embedded = false, onStartTemplate, onDismiss, p
     event.preventDefault();
     const target = parseInviteLinkTarget(inviteInput);
     if (!target) {
-      setInviteError("请粘贴有效的房间邀请链接（例如 https://…/rooms/房间ID?invite=…）");
+      setInviteError("请粘贴有效的房间邀请链接（直接粘贴同事发给你的完整链接）");
       return;
     }
     setInviteError("");
@@ -217,7 +217,7 @@ export function OnboardingView({ embedded = false, onStartTemplate, onDismiss, p
       <section className="wb-onb-next wb-onb-next--done" aria-label="新手进度">
         <div className="wb-onb-next__copy">
           <h2>新手设置已完成</h2>
-          <p>房间、Agent 和协作者都已经就绪。</p>
+          <p>房间、智能助手和同事都已经准备好了。</p>
           <ProgressSteps steps={steps} />
         </div>
         <div className="wb-onb-next__actions">
@@ -234,12 +234,12 @@ export function OnboardingView({ embedded = false, onStartTemplate, onDismiss, p
       : nextStep?.key === "invite" && progress.firstRoomId
         ? `/rooms/${encodeURIComponent(progress.firstRoomId)}?panel=invite`
         : "/home";
-    const nextLabel = nextStep?.key === "agent" ? "去接入 Agent" : nextStep?.key === "invite" ? "去邀请成员" : "查看房间";
+    const nextLabel = nextStep?.key === "agent" ? "去接入智能助手" : nextStep?.key === "invite" ? "去邀请一位同事" : "查看房间";
     return (
       <section className="wb-onb-next" aria-label="新手进度">
         <div className="wb-onb-next__copy">
           <h2>继续完成新手设置</h2>
-          <p>进度按真实房间、席位和成员计算，不会因为点过按钮提前完成。</p>
+          <p>完成后，你就能和智能助手、同事在同一个房间里协作。</p>
           <ProgressSteps steps={steps} />
         </div>
         <div className="wb-onb-next__actions">
@@ -260,7 +260,7 @@ export function OnboardingView({ embedded = false, onStartTemplate, onDismiss, p
       <div className="wb-onb__title-row">
         <div>
           <HeadingTag>欢迎，{userName}。先做一件事就能开始。</HeadingTag>
-          <p className="wb-onb__lead">先用模板开一个加密房间。接入 Agent 和邀请同事可以随后完成。</p>
+          <p className="wb-onb__lead">先用模板开一个房间。接入智能助手和邀请同事，可以随后完成。</p>
         </div>
         <DismissButton onDismiss={onDismiss} />
       </div>
