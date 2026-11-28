@@ -291,6 +291,9 @@ export async function handleCreateSeat(deps: HelperServerDeps, body: unknown): P
     xmtpAddress,
     xmtpGroupId: grant.xmtp_group_id,
     allowedSenders: grant.allowed_senders ?? [],
+    ...(via === "ticket" && grant.allowed_senders?.length === 1
+      ? { ownerXmtpAddress: grant.allowed_senders[0] } : {}),
+    ...(prev?.responseMode ? { responseMode: prev.responseMode } : {}),
     agentToken: grant.agent_token,
     consolePort: prev?.consolePort ?? (await deps.store.nextFreePort()),
     createdAt: prev?.createdAt ?? new Date().toISOString(),

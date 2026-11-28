@@ -35,6 +35,7 @@ import uuid
 from datetime import datetime, timezone
 
 import httpx
+from trusted_runner import trust_frame
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(levelname)s %(message)s")
 logger = logging.getLogger("gateway")
@@ -229,11 +230,10 @@ class AgentGateway:
         """Send a mentioned message to the local backend and post the reply."""
         content = msg.get("content", "")
         room_id = msg.get("room_id", "")
-        sender = msg.get("sender_name", "user")
 
         prompt = (
             f"You are {self.agent_name} in a multi-agent collaboration room.\n"
-            f"{sender} said: {content}\n"
+            f"{trust_frame(content, msg, room_id=room_id, verified_owner_id=os.getenv('MAPR_OWNER_USER_ID'))}\n"
             "Respond concisely."
         )
 

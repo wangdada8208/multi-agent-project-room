@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { appendFile, mkdir } from "node:fs/promises";
 import path from "node:path";
@@ -66,6 +66,12 @@ import { GoogleCalendarConnector } from "./connectors/googleCalendar.ts";
 import { GmailReceiptConnector } from "./connectors/gmailReceipt.ts";
 import { GmailSendConnector } from "./connectors/gmailSend.ts";
 import { validateActionParams } from "./connectors/actionSchemas.ts";
+import { memberAccess } from "./capabilities.ts";
+import { startLocalMcp } from "./mcp.ts";
+import { RoomInbox, routeLiveMessage, type RoomMessage } from "./roomInbox.ts";
+import type { MessageSource } from "./trustFrame.ts";
+import { filterOutbound } from "./outboundFilter.ts";
+import { clearRevokedPairing } from "./pairingCredentials.ts";
 
 export interface MemberConfig {
   selfName?: string;
@@ -162,6 +168,9 @@ export async function bindGroupToHub(
 
 export async function startMember(): Promise<void> {
   const config = loadConfigFromEnv();
+  const access = memberAccess(process.env.MAPR_CAPS, process.env.MAPR_RESPONSE_MODE);
+  const captureRoom = access.caps.has("mcp") || access.mode === "watch";
+  const ownerAddress = process.env.MAPR_OWNER_XMTP_ADDRESS?.toLowerCase();
   // 白名单为空时，只有 XMTP_ALLOW_GROUP_MEMBERS=1 才能启动：席位走 via=local 建座时
   // Hub 返回空 allowed_senders，群成员放行本来就交给群成员缓存（决定 D3）。
   if (config.allowedSenders.length === 0 && process.env.XMTP_ALLOW_GROUP_MEMBERS !== "1") {
@@ -206,6 +215,7 @@ export async function startMember(): Promise<void> {
   };
   let currentHubToken = config.hubToken || "";
   let cloudSeatPaused = false;
+  let stopping = false;
   let lastUploadedCheckpointSeq = -1;
   const queue = new ConsentQueue(consentsPath);
   await queue.load();
@@ -281,7 +291,7 @@ export async function startMember(): Promise<void> {
     });
   }
 
-  const engineConfig = engineConfigFromEnv(process.env);
+  const engineConfig = access.mode === "active" ? engineConfigFromEnv(process.env) : null;
   const complete = engineConfig
     ? engineToComplete(createReplyEngine(engineConfig), engineConfig.timeoutMs)
     : undefined;
@@ -358,12 +368,13 @@ export async function startMember(): Promise<void> {
   });
 
   async function sendToConversation(conversationId: string, text: string): Promise<void> {
+    if (stopping || cloudSeatPaused) throw new Error("seat_unavailable");
     let ctx = await agent.getConversationContext(conversationId);
     if (!ctx) {
       await agent.client.conversations.syncAll();
       ctx = await agent.getConversationContext(conversationId);
     }
-    if (!ctx) throw new Error("conversation not found");
+    if (!ctx || stopping || cloudSeatPaused) throw new Error("seat_unavailable");
     await ctx.conversation.sendText(text);
   }
 
@@ -506,7 +517,7 @@ export async function startMember(): Promise<void> {
     ledgerCheckpointFile: checkpointPath,
     activitySeatId: process.env.MAPR_HELPER_SEAT_ID,
     policy: runtimePolicy,
-    onTriggersChanged: () => triggerEngine.refresh(),
+    onTriggersChanged: () => { if (access.mode === "active") triggerEngine.refresh(); },
     readLedger: () => readLedger(ledgerPath),
     readInbox: () => readInbox(inboxPath),
     readOwnerNotes: () => readOwnerNotesFile(ownerNotesPath),
@@ -621,8 +632,10 @@ export async function startMember(): Promise<void> {
 
   let revocationReady = false;
   const expiryTimer = setInterval(() => {
-    expireDue(actionDeps).catch((err) => console.error("Expiry error:", err.message));
-    resendPendingReceipts(actionDeps).catch((err) => console.error("Receipt resend error:", err.message));
+    if (access.mode === "active") {
+      expireDue(actionDeps).catch((err) => console.error("Expiry error:", err.message));
+      resendPendingReceipts(actionDeps).catch((err) => console.error("Receipt resend error:", err.message));
+    }
     writeLedgerCheckpoint().catch((err) => console.error("Checkpoint error:", err.message));
     loadHubRoomSettings(hubRoomSettingsPath)
       .then((next) => {
@@ -638,20 +651,39 @@ export async function startMember(): Promise<void> {
   // 本房其他席位的 XMTP 地址（连环护栏区分人/Agent 发言）。Hub 连不上时为空——
   // 全部发送者按人类处理，护栏不起作用，行为与旧版一致。
   const seatPeerAddresses = new Set<string>();
+  const seatNamesByAddress = new Map<string, string>();
   let seatPeerNames: string[] = [];
   const loopGuardLimit = (() => {
     const n = Number.parseInt(process.env.XMTP_LOOP_GUARD_LIMIT || "", 10);
     return Number.isFinite(n) ? n : undefined;
   })();
 
-  agent.on("text", async (ctx: any) => {
-    if (cloudSeatPaused) return;
-    const sender = ((await ctx.getSenderAddress()) || "").toLowerCase();
+  let roomInbox: RoomInbox;
+  const messageSource = (sender: string, roomId: string, sentAt: Date): MessageSource => ({
+    sender,
+    role: seatPeerAddresses.has(sender) ? "agent" : sender && sender === ownerAddress ? "human" : "unknown",
+    seat: seatNamesByAddress.get(sender),
+    roomId,
+    sentAt: sentAt.toISOString(),
+  });
+  type TextContext = Parameters<Parameters<typeof agent.on<"text">>[1]>[0];
+  const processText = async (ctx: TextContext, markdown: boolean) => {
+    if (cloudSeatPaused || stopping) return;
+    const sender = ((await ctx.getSenderAddress().catch(() => undefined)) || "").toLowerCase();
     if (sender && sender === selfAddress) return;
-    const senderAllowed = await isSenderAuthorized(
+    const text = ctx.message.content;
+    const isRoom = Boolean(activeGroupId && ctx.conversation.id === activeGroupId &&
+      ctx.isGroup() && ctx.conversation.isActive);
+    const source = messageSource(sender, isRoom ? config.hubRoomId || ctx.conversation.id : ctx.conversation.id,
+      ctx.message.sentAt);
+    const plain = !text.startsWith(ENVELOPE_PREFIX);
+    const message = isRoom && plain && captureRoom
+      ? { id: ctx.message.id, text, source, verifiedOwner: ownerAddress } : undefined;
+    const active = access.mode === "active" && !markdown;
+    const senderAllowed = active && await isSenderAuthorized(
       {
         sender,
-        isGroup: typeof ctx.isGroup === "function" ? ctx.isGroup() : null,
+        isGroup: ctx.isGroup(),
         conversation: ctx.conversation,
       },
       {
@@ -661,7 +693,7 @@ export async function startMember(): Promise<void> {
         revoked: revokedStore,
       }
     );
-    if (!senderAllowed) {
+    if (active && !senderAllowed) {
       await writeLedger(
         buildLedgerEntry({
           now: new Date(),
@@ -670,20 +702,28 @@ export async function startMember(): Promise<void> {
           reason: "sender_not_allowed",
         })
       );
-      return;
     }
+    if (cloudSeatPaused || stopping || (!senderAllowed && !message)) return;
+    await routeLiveMessage({
+      inbox: roomInbox, id: ctx.message.id, message, mode: senderAllowed ? "active" : "watch",
+      arrived: isRoom && plain && access.caps.has("notify") ?
+        () => console.info("[member] new encrypted room message available") : undefined,
+      dispatch: async () => {
+        if (!cloudSeatPaused && !stopping && !markdown) await dispatchText(ctx, text, source);
+      },
+    });
+  };
 
-    const text =
-      typeof ctx.message?.content === "string"
-        ? ctx.message.content
-        : ctx.message?.content?.text || "";
-
+  const dispatchText = async (ctx: TextContext, text: string, source: MessageSource) => {
+    const sender = source.sender;
     const envelope = decodeEnvelope(text);
     if (envelope) {
       try {
-        await handleEnvelope({ envelope, sender, conversationId: ctx.conversation.id }, envelopeDeps);
-      } catch (err: any) {
-        console.error("Envelope error:", err.message);
+        await handleEnvelope({
+          envelope, sender, conversationId: ctx.conversation.id, source, verifiedOwner: ownerAddress,
+        }, envelopeDeps);
+      } catch {
+        console.error("[member] envelope processing failed");
       }
       return;
     }
@@ -693,6 +733,8 @@ export async function startMember(): Promise<void> {
       loopState = await onInboundText({
         state: loopState,
         text,
+        source,
+        verifiedOwner: ownerAddress,
         senderIsAgent: seatPeerAddresses.has(sender),
         peerNames: seatPeerNames,
         guardLimit: loopGuardLimit,
@@ -704,16 +746,25 @@ export async function startMember(): Promise<void> {
           await appendOwnerNote(ownerNotesPath, note);
         },
         sendText: async (body: string) => {
+          if (stopping || cloudSeatPaused) return;
           await ctx.conversation.sendText(body);
         },
         saveState: async (nextState: LocalLoopState) => {
           await saveLoopState(statePath, nextState);
         },
       });
-    } catch (err: any) {
-      console.error("Worker process error:", err.message);
+    } catch {
+      console.error("[member] reply processing failed");
     }
-  });
+  };
+  let inbound = Promise.resolve();
+  const enqueue = (ctx: TextContext, markdown = false) => {
+    inbound = inbound.then(() => processText(ctx, markdown)).catch(() => {
+      console.error("[member] inbound message processing failed");
+    });
+  };
+  agent.on("text", enqueue);
+  if (captureRoom) agent.on("markdown", (ctx) => enqueue(ctx, true));
 
   const hubConfigured = Boolean(config.hubBaseUrl && config.hubRoomId && config.hubToken);
   const hubGroupId = hubConfigured
@@ -734,9 +785,11 @@ export async function startMember(): Promise<void> {
         });
         if (peers === null) return; // 旧版 Hub 没有此接口或暂时失败，保留上一份名单
         seatPeerAddresses.clear();
+        seatNamesByAddress.clear();
         for (const p of peers) {
           const addr = p.xmtp_address.toLowerCase();
           if (addr !== selfAddress) seatPeerAddresses.add(addr);
+          seatNamesByAddress.set(addr, p.agent_display_name);
         }
         seatPeerNames = peers.map((p) => p.agent_display_name.trim()).filter(Boolean);
       } catch {
@@ -771,15 +824,75 @@ export async function startMember(): Promise<void> {
     console.log("[member] no group configured; listening only");
   }
 
+  const journalId = createHash("sha256")
+    .update(JSON.stringify([selfAddress, config.xmtpEnv, activeGroupId])).digest("hex").slice(0, 24);
+  roomInbox = await RoomInbox.open(path.join(stateDir, `room-inbox-${journalId}.json`));
+  const joinedRoom = async () => {
+    if (!activeGroupId || cloudSeatPaused || stopping) return null;
+    const ctx = await agent.getConversationContext(activeGroupId);
+    if (!ctx || !ctx.isGroup() || !ctx.conversation.isActive) return null;
+    return {
+      id: config.hubRoomId || ctx.conversation.id,
+      name: process.env.MAPR_ROOM_NAME || ctx.conversation.name || config.hubRoomId || ctx.conversation.id,
+      inbox: roomInbox,
+      conversation: ctx.conversation,
+    };
+  };
+  let syncing = false;
+  const restoreInbox = async () => {
+    if (syncing || stopping || cloudSeatPaused) return;
+    syncing = true;
+    try {
+      await agent.client.conversations.sync();
+      const room = await joinedRoom();
+      if (!room) return;
+      await room.conversation.sync();
+      const messages = (await room.conversation.messages()).reverse();
+      const senders = new Map<string, string>();
+      const restored: RoomMessage[] = [];
+      for (const item of messages) {
+        if (item.senderInboxId === agent.client.inboxId ||
+            typeof item.content !== "string" || item.content.startsWith(ENVELOPE_PREFIX)) continue;
+        if (!senders.has(item.senderInboxId)) {
+          const [state] = await agent.client.preferences.getInboxStates([item.senderInboxId]).catch(() => []);
+          senders.set(item.senderInboxId, state?.identifiers[0]?.identifier.toLowerCase() || "");
+        }
+        const sender = senders.get(item.senderInboxId) || "";
+        restored.push({ id: item.id, text: item.content, source: messageSource(sender, room.id, item.sentAt),
+          verifiedOwner: ownerAddress });
+      }
+      if (!stopping && !cloudSeatPaused) await roomInbox.restore(restored);
+    } catch {
+      console.error("[member] encrypted room history sync failed; retrying");
+    } finally {
+      syncing = false;
+    }
+  };
+  let connected = false;
+  const mcp = access.caps.has("mcp") ? await startLocalMcp({
+    ...access,
+    stateDir,
+    room: () => connected ? joinedRoom() : Promise.resolve(null),
+    connected: () => connected && !stopping && !cloudSeatPaused,
+    audit: (reason) => console.warn(`[member] MCP: ${reason}`),
+    send: async (id, text) => {
+      const room = await joinedRoom();
+      if (stopping || cloudSeatPaused || !room || room.id !== id) throw new Error("room_unavailable");
+      const filtered = filterOutbound({ content: text, approvedDays: config.approvedDays,
+        sensitiveKeywords: config.sensitiveKeywords });
+      if (filtered.blocked || filtered.text !== text || !text.trim() || text.trimStart().startsWith(ENVELOPE_PREFIX)) {
+        throw new Error("send_rejected");
+      }
+      await room.conversation.sendText(text);
+    },
+  }) : null;
+  agent.on("start", () => { connected = true; });
+  agent.on("stop", () => { connected = false; });
+  const historyTimer = captureRoom ? setInterval(() => void restoreInbox(), 30_000) : undefined;
+  historyTimer?.unref();
+
   console.log(`[member] address ${selfAddress}`);
   console.log(`[member] owner console http://127.0.0.1:${consolePort}/`);
-  await agent.start();
-  // 上线后立刻补一轮回执重发——崩溃恢复补签的 uncertain 回执在这时真正送出。
-  resendPendingReceipts(actionDeps).catch((err) => console.error("Receipt resend error:", err.message));
-  revocationReady = true;
-  if (revokedRetries.size() > 0) revocationReconciler.start();
-  // 有启用的触发器才开始巡检；控制台启停/增删会经 onTriggersChanged 刷新。
-  triggerEngine.refresh();
   const cloudSeatId = (process.env.MAPR_SEAT_ID || "").trim();
   const cloudHubOrigin = (config.hubBaseUrl || "").trim().replace(/\/+$/, "");
   let stopCloudSeat: (() => void) | null = null;
@@ -795,19 +908,45 @@ export async function startMember(): Promise<void> {
       onPaused: (paused) => {
         cloudSeatPaused = paused;
       },
-      onRemoved: () => {
-        console.warn("[member] cloud seat removed; exiting fail-closed");
-        triggerEngine.stop();
-        consoleServer.close();
+      onRemoved: async (confirmed) => {
+        console.warn(confirmed ? "[member] cloud seat revoked; pair this seat again" :
+          "[member] cloud seat unavailable; check seat registration");
+        await stopTimers();
+        if (confirmed) {
+          await clearRevokedPairing({
+            envFile: path.resolve(process.env.MAPR_PAIRING_ENV_FILE || ".env"),
+            stateDir,
+            seatId: cloudSeatId,
+            token: config.hubToken || "",
+          }).catch(() => console.error("[member] could not clear revoked credentials from the local pairing file"));
+        }
         process.exit(0);
       },
     });
     stopCloudSeat = () => poller.stop();
+    await poller.checkNow();
   }
-  const stopTimers = () => {
+  if (stopping) return;
+  await agent.start();
+  if (captureRoom) void restoreInbox();
+  // Reconcile existing receipts and triggers only for active seats.
+  if (access.mode === "active") {
+    resendPendingReceipts(actionDeps).catch((err) => console.error("Receipt resend error:", err.message));
+    triggerEngine.refresh();
+  }
+  revocationReady = true;
+  if (revokedRetries.size() > 0) revocationReconciler.start();
+  async function stopTimers() {
+    if (stopping) return;
+    stopping = true;
+    clearInterval(expiryTimer);
+    clearInterval(historyTimer);
     triggerEngine.stop();
     stopCloudSeat?.();
-  };
+    consoleServer.close();
+    consoleServer.closeAllConnections();
+    await Promise.allSettled([agent.stop(), mcp?.stop()]);
+  }
   process.on("SIGINT", stopTimers);
   process.on("SIGTERM", stopTimers);
 }

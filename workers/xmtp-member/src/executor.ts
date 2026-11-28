@@ -1,16 +1,18 @@
 import type { ResultEnvelope, TaskEnvelope } from "./envelope.ts";
 import { teamConfigPromptBlock } from "./rulesEngine.ts";
+import { trustFrame, type MessageSource } from "./trustFrame.ts";
 
-export function buildTaskPrompt(task: TaskEnvelope, options?: { teamConfigMarkdown?: string }): string {
+export function buildTaskPrompt(task: TaskEnvelope, options?: {
+  teamConfigMarkdown?: string; source?: MessageSource; verifiedOwner?: string;
+}): string {
   const criteria = task.acceptance.map((c, i) => `${i + 1}. ${c}`).join("\n");
   const teamBlock = teamConfigPromptBlock(options?.teamConfigMarkdown);
   return [
     `你是一个执行者智能体。请针对以下任务目标给出高质量答复。`,
     ...(teamBlock ? [teamBlock] : []),
-    `任务目标：${task.goal}`,
     `当前轮次：第 ${task.round} 轮`,
-    `验收标准：`,
-    criteria,
+    trustFrame(`任务目标：${task.goal}\n验收标准：\n${criteria}`,
+      options?.source ?? { sender: "", role: "unknown", roomId: "", sentAt: "" }, options?.verifiedOwner),
     `请提供清晰的总结与具体事实或论据支撑。输出格式可以直接为结果说明，或者形如 {"summary": "...", "evidence": ["..."]} 的 JSON。`,
   ].join("\n");
 }

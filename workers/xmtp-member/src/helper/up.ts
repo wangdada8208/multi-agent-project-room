@@ -3,13 +3,14 @@ import { randomUUID } from "node:crypto";
 import { access, chmod, constants as fsConstants, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { memberAccess, type MemberAccess } from "../capabilities.ts";
 import { activityEventId, buildSafeActivityEvent, isSignedLedgerCheckpoint, ledgerEntryStatus } from "../activity.ts";
 import { isAllowedOpenAiBaseUrl, openAiCompatibleEngine, webhookEngine } from "../engines/httpEngines.ts";
 import type { EngineConfig } from "../engines/types.ts";
 import type { HubSafeActivityEvent } from "../hubContracts.generated.ts";
 import { readLedger } from "../ledger.ts";
 import { writeJsonSecure } from "../secureFile.ts";
-import { createHubClient, type HubClient } from "./hubClient.ts";
+import { createHubClient, HubError, type HubClient } from "./hubClient.ts";
 import { defaultDetectDeps, detectLocalAgents, type DetectDeps } from "./knownAgents.ts";
 import {
   createSeatStore,
@@ -48,12 +49,14 @@ export interface UpOptions {
   pairCode?: string;
   rootDir: string;
   openBrowser: boolean;
+  access?: MemberAccess;
 }
 
 export interface HelperRuntimeOptions {
   hubOrigin: string;
   pairCode?: string;
   rootDir: string;
+  access?: MemberAccess;
   detectDeps?: DetectDeps;
   fetchImpl?: typeof fetch;
   platform?: NodeJS.Platform;
@@ -228,7 +231,10 @@ export function parseUpArgs(flags: Record<string, string>, env: NodeJS.ProcessEn
   const pairCode = (flags.pair || "").trim() || undefined;
   const rootDir = (flags.dir || env.MAPR_DIR || path.join(homeDir, ".mapr")).trim();
   const openBrowser = flags["no-browser"] === undefined && flags.browser !== "false";
-  return { hubOrigin, pairCode, rootDir, openBrowser };
+  const caps = flags.cap ?? env.MAPR_CAPS;
+  const mode = flags.mode ?? env.MAPR_RESPONSE_MODE;
+  return { hubOrigin, pairCode, rootDir, openBrowser,
+    ...(caps !== undefined || mode !== undefined ? { access: memberAccess(caps, mode) } : {}) };
 }
 
 function secretFileFor(rootDir: string, agentKey: string): string {
@@ -412,10 +418,12 @@ export async function createHelperRuntime(options: HelperRuntimeOptions): Promis
     memberEntry,
     rootDir,
     xmtpEnv,
+    access: options.access,
   });
 
   /** 停进程、删 seat.json、删沙箱：三种「移除席位」的路径共用一个收口。 */
   const removeSeatFully = async (seatId: string): Promise<void> => {
+    if (!SEAT_ID_RE.test(seatId)) return;
     await supervisor.stop(seatId);
     await store.remove(seatId);
     await rm(path.join(rootDir, "sandbox", seatId), { recursive: true, force: true });
@@ -628,7 +636,17 @@ export async function createHelperRuntime(options: HelperRuntimeOptions): Promis
     activitySeq: new Map(),
   };
 
-  const heartbeat = async (): Promise<void> => {
+  async function retirePairing(client: HubClient) {
+    if (hub !== client || !config) return;
+    console.warn("[helper] device pairing revoked; pair this device again");
+    await supervisor.stopAll();
+    for (const seat of await store.list()) await removeSeatFully(seat.seatId);
+    if (hub !== client || !config) return;
+    await writeConfig({ ...config, helperId: "", helperToken: "" });
+    hub = null;
+  }
+
+  const reconcile = async (): Promise<void> => {
     const client = hub;
     if (!client || !config?.helperToken) return;
     try {
@@ -637,18 +655,14 @@ export async function createHelperRuntime(options: HelperRuntimeOptions): Promis
         agents: agentList.map((a) => ({ key: a.key, kind: a.kind, version: a.version })),
         seats: views.map((v) => ({ seat_id: v.seatId, status: v.status })),
       });
+      if (hub !== client) return;
       if (res.revoked) {
-        // 主人在网站上吊销了这台电脑：停全部席位、删本地令牌，回到未配对。
-        console.log("[helper] revoked by owner; stopping all seats");
-        await supervisor.stopAll();
-        for (const s of await store.list()) await removeSeatFully(s.seatId);
-        const next: HelperConfig = { ...config, helperId: "", helperToken: "" };
-        await writeConfig(next);
-        hub = null;
+        await retirePairing(client);
         return;
       }
       for (const seatId of res.seats_to_stop) {
         await removeSeatFully(seatId);
+        console.warn("[helper] seat revoked; pair this seat again");
       }
       // WP5：seats_to_pause 只停进程不删数据——绝不复用 seats_to_stop（后者物理删除）。
       // Hub 端恢复 = 席位不再出现在列表里，此时清标记并重启；本机手动暂停（"local"）不受对账影响。
@@ -695,10 +709,16 @@ export async function createHelperRuntime(options: HelperRuntimeOptions): Promis
         }
       }
     } catch (err) {
+      if (err instanceof HubError && err.revoked) {
+        await retirePairing(client).catch(() => console.error("[helper] could not clear revoked pairing; retrying"));
+        return;
+      }
       // Hub 抖动不致命；心跳内容只含状态码级信息，天然不带秘密。
       console.error(`[helper] heartbeat failed: ${messageOf(err)}`);
     }
   };
+  let reconciling: Promise<void> | undefined;
+  const heartbeat = () => reconciling ??= reconcile().finally(() => { reconciling = undefined; });
 
   return { deps, store, supervisor, heartbeat };
 }
@@ -709,6 +729,7 @@ export async function runHelper(options: UpOptions): Promise<number> {
     hubOrigin: options.hubOrigin,
     pairCode: options.pairCode,
     rootDir,
+    access: options.access,
   });
 
   // ── 3. 本机接口 ──
@@ -730,6 +751,7 @@ export async function runHelper(options: UpOptions): Promise<number> {
   console.log(`[helper] listening on http://${HELPER_BIND}:${HELPER_PORT}/`);
 
   // ── 4. 恢复席位（已暂停的跳过，不自动拉起） ──
+  await heartbeat();
   await restoreSeats(store, supervisor);
 
   // ── 5. 心跳 ──
@@ -737,7 +759,6 @@ export async function runHelper(options: UpOptions): Promise<number> {
     void heartbeat();
   }, HEARTBEAT_INTERVAL_MS);
   heartbeatTimer.unref();
-  void heartbeat();
 
   // ── 6. 首次启动打开本机页面 ──
   const markerPath = path.join(rootDir, BROWSER_MARKER);

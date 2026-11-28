@@ -1,5 +1,6 @@
 import type { ResultEnvelope, TaskEnvelope } from "./envelope.ts";
 import { teamConfigPromptBlock } from "./rulesEngine.ts";
+import { trustFrame, type MessageSource } from "./trustFrame.ts";
 
 export interface VerdictOutcome {
   accepted: boolean;
@@ -9,7 +10,7 @@ export interface VerdictOutcome {
 export function buildVerdictPrompt(
   task: TaskEnvelope,
   result: ResultEnvelope,
-  options?: { teamConfigMarkdown?: string }
+  options?: { teamConfigMarkdown?: string; source?: MessageSource }
 ): string {
   const criteria = task.acceptance.map((c, i) => `${i + 1}. ${c}`).join("\n");
   const evidenceList = result.evidence.length > 0
@@ -24,10 +25,8 @@ export function buildVerdictPrompt(
     `当前轮次：第 ${task.round} 轮`,
     `验收标准：`,
     criteria,
-    `执行者总结：`,
-    result.summary,
-    `执行者论据：`,
-    evidenceList,
+    trustFrame(`执行者总结：\n${result.summary}\n执行者论据：\n${evidenceList}`,
+      options?.source ?? { sender: "", role: "agent", roomId: "", sentAt: "" }),
     `请对执行结果是否完全满足验收标准进行裁决。`,
     `如果完全满足，accepted 为 true，challenge 必须为空字符串。`,
     `如果有任何一项未满足，accepted 为 false，并在 challenge 中详细说明具体的不足与修改意见（最多500字）。`,
