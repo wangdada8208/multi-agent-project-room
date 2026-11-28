@@ -414,6 +414,109 @@ a:hover {
   gap: 10px;
 }
 
+
+.unlock-field {
+  display: grid;
+  gap: 6px;
+}
+
+.unlock-field > label {
+  font-size: var(--fs-caption);
+  color: var(--text-2);
+  font-weight: var(--fw-medium);
+}
+
+.unlock-password-row {
+  position: relative;
+}
+
+.unlock-password-row .input {
+  padding-right: 42px;
+}
+
+.unlock-eye {
+  position: absolute;
+  right: 5px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text-2);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.unlock-eye:hover {
+  background: var(--bg-hover);
+  color: var(--text-1);
+}
+
+.unlock-eye:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.unlock-keep {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: var(--fs-sm);
+  color: var(--text-1);
+  line-height: var(--lh-sm);
+  cursor: pointer;
+}
+
+.unlock-keep input {
+  width: 16px;
+  height: 16px;
+  margin: 2px 0 0;
+  accent-color: var(--accent);
+}
+
+.unlock-help {
+  margin: -4px 0 0 24px;
+  font-size: var(--fs-caption);
+  color: var(--text-3);
+  line-height: var(--lh-caption);
+}
+
+.unlock-reset-link {
+  align-self: flex-start;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: var(--text-link);
+  font-size: var(--fs-sm);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.unlock-reset-panel {
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-md);
+  background: var(--bg-subtle);
+  padding: 12px;
+}
+
+.unlock-reset-panel strong {
+  display: block;
+  font-size: var(--fs-sm);
+  margin-bottom: 4px;
+}
+
+.unlock-reset-panel p {
+  color: var(--text-2);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  margin: 0;
+}
+
 /* ── Room Search ── */
 
 .search-bar {

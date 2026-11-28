@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { lockXmtpIdentity } from "../lib/xmtpUnlockSession";
 
 export interface AuthUser {
   id: string;
@@ -57,6 +58,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     });
   },
   logout: () => {
+    lockXmtpIdentity();
     safeStorage?.removeItem("mapr-auth-token");
     safeStorage?.removeItem("mapr-auth-user");
     set({

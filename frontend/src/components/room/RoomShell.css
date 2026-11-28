@@ -16,6 +16,7 @@
 .wb-privacy ul { display: grid; gap: 8px; margin-top: 10px; list-style: none; }
 .wb-privacy li { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; line-height: 20px; color: var(--text-2); }
 .wb-privacy svg { flex: none; color: var(--ok); margin-top: 3px; }
+.wb-privacy__session { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 12px; padding: 9px 10px; border: 1px solid var(--border-1); border-radius: var(--r-md); background: var(--bg-subtle); font-size: 12px; color: var(--text-2); }
 .wb-privacy details { margin-top: 12px; border-top: 1px solid var(--border-1); padding-top: 10px; }
 .wb-privacy dl { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 10px; margin-top: 8px; font-size: 12px; }
 .wb-privacy dt { color: var(--text-2); }

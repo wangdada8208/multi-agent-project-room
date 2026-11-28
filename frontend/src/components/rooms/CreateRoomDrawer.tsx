@@ -225,7 +225,7 @@ export function CreateRoomDrawer({ open, onClose, onCreated }: CreateRoomDrawerP
         <footer className="wb-create-drawer__foot">
           <span className="wb-create-drawer__note">
             <Lock size={14} strokeWidth={2} aria-hidden="true" />
-            <span>房间默认端到端加密</span>
+            <span>创建后自动开启端到端加密</span>
           </span>
           <Button variant="ghost" disabled={creating} onClick={onClose}>
             取消

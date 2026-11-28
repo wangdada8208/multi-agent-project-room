@@ -71,7 +71,9 @@ export function RoomPage() {
       id: seat.seat_id, name: seat.agent_display_name, actor: seat.source === "invite" || seat.kind === "cloud-agent" ? "cloud" : "local", size: "sm",
     })),
   ];
-  const encryption = isEncrypted ? { ready: workspace.session.kind === "ready", groupId: room?.xmtp_group_id, address: myXmtpAddress } : undefined;
+  const encryption = isEncrypted ? {
+    ready: workspace.session.kind === "ready", groupId: room?.xmtp_group_id, address: myXmtpAddress, onLock: workspace.lock,
+  } : undefined;
   const permissions = {
     roomId, room, isEncrypted, isOwner, myXmtpAddress, xmtpClient: workspace.xmtpClient,
     xmtpGroupId: room?.xmtp_group_id, permissionsQuery: workspace.permissionsQuery,

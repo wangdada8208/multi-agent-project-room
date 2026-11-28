@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
 import { recoverMessageAddress } from "viem";
 import {
@@ -11,6 +12,11 @@ import {
   setUnlockedXmtpKey,
   signXmtpMessage,
   unlockOrCreateInboxKey,
+  lockXmtpIdentity,
+  rememberUnlockedXmtpKey,
+  resetLocalXmtpIdentity,
+  SESSION_UNLOCK_STORAGE_KEY,
+  XmtpIdentityError,
   unlockedXmtpAddress,
   LEGACY_STORAGE_KEY,
   storeEncryptedKey,
@@ -67,7 +73,10 @@ describe("xmtpLocalIdentity", () => {
     const storage = { getItem: (k: string) => mem.get(k) ?? null,
       setItem: () => { throw new Error("storage full"); },
       removeItem: (k: string) => { mem.delete(k); } };
-    await expect(unlockOrCreateInboxKey("long test password", storage, 1000)).rejects.toThrow("storage full");
+    await expect(unlockOrCreateInboxKey("long test password", storage, 1000)).rejects.toMatchObject({
+      name: "XmtpIdentityError",
+      code: "identity-save-failed",
+    });
     expect(mem.get(LEGACY_STORAGE_KEY)).toBe(oldKey);
   });
 
@@ -123,11 +132,12 @@ describe("WebCrypto Vault Password Protection (Task E-4)", () => {
     expect(DEFAULT_PBKDF2_ITERATIONS).toBeGreaterThanOrEqual(310000);
   });
 
-  it("fails decryption when provided an incorrect password", async () => {
+  it("fails decryption with a structured incorrect-password error", async () => {
     const vault = await encryptPrivateKey(sampleKey, password, 1000);
-    await expect(decryptPrivateKey(vault, "wrong-password")).rejects.toThrow(
-      /Decryption failed/i,
-    );
+    await expect(decryptPrivateKey(vault, "wrong-password")).rejects.toMatchObject({
+      name: "XmtpIdentityError",
+      code: "incorrect-password",
+    });
   });
 
   it("successfully unlocks repeatedly with the same password", async () => {
@@ -148,6 +158,46 @@ describe("WebCrypto Vault Password Protection (Task E-4)", () => {
     expect(key2).toBe(sampleKey);
   });
 });
+
+describe("browser-session unlock state", () => {
+  const key = "0x" + "ef".repeat(32);
+
+  it("keeps the key out of localStorage and remembers it only in sessionStorage when requested", () => {
+    rememberUnlockedXmtpKey(key, true);
+    expect(sessionStorage.getItem(SESSION_UNLOCK_STORAGE_KEY)).toBe(key);
+    expect(localStorage.getItem(SESSION_UNLOCK_STORAGE_KEY)).toBeNull();
+    lockXmtpIdentity();
+    expect(sessionStorage.getItem(SESSION_UNLOCK_STORAGE_KEY)).toBeNull();
+  });
+
+  it("resetLocalXmtpIdentity removes vault, legacy plaintext and session unlock state", async () => {
+    const mem = new Map<string, string>();
+    const storage = {
+      getItem: (k: string) => mem.get(k) ?? null,
+      setItem: (k: string, v: string) => { mem.set(k, v); },
+      removeItem: (k: string) => { mem.delete(k); },
+    };
+    await storeEncryptedKey(key, "long test password", storage, 1000);
+    mem.set(LEGACY_STORAGE_KEY, key);
+    rememberUnlockedXmtpKey(key, true);
+
+    resetLocalXmtpIdentity(storage);
+
+    expect(mem.has(VAULT_STORAGE_KEY)).toBe(false);
+    expect(mem.has(LEGACY_STORAGE_KEY)).toBe(false);
+    expect(sessionStorage.getItem(SESSION_UNLOCK_STORAGE_KEY)).toBeNull();
+    expect(hasUnlockedXmtpKey()).toBe(false);
+  });
+
+  it("logout clears the remembered browser-session unlock state", async () => {
+    const { useAuthStore } = await import("../stores/authStore");
+    rememberUnlockedXmtpKey(key, true);
+    useAuthStore.getState().logout();
+    expect(sessionStorage.getItem(SESSION_UNLOCK_STORAGE_KEY)).toBeNull();
+    expect(hasUnlockedXmtpKey()).toBe(false);
+  });
+});
+
 
 describe("signXmtpMessage (unlocked-session signing)", () => {
   const key = "0x" + "cd".repeat(32);

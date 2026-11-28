@@ -1,9 +1,9 @@
 import type { InviteFlow } from "./inviteFlow";
-import type { XmtpSession } from "./xmtpSession";
+import type { XmtpErrorReason, XmtpSession } from "./xmtpSession";
 
 export type RoomStatusView =
   | { kind: "locked" | "connecting" | "enableGroup" | "waitForGroup" | "awaitingApproval" | "awaitingAdd" | "notInGroup" | "ready" }
-  | { kind: "error" | "inviteError"; message: string };
+  | { kind: "error" | "inviteError"; message: string; reason?: XmtpErrorReason };
 
 export function roomStatusView(
   session: XmtpSession, invite: InviteFlow, role?: string, hasMessages = false,
@@ -12,7 +12,11 @@ export function roomStatusView(
     case "locked": return { kind: "locked" };
     case "connecting": return { kind: "connecting" };
     case "noGroup": return { kind: role === "owner" ? "enableGroup" : "waitForGroup" };
-    case "error": return { kind: "error", message: session.message };
+    case "error": return {
+      kind: "error",
+      message: session.message,
+      ...(session.reason ? { reason: session.reason } : {}),
+    };
     case "ready": return hasMessages ? null : { kind: "ready" };
     case "notInGroup":
       switch (invite.kind) {

@@ -1,12 +1,14 @@
+export type XmtpErrorReason = "connect" | "bind" | "stream";
+
 export type XmtpSession =
   | { kind: "locked" | "connecting" | "noGroup" }
   | { kind: "notInGroup" | "ready"; groupId: string }
-  | { kind: "error"; message: string };
+  | { kind: "error"; message: string; reason?: XmtpErrorReason };
 
 export type XmtpSessionEvent =
   | { type: "lock" | "connect" | "groupMissing" }
   | { type: "notInGroup" | "ready"; groupId: string }
-  | { type: "failed"; message: string };
+  | { type: "failed"; message: string; reason?: XmtpErrorReason };
 
 export const lockedXmtpSession: XmtpSession = { kind: "locked" };
 
@@ -18,7 +20,11 @@ export function xmtpSessionReducer(state: XmtpSession, event: XmtpSessionEvent):
     case "groupMissing": return { kind: "noGroup" };
     case "notInGroup": return { kind: "notInGroup", groupId: event.groupId };
     case "ready": return { kind: "ready", groupId: event.groupId };
-    case "failed": return { kind: "error", message: event.message };
+    case "failed": return {
+      kind: "error",
+      message: event.message,
+      ...(event.reason ? { reason: event.reason } : {}),
+    };
   }
   return state;
 }
