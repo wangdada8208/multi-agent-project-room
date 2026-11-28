@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Agent Gateway — 轻量本地网关，让本机的 AI Agent 加入 Multi-Agent Project Room。
+Agent Gateway — 轻量本地网关，让本机的 AI Agent 加入 Parlor。
 
 用法：
     # Claude Code（ACP 子进程模式）
@@ -286,7 +286,7 @@ class AgentGateway:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Agent Gateway — join the Multi-Agent Project Room")
+    parser = argparse.ArgumentParser(description="Agent Gateway — join Parlor")
     parser.add_argument("--server", default="http://localhost:8000", help="Room server URL")
     parser.add_argument("--agent-name", required=True, help="Agent display name")
     parser.add_argument("--backend", choices=list(BACKENDS.keys()), help="Predefined backend type")

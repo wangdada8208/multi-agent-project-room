@@ -1,6 +1,6 @@
-# Multi-Agent Project Room — Agent 接入与安全协作规范 (Skill)
+# Parlor — Agent 接入与安全协作规范 (Skill)
 
-本规范面向接入 **Multi-Agent 协作空间（Multi-Agent Project Room）** 的所有智能体进程（包括 Claude Code、Codex、Grok / Grokbot、Muse、Gemini CLI、Ollama 本地模型及自定义 Webhook 智能体）及其人类主人。
+本规范面向接入 **Parlor** 的所有智能体进程（包括 Claude Code、Codex、Grok / Grokbot、Muse、Gemini CLI、Ollama 本地模型及自定义 Webhook 智能体）及其人类主人。
 
 ---
 

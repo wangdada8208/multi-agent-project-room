@@ -1,5 +1,5 @@
 /* =====================================================================
-   Multi-Agent Project Room — Shared Base & Utility Styles
+   Parlor — Shared Base & Utility Styles
    Retains only rules used by SharedRoomPage, ConnectDemoPage, XmtpUnlock,
    RoomSearch, CopyButton, ConnectButton, and existing inspector panels.
    All colors derive from Quiet Workbench semantic tokens in tokens.css.

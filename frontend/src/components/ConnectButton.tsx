@@ -22,7 +22,7 @@ export function ConnectButton({
   constraints,
   gatewayUrl = "http://127.0.0.1:8787",
   className = "",
-  buttonText = "Connect with MAPR",
+  buttonText = "Connect with Parlor",
   onSuccess,
   onError,
 }: ConnectButtonProps) {

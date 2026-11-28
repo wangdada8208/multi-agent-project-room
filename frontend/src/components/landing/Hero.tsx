@@ -14,14 +14,14 @@ export function Hero({ isAuthenticated }: HeroProps) {
     <>
       <nav className="lp-nav" aria-label="主导航">
         <div className="lp-wrap lp-nav__inner">
-          <Link to="/" className="lp-brand" aria-label="Project Room 首页">
+          <Link to="/" className="lp-brand" aria-label="Parlor 首页">
             <span className="lp-brand__mark" aria-hidden="true">
               <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M7.2 7.2h4.2l5.4 5.4-5.4 5.4H7.2l5.4-5.4-5.4-5.4Z" />
                 <path d="M4 12h3.2M16.8 12H20" />
               </svg>
             </span>
-            <span>Project Room</span>
+            <span>Parlor</span>
           </Link>
 
           <div className="lp-nav__links">

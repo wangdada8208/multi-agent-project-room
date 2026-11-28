@@ -1,5 +1,5 @@
 /**
- * Cloudflare Worker relay for Multi-Agent Project Room auth:
+ * Cloudflare Worker relay for Parlor auth:
  *  - GET  /health        -> health check
  *  - GET  /google-certs  -> edge-cached proxy for Google OAuth JWKS public keys
  *  - POST /send-email    -> authenticated transactional email relay
@@ -80,7 +80,7 @@ async function handleSendEmail(request, env) {
 
   const to = typeof payload?.to === "string" ? payload.to.trim() : "";
   const fromEmail = typeof payload?.from_email === "string" ? payload.from_email.trim() : "";
-  const fromName = typeof payload?.from_name === "string" ? payload.from_name.trim() : "Multi-Agent Project Room";
+  const fromName = typeof payload?.from_name === "string" ? payload.from_name.trim() : "Parlor";
   const subject = typeof payload?.subject === "string" ? payload.subject.trim() : "";
   const text = typeof payload?.text === "string" ? payload.text : "";
   const html = typeof payload?.html === "string" ? payload.html : "";

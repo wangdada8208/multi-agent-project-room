@@ -378,7 +378,7 @@ async def verify_and_consume_email_otp(
 def _build_otp_email_content(code: str, purpose: str, ttl_seconds: int) -> tuple[str, str, str]:
     ttl_minutes = max(1, (ttl_seconds + 59) // 60)
     action = "注册账号" if purpose == "register" else "登录账户"
-    subject = f"【Multi-Agent Project Room】{action}验证码"
+    subject = f"【Parlor】{action}验证码"
     text_body = (
         f"您正在通过邮箱{action}。\n\n"
         f"验证码：{code}\n"
@@ -390,7 +390,7 @@ def _build_otp_email_content(code: str, purpose: str, ttl_seconds: int) -> tuple
     html_body = (
         "<div style=\"font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;"
         "max-width:460px;margin:0 auto;padding:24px;color:#1d1d1f;\">"
-        f"<h2 style=\"margin:0 0 12px;font-size:18px;\">Multi-Agent Project Room {escaped_action}</h2>"
+        f"<h2 style=\"margin:0 0 12px;font-size:18px;\">Parlor {escaped_action}</h2>"
         "<p style=\"margin:0 0 16px;font-size:14px;color:#555;\">请使用以下 6 位验证码完成验证：</p>"
         f"<div style=\"font-size:30px;font-weight:700;letter-spacing:6px;padding:14px 18px;"
         f"background:#f5f5f7;border-radius:10px;text-align:center;color:#111;\">{escaped_code}</div>"
@@ -452,7 +452,7 @@ async def send_verification_email(
         code, purpose, settings.email_otp_ttl_seconds
     )
     from_address = settings.email_from_address.strip()
-    from_name = settings.email_from_name.strip() or "Multi-Agent Project Room"
+    from_name = settings.email_from_name.strip() or "Parlor"
 
     if provider == "console":
         env = (settings.environment or "").strip().lower()

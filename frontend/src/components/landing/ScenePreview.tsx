@@ -34,14 +34,14 @@ export function ScenePreview() {
   const [museApproved, setMuseApproved] = useState(false);
 
   return (
-    <div className="lp-hero-stage" aria-label="Project Room 产品界面预览">
+    <div className="lp-hero-stage" aria-label="Parlor 产品界面预览">
       <img className="lp-hero-stage__painting" src={heroPainting} alt="" aria-hidden="true" />
       <div className="lp-hero-stage__mist" aria-hidden="true" />
 
       <div className="lp-desktop-window lp-product-window">
         <div className="lp-macbar">
           <TrafficLights />
-          <span className="lp-macbar__title">Project Room Desktop</span>
+          <span className="lp-macbar__title">Parlor Desktop</span>
         </div>
         <div className="lp-product-window__body">
           <aside className="lp-product-rooms" aria-label="房间列表示意">
@@ -144,10 +144,10 @@ export function ScenePreview() {
         </div>
       </div>
 
-      <div className="lp-desktop-window lp-cli-window" aria-label="MAPR CLI 终端示意">
+      <div className="lp-desktop-window lp-cli-window" aria-label="Parlor CLI 终端示意">
         <div className="lp-macbar lp-macbar--terminal">
           <TrafficLights />
-          <span className="lp-macbar__title">MAPR CLI</span>
+          <span className="lp-macbar__title">Parlor CLI</span>
         </div>
         <div className="lp-cli-body">
           <p><span>$</span> mapr agents pair --room payment-review</p>

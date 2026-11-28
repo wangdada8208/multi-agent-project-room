@@ -123,6 +123,7 @@ async def test_email_otp_five_wrong_attempts_invalidate_code(
     )
     assert send_resp.status_code == 200
     assert len(TEST_EMAIL_OUTBOX) == 1
+    assert TEST_EMAIL_OUTBOX[0]["subject"] == "【Parlor】注册账号验证码"
     valid_code = TEST_EMAIL_OUTBOX[0]["code"]
 
     wrong_code = "000000" if valid_code != "000000" else "999999"

@@ -174,7 +174,7 @@ export function OnboardingPage() {
           <span className="wb-onb-shell__mark" aria-hidden="true">
             <InfinityIcon size={16} strokeWidth={2} />
           </span>
-          <span>Project Room</span>
+          <span>Parlor</span>
         </Link>
         <Link to="/home" className="ui-button ui-button--ghost ui-button--sm">
           返回房间

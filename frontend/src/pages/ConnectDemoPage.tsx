@@ -13,7 +13,7 @@ export function ConnectDemoPage() {
       <header className="topbar">
         <Link to="/" className="topbar__brand">
           <InfinityIcon size={17} strokeWidth={2} />
-          <span>Project Room</span>
+          <span>Parlor</span>
         </Link>
         <span className="topbar__spacer" />
         <Link to="/home" className="ui-button ui-button--ghost ui-button--sm">
@@ -25,7 +25,7 @@ export function ConnectDemoPage() {
         <div className="connect-demo__head">
           <h1>SkyTrip 差旅智能助手</h1>
           <p>
-            第三方应用接入示范 — 通过 Connect with MAPR 实现单次明确授权与最小化隐私数据代取
+            第三方应用接入示范 — 通过 Connect with Parlor 实现单次明确授权与最小化隐私数据代取
           </p>
         </div>
 
@@ -51,7 +51,7 @@ export function ConnectDemoPage() {
                 scope="calendar.free_busy"
                 purpose="查询空闲时间以匹配差旅航班"
                 constraints={{ date_from: "2026-10-05", date_to: "2026-10-09" }}
-                buttonText="授权读取忙闲 (Connect with MAPR)"
+                buttonText="授权读取忙闲 (Connect with Parlor)"
                 onSuccess={(res) => {
                   setCalendarResult(res);
                   setErrorMsg(null);
@@ -88,7 +88,7 @@ export function ConnectDemoPage() {
                 scope="email.receipt"
                 purpose="自动读取铁路电子客票以报销差旅"
                 constraints={{ query: "from:12306", date_from: "2026-10-01", date_to: "2026-10-10" }}
-                buttonText="授权读取客票 (Connect with MAPR)"
+                buttonText="授权读取客票 (Connect with Parlor)"
                 onSuccess={(res) => {
                   setReceiptResult(res);
                   setErrorMsg(null);
@@ -115,7 +115,7 @@ export function ConnectDemoPage() {
         <div className="card connect-demo__card connect-demo__spec">
           <h3>
             <ShieldCheck size={17} strokeWidth={1.85} />
-            <span>Connect with MAPR 安全设计规范</span>
+            <span>Connect with Parlor 安全设计规范</span>
           </h3>
           <ul className="hint connect-demo__list">
             <li>单次授权原则：凭证 10 分钟自动过期，使用一次即废弃。</li>

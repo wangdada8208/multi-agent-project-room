@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Local AI Agent Adapter — bridges a local AI tool to the Multi-Agent Project Room.
+Local AI Agent Adapter — bridges a local AI tool to Parlor.
 
 Usage:
     # Claude:
@@ -817,7 +817,7 @@ class LocalAgentAdapter(ReliableAgentMixin):
     def _build_prompt(self, content: str) -> str:
         """Keep the chat prompt intentionally small for faster CLI responses."""
         return (
-            f"你是 {self.agent_name}，Multi-Agent Project Room 的代码协作 Agent。"
+            f"你是 {self.agent_name}，Parlor 的代码协作 Agent。"
             "请优先用中文简短回复，默认 1-3 句；只有用户明确要求实现/检查/修改代码时才展开。"
             f"\n聊天室消息：{content}"
         )

@@ -21,7 +21,7 @@ INSECURE_SECRET_BLACKLIST = {
 
 
 class Settings(BaseSettings):
-    app_name: str = "Multi-Agent Project Room Demo"
+    app_name: str = "Parlor"
     cors_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173", "https://hub.wangdada8208.xyz"]
     database_url: str = "postgresql+asyncpg://postgres:password@localhost:5432/agent_room"
     repository_root: str = "/data/repos"
@@ -39,7 +39,7 @@ class Settings(BaseSettings):
     # Email OTP registration & login
     email_provider: str = ""
     email_from_address: str = "noreply@wangdada8208.xyz"
-    email_from_name: str = "Multi-Agent Project Room"
+    email_from_name: str = "Parlor"
     email_worker_url: str = ""
     email_worker_secret: SecretStr = SecretStr("")
     email_api_url: str = "https://api.resend.com/emails"

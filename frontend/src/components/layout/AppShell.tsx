@@ -57,8 +57,8 @@ export function AppShell({ children, roomId, pending }: { children: ReactNode; r
   return (
     <div className={roomId ? "app-shell app-shell--room" : "app-shell"}>
       <aside className="app-rail">
-        <Link to="/home" className="app-rail__brand" title="Multi-Agent 房间">
-          <span><Infinity size={17} /></span><strong>Project Room</strong>
+        <Link to="/home" className="app-rail__brand" title="Parlor 房间">
+          <span><Infinity size={17} /></span><strong>Parlor</strong>
         </Link>
         <nav className="app-rail__nav" aria-label="主导航">
           <NavLink to="/home" title="房间"><LayoutGrid size={17} /><span>房间</span></NavLink>

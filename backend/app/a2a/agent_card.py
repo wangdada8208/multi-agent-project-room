@@ -13,9 +13,9 @@ from app.config import get_settings
 def build_hub_card(public_url: str) -> AgentCard:
     """Build the Hub's agent card with all registered skills."""
     card = AgentCard()
-    card.name = "Multi-Agent Room Hub"
+    card.name = "Parlor Hub"
     card.description = (
-        "Agent communication hub for the Multi-Agent Project Room. "
+        "Agent communication hub for Parlor. "
         "Routes messages, tasks, and approvals between human users and AI agents."
     )
     card.version = "2.0.0"
@@ -23,7 +23,7 @@ def build_hub_card(public_url: str) -> AgentCard:
     card.capabilities.push_notifications = False
     auth = card.security_schemes['bearer'].http_auth_security_scheme
     auth.scheme = 'bearer'
-    auth.bearer_format = 'MAPR signed access token'
+    auth.bearer_format = 'Parlor signed access token'
     card.security_requirements.add().schemes['bearer'].SetInParent()
     card.default_input_modes.append("text/plain")
     card.default_input_modes.append("application/json")

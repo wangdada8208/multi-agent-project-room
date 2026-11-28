@@ -531,7 +531,7 @@ test("GET /connect/authorize serves consent page and handles approve/deny", asyn
     );
     assert.equal(authPage.status, 200);
     const text = await authPage.text();
-    assert.equal(text.includes("Connect with MAPR"), true);
+    assert.equal(text.includes("Connect with Parlor"), true);
     assert.equal(text.includes('document.getElementById("app-id").textContent = appId'), true);
 
     const approveRes = await fetch(`${base}/api/connect/approve`, {

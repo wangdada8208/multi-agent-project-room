@@ -41,7 +41,7 @@ export function SharedRoomPage() {
       <header className="topbar">
         <Link to="/" className="topbar__brand">
           <InfinityIcon size={17} strokeWidth={2} />
-          <span>Project Room</span>
+          <span>Parlor</span>
         </Link>
         <span className="topbar__spacer" />
         <Link to="/login" className="ui-button ui-button--ghost ui-button--sm">

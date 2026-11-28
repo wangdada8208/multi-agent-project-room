@@ -1,5 +1,5 @@
 #!/bin/sh
-# MAPR 本机助手一键安装脚本（Linux + macOS，POSIX sh）
+# Parlor 本机助手一键安装脚本（Linux + macOS，POSIX sh）
 #
 # 用法（网站「我的 Agent」页生成的命令）：
 #   curl -fsSL https://hub.wangdada8208.xyz/install.sh | sh -s -- --pair <配对码>
@@ -42,7 +42,7 @@ die()  { printf '错误: %s\n' "$*" >&2; exit 1; }
 
 usage() {
   cat <<'USAGE'
-MAPR 本机助手一键安装（Linux + macOS）
+Parlor 本机助手一键安装（Linux + macOS）
 
 用法: curl -fsSL <Hub>/install.sh | sh -s -- [--pair <配对码>] [--hub <Hub 地址>]
 
@@ -166,7 +166,7 @@ rm -rf "$MAPR_ROOT/pkg.old"
 
 cat > "$MAPR_ROOT/bin/mapr" <<'MAPR_EOF'
 #!/bin/sh
-# mapr — MAPR 本机助手命令行入口（install.sh 生成，重复安装会重写本文件）
+# mapr — Parlor 本机助手命令行入口（install.sh 生成，重复安装会重写本文件）
 set -eu
 MAPR_ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 if [ "${1:-}" = "uninstall" ]; then
@@ -179,7 +179,7 @@ chmod 755 "$MAPR_ROOT/bin/mapr"
 
 cat > "$MAPR_ROOT/uninstall.sh" <<'UNINST_EOF'
 #!/bin/sh
-# MAPR 本机助手卸载：撤自启、停进程。
+# Parlor 本机助手卸载：撤自启、停进程。
 # 用法: sh ~/.mapr/uninstall.sh [--purge] [--yes]
 #   --purge  连 ~/.mapr 数据一起删（配对信息、席位私钥都会没，谨慎）
 #   --yes    跳过 --purge 的确认提示
@@ -263,7 +263,7 @@ write_systemd_unit() {
   mkdir -p "$HOME/.config/systemd/user"
   cat > "$UNIT" <<EOF
 [Unit]
-Description=MAPR helper (mapr 本机助手)
+Description=Parlor helper (mapr 本机助手)
 After=network-online.target
 
 [Service]
@@ -284,8 +284,8 @@ write_desktop_autostart() {
   cat > "$DESKTOP" <<EOF
 [Desktop Entry]
 Type=Application
-Name=MAPR Helper (mapr 本机助手)
-Comment=Local helper for MAPR encrypted rooms, port 8790
+Name=Parlor Helper (mapr 本机助手)
+Comment=Local helper for Parlor encrypted rooms, port 8790
 Exec="$MAPR_ROOT/bin/mapr" up --hub "$HUB"
 Terminal=false
 X-GNOME-Autostart-enabled=true
