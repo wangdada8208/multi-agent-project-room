@@ -31,7 +31,7 @@ function SeatRow({ seat, actions, editable, source }: { seat: HubSeatView; actio
     </div>}
     {confirming && <ConfirmInline confirmLabel="移出" loading={actions.removingId === seat.seat_id} onCancel={() => setConfirming(false)}
       onConfirm={() => void actions.handleRemoveSeat(seat)}>
-      {pending ? "移除此待入群 Agent？" : `先把 ${seat.agent_display_name} 移出加密群，再删除记录。移除后无法读取新消息。`}
+      {pending ? "移除此待入房助手？" : `先收回 ${seat.agent_display_name} 查看加密聊天的权限，再删除记录。移除后无法读取新消息。`}
     </ConfirmInline>}
   </article>;
 }
@@ -75,7 +75,7 @@ export function MembersTab({ requests, requestActions, seats, seatActions, permi
         </article>;
       })}
     </section>
-    {[{ label: "云端 Agent", Icon: Cloud, entries: activeSeats.filter(isCloud) }, { label: "电脑端 Agent", Icon: Laptop, entries: activeSeats.filter((seat) => !isCloud(seat)) }].map(({ label, Icon, entries }) => (
+    {[{ label: "云端助手", Icon: Cloud, entries: activeSeats.filter(isCloud) }, { label: "电脑端助手", Icon: Laptop, entries: activeSeats.filter((seat) => !isCloud(seat)) }].map(({ label, Icon, entries }) => (
       <section key={label}>
         <h3><Icon size={13} />{label} <span>{entries.length}</span></h3>
         {entries.map((seat) => <SeatRow key={seat.seat_id} seat={seat} actions={seatActions}
@@ -85,7 +85,7 @@ export function MembersTab({ requests, requestActions, seats, seatActions, permi
       </section>
     ))}
     {(seatActions.removeError || seatActions.pauseError) && <p className="wb-error" role="alert">{seatActions.removeError || seatActions.pauseError}</p>}
-    <button type="button" className="wb-add" onClick={onInvite}><Plus size={16} />邀请成员或接入 Agent</button>
+    <button type="button" className="wb-add" onClick={onInvite}><Plus size={16} />邀请成员或接入助手</button>
     <details><summary>成员权限与加密身份</summary><PermissionsPanel {...permissions} section="members" /></details>
   </div>;
 }

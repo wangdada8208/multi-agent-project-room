@@ -3,8 +3,10 @@ import { Link } from "react-router-dom";
 import { AlertCircle, CheckCircle2, Infinity as InfinityIcon, Plane, Receipt, ShieldCheck } from "lucide-react";
 import { AgentPromptSetupPicker } from "../components/AgentPromptSetupPicker";
 import { ConnectButton } from "../components/ConnectButton";
+import { useDocumentTitle } from "../hooks/useDocumentTitle";
 
 export function ConnectDemoPage() {
+  useDocumentTitle("连接演示 · Parlor");
   const [calendarResult, setCalendarResult] = useState<any>(null);
   const [receiptResult, setReceiptResult] = useState<any>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);

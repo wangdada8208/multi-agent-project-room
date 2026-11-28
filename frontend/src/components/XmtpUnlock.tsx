@@ -66,14 +66,14 @@ export function XmtpUnlock({ onUnlock }: { onUnlock: (key: string) => void }) {
         ) : (
           <Lock size={18} strokeWidth={1.9} />
         )}
-        <span>{creating ? "设置本机加密口令" : "解锁加密身份"}</span>
+        <span>{creating ? "给你的私密房间上把锁" : "打开这把房间锁"}</span>
       </h3>
       <p className="unlock-desc">
         {migrating
-          ? "现有身份会加密迁移，保留原群访问权限。口令只留在当前浏览器，用于保护你的加密房间钥匙。"
+          ? "现有房间锁会安全迁移，你仍能打开原来的房间。口令只留在当前浏览器，平台看不到你的聊天内容。"
           : creating
-            ? "口令只留在当前浏览器，用于保护你的加密房间钥匙。服务器看不到，也无法替你找回。"
-            : "口令只留在当前浏览器，用于保护你的加密房间钥匙。输入后，本房间会尝试自动开启端到端加密。"}
+            ? "这把锁保护房间里的私密聊天。口令只留在当前浏览器，平台看不到，也不能替你找回。"
+            : "输入口令后，这台浏览器才能读懂房间里的加密聊天。口令只留在当前浏览器，平台看不到你的聊天内容。"}
       </p>
       <form onSubmit={(event) => void handleSubmit(event)}>
         <div className="unlock-field">
@@ -129,9 +129,9 @@ export function XmtpUnlock({ onUnlock }: { onUnlock: (key: string) => void }) {
             onChange={(event) => setKeepUnlocked(event.target.checked)}
             disabled={pending}
           />
-          <span>本次浏览器会话保持解锁（关闭浏览器自动锁定）</span>
+          <span>本次浏览器会话保持打开（关闭浏览器后自动上锁）</span>
         </label>
-        <p className="unlock-help">只在当前浏览器标签页有效；退出登录或手动锁定会立即清除。</p>
+        <p className="unlock-help">只在当前浏览器有效；退出登录或手动上锁会立即清除。</p>
 
         {error && (
           <p className="error-text" role="alert">
@@ -141,14 +141,14 @@ export function XmtpUnlock({ onUnlock }: { onUnlock: (key: string) => void }) {
 
         {!creating && !confirmingReset && (
           <button type="button" className="unlock-reset-link" onClick={() => setConfirmingReset(true)}>
-            忘记口令？重设本机加密身份
+            忘记口令？重设这把房间锁
           </button>
         )}
         {!creating && confirmingReset && (
           <div className="unlock-reset-panel">
             <ConfirmInline confirmLabel="确认重设" onCancel={() => setConfirmingReset(false)} onConfirm={handleReset}>
-              <strong>重设本机加密身份？</strong>
-              <p>旧房间历史消息将无法解密，你需要重新加入房间；不会影响账号登录。</p>
+              <strong>重设这把房间锁？</strong>
+              <p>以前的加密聊天将无法再打开，你需要重新加入房间；账号登录不受影响。</p>
             </ConfirmInline>
           </div>
         )}

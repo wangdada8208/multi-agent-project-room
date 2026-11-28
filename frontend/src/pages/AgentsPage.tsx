@@ -7,6 +7,7 @@ import { LocalAgentSection } from "../components/agents/LocalAgentSection";
 import { PairedDevices } from "../components/agents/PairedDevices";
 import { CreateTargetRoom, TargetRoomPicker } from "../components/agents/TargetRoomPicker";
 import { Drawer } from "../components/ui/Drawer";
+import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { useViewportWidth } from "../hooks/useViewportWidth";
 import { useLocalHelper } from "../hooks/useLocalHelper";
 import { PairingCodeContext, usePairingCode } from "../hooks/agents/useLocalAgents";
@@ -19,6 +20,7 @@ import "../components/agents/Agents.css";
 export { AgentJoinSection, type AgentJoinSectionProps } from "../components/agents/AgentJoinSection";
 
 export function AgentsPage() {
+  useDocumentTitle("接入助手 · Parlor");
   const [params, setParams] = useSearchParams();
   const [managing, setManaging] = useState(false);
   const phone = useViewportWidth() < 768 || isMobileBrowser();
@@ -43,8 +45,8 @@ export function AgentsPage() {
     <div className="wb-agents-page">
       <header className="wb-agents-head">
         <div>
-          <h1>接入 Agent</h1>
-          <p>选择你正在使用的客户端，复制专属提示词给 Agent。</p>
+          <h1>接入助手</h1>
+          <p>选择你正在用的助手，复制一段话发给它；它会按说明自己连进房间。</p>
         </div>
         <TargetRoomPicker target={target} />
       </header>

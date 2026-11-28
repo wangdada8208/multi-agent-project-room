@@ -6,9 +6,9 @@ import { XmtpUnlock } from "../XmtpUnlock";
 import { Button } from "../ui/Button";
 
 const labels = {
-  awaitingApproval: ["入群申请已提交，等待房主批准", "批准后，房主页面会自动把你加入加密群。"],
-  awaitingAdd: ["加密身份已登记", "房主在线时会自动把你加入加密群（约 5 秒）。"],
-  notInGroup: ["当前加密身份尚未加入此房间加密群", "请向房主索取邀请链接，或将你的加密地址发给房主。"],
+  awaitingApproval: ["入房申请已提交，等待房主批准", "批准后，房主这里会自动让你看到加密聊天。"],
+  awaitingAdd: ["这台设备的钥匙已登记", "房主在线时会自动把你加入私密对话（约 5 秒）。"],
+  notInGroup: ["这台设备还看不到房间里的加密聊天", "请向房主索取邀请链接，或把这台设备的入场地址发给房主。"],
 };
 
 export function RoomStatusCard({ view, address, roomId, accepted, binding, canBind, onUnlock, onBind, onReconnect, onRetryInvite, starters, onStarter }: {
@@ -28,7 +28,7 @@ export function RoomStatusCard({ view, address, roomId, accepted, binding, canBi
   switch (view.kind) {
     case "locked":
       return <div className="wb-unlock">
-        {accepted && <div className="wb-notice">房间权限已开通。解锁此设备的加密身份后，系统会为你登记入群。</div>}
+        {accepted && <div className="wb-notice">房间权限已开通。用口令打开这台设备上的房间锁后，系统会为你登记入房。</div>}
         <XmtpUnlock onUnlock={onUnlock} />
       </div>;
     case "connecting":
@@ -40,12 +40,12 @@ export function RoomStatusCard({ view, address, roomId, accepted, binding, canBi
       return <section className="wb-status" role={binding ? "status" : undefined}>
         <LockKeyhole size={24} />
         <strong>{view.kind === "enableGroup"
-          ? binding ? "正在开启端到端加密…" : "这个房间还没启用加密对话"
-          : "等房主打开房间启用加密对话"}</strong>
+          ? binding ? "正在开启端到端加密…" : "这个房间还没开启加密对话"
+          : "等房主打开房间并开启加密对话"}</strong>
         {view.kind === "enableGroup" && (binding ? (
           <p>首次开启通常需要几秒，完成后即可直接发消息。</p>
         ) : <>
-          <p>启用后，此设备会自动把待入群的成员加入加密群。</p>
+          <p>开启后，这台设备会自动让已批准的成员看到加密聊天。</p>
           <div className="wb-actions">
             <Button size="sm" loading={binding} disabled={!canBind} onClick={onBind}>立即启用</Button>
             <Link to={`/setup/${encodeURIComponent(roomId)}`}>打开完整配置向导</Link>
@@ -60,7 +60,7 @@ export function RoomStatusCard({ view, address, roomId, accepted, binding, canBi
         <strong>{labels[view.kind][0]}</strong>
         <p>{labels[view.kind][1]}</p>
         {view.kind === "notInGroup" && <Button size="sm" variant="secondary" onClick={onReconnect}>重新检查入群</Button>}
-        {address && <details><summary>我的加密身份</summary><code>{address}</code> <CopyButton text={address} label="复制我的加密地址" /></details>}
+        {address && <details><summary>我的入场地址（技术信息）</summary><code>{address}</code> <CopyButton text={address} label="复制我的加密地址" /></details>}
       </section>;
     case "inviteError":
     case "error": {
@@ -80,7 +80,7 @@ export function RoomStatusCard({ view, address, roomId, accepted, binding, canBi
     case "ready":
       return <section className="wb-status">
         <ShieldCheck size={24} /><strong>端到端加密对话已就绪</strong>
-        <p>发送第一条消息，或打开「邀请」接入 Agent。</p>
+        <p>发送第一条消息，或打开「邀请」接入助手。</p>
         {onStarter && <div className="wb-actions">{starters.map((text) => <Button key={text} variant="secondary" size="sm" onClick={() => onStarter(text)}>{text}</Button>)}</div>}
       </section>;
   }

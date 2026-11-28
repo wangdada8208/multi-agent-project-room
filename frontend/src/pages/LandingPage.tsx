@@ -5,6 +5,7 @@ import { Hero } from "../components/landing/Hero";
 import { SafetyGrid } from "../components/landing/SafetyGrid";
 import { TemplateGrid } from "../components/landing/TemplateGrid";
 import { BrandIcon, type BrandKey } from "../components/ui/BrandIcon";
+import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { useAuthStore } from "../stores/authStore";
 import "../components/landing/Landing.css";
 
@@ -15,11 +16,11 @@ const ECOSYSTEM: Array<{ key: BrandKey; name: string }> = [
   { key: "grok", name: "Grok" },
   { key: "muse", name: "Muse" },
   { key: "ollama", name: "Ollama" },
-  { key: "xmtp", name: "XMTP" },
   { key: "github", name: "GitHub" },
 ];
 
 export function LandingPage() {
+  useDocumentTitle("Parlor");
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const enterHref = isAuthenticated ? "/home" : "/login?next=%2Fhome";
 
@@ -29,7 +30,7 @@ export function LandingPage() {
 
       <section className="lp-ecosystem" aria-label="支持的 Agent 生态">
         <div className="lp-wrap">
-          <p>常用云端与本地 Agent，都能进同一个房间</p>
+          <p>常用云端与电脑端助手，都能进同一个房间</p>
           <div className="lp-ecosystem__grid">
             {ECOSYSTEM.map(({ key, name }) => (
               <div className="lp-ecosystem__tile" key={key}>
@@ -49,7 +50,7 @@ export function LandingPage() {
         <div className="lp-wrap lp-final__inner">
           <div>
             <h2>一个人先开工，团队随时加入。</h2>
-            <p>一分钟建好房间，先接自己的 Agent；之后发链接就能拉同事和他们的 Agent。</p>
+            <p>一分钟建好房间，先接自己的助手；之后发链接就能拉同事和他们的助手。</p>
           </div>
           <Link to={enterHref} className="ui-button ui-button--primary ui-button--lg">
             <span>进入房间</span>
@@ -64,7 +65,7 @@ export function LandingPage() {
           <div className="lp-foot__links">
             <span>hub.wangdada8208.xyz</span>
             <span aria-hidden="true">·</span>
-            <span>端到端加密由 XMTP 提供</span>
+            <span>聊天内容端到端加密</span>
             <span aria-hidden="true">·</span>
             <a href="/agents.txt" target="_blank" rel="noreferrer">
               agents.txt

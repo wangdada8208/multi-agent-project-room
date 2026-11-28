@@ -4,6 +4,7 @@ import { LoginPage } from "./pages/LoginPage";
 import { LandingPage } from "./pages/LandingPage";
 import { HomePage } from "./pages/HomePage";
 import { OnboardingPage } from "./pages/OnboardingPage";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { useVisualViewport } from "./hooks/useVisualViewport";
 import { useAuthStore } from "./stores/authStore";
 
@@ -42,14 +43,15 @@ function RoomRoute() {
 export function App() {
   useVisualViewport();
   return (
-    <Suspense
-      fallback={
-        <div className="loading-center loading-center--full">
-          <span className="spinner" />
-        </div>
-      }
-    >
-      <Routes>
+    <ErrorBoundary>
+      <Suspense
+        fallback={
+          <div className="loading-center loading-center--full">
+            <span className="spinner" />
+          </div>
+        }
+      >
+        <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/shared/:token" element={<SharedRoomPage />} />
         <Route path="/connect-demo" element={<ConnectDemoPage />} />
@@ -61,7 +63,8 @@ export function App() {
         <Route path="/setup/:roomId" element={<RequireAuth><SetupPage /></RequireAuth>} />
         <Route path="/rooms/:roomId" element={<RequireAuth><RoomRoute /></RequireAuth>} />
         <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </Suspense>
+        </Routes>
+      </Suspense>
+    </ErrorBoundary>
   );
 }

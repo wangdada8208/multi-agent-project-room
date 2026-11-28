@@ -14,9 +14,9 @@ export function EncryptionDetails({ ready, groupId, address, onLock }: Encryptio
   return <div className="wb-privacy">
     <h4><ShieldCheck size={17} />{ready ? "已端到端加密" : "端到端加密"}</h4>
     <ul>
-      <li><Check size={14} />只有加密群成员可以读取对话。</li>
+      <li><Check size={14} />只有房间成员可以读取对话。</li>
       <li><Check size={14} />服务器只负责房间和成员管理，看不到聊天正文。</li>
-      <li><Check size={14} />新成员由房主的设备加入加密群。</li>
+      <li><Check size={14} />新成员要由房主设备确认后才能看到聊天。</li>
     </ul>
     {address && onLock && <div className="wb-privacy__session">
       <span>本机加密身份已解锁</span>

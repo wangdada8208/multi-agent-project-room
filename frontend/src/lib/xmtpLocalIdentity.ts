@@ -21,9 +21,9 @@ export const XMTP_NETWORK_ERROR_MESSAGE = "暂时连不上加密网络，请稍�
 export const XMTP_BIND_ERROR_MESSAGE = "暂时无法开启端到端加密，请稍后重试。";
 
 const identityErrorMessages = {
-  "incorrect-password": "口令不对，请检查大小写后重试，或点下方重设本机加密身份",
+  "incorrect-password": "口令不对，请检查大小写后重试，或点下方重设这把房间锁",
   "missing-vault": "没有找到本机加密身份，请设置新口令",
-  "unsupported-vault": "本机加密身份版本不受支持，请重设本机加密身份",
+  "unsupported-vault": "这台设备上的房间锁版本不受支持，请重设这把房间锁",
   "password-too-short": "新口令至少需要 10 个字符",
   "invalid-legacy-identity": "原加密身份已损坏，请先恢复备份，不能自动替换身份",
   "identity-save-failed": "无法把加密身份保存到当前浏览器，请检查浏览器存储设置后重试",

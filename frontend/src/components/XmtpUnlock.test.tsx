@@ -78,7 +78,7 @@ describe("XmtpUnlock", () => {
   });
 
   it("blocks mismatched creation passwords, explains the local-only passphrase, and toggles visibility", async () => {
-    expect(host.textContent).toContain("口令只留在当前浏览器，用于保护你的加密房间钥匙");
+    expect(host.textContent).toContain("口令只留在当前浏览器，平台看不到，也不能替你找回");
     const password = inputByLabel(host, "设置口令");
     const confirmation = inputByLabel(host, "确认口令");
     expect(password.type).toBe("password");
@@ -107,7 +107,7 @@ describe("XmtpUnlock", () => {
     });
     const keepUnlocked = host.querySelector<HTMLInputElement>('input[type="checkbox"]');
     expect(keepUnlocked?.checked).toBe(false);
-    expect(host.textContent).toContain("本次浏览器会话保持解锁");
+    expect(host.textContent).toContain("本次浏览器会话保持打开");
     await act(async () => keepUnlocked?.click());
 
     await act(async () => buttonByText(host, "保存并进入").click());
@@ -153,7 +153,7 @@ describe("XmtpUnlock", () => {
     await act(async () => buttonByText(host, "解锁").click());
     await flush(8);
 
-    expect(host.textContent).toContain("口令不对，请检查大小写后重试，或点下方重设本机加密身份");
+    expect(host.textContent).toContain("口令不对，请检查大小写后重试，或点下方重设这把房间锁");
     expect(host.textContent).not.toContain("Decryption failed");
     expect(onUnlock).not.toHaveBeenCalled();
   });
@@ -167,16 +167,16 @@ describe("XmtpUnlock", () => {
       root.render(<XmtpUnlock onUnlock={onUnlock} />);
     });
 
-    await act(async () => buttonByText(host, "忘记口令？重设本机加密身份").click());
-    expect(host.textContent).toContain("旧房间历史消息将无法解密");
-    expect(host.textContent).toContain("不会影响账号登录");
+    await act(async () => buttonByText(host, "忘记口令？重设这把房间锁").click());
+    expect(host.textContent).toContain("以前的加密聊天将无法再打开");
+    expect(host.textContent).toContain("账号登录不受影响");
 
     await act(async () => buttonByText(host, "确认重设").click());
     await flush();
 
     expect(hasEncryptedVault()).toBe(false);
     expect(sessionStorage.getItem(SESSION_UNLOCK_STORAGE_KEY)).toBeNull();
-    expect(host.textContent).toContain("设置本机加密口令");
+    expect(host.textContent).toContain("给你的私密房间上把锁");
     expect(host.querySelector<HTMLInputElement>('input[aria-label="确认口令"]')).not.toBeNull();
   });
 });

@@ -78,11 +78,11 @@ describe("AgentPromptSetupPicker", () => {
     mountPicker();
     try {
       act(() => {
-        buttonByText("Grok Bot / 云端 Webhook").click();
+        buttonByText("Grok Bot / 云端助手").click();
       });
 
       const prompt = container.querySelector('[data-testid="agent-prompt-preview"]')!.textContent ?? "";
-      expect(prompt).toContain("Grok Bot / 云端 Webhook");
+      expect(prompt).toContain("Grok Bot / 云端助手");
       expect(prompt).toContain("https://parlor.example/prompts/cloud-webhook.md");
       expect(prompt).toContain("不要自己编造邀请令牌");
 
@@ -138,7 +138,7 @@ describe("AgentPromptSetupPicker", () => {
       origin: "https://parlor.example",
     });
     expect(prompt).toContain("<目标房间：请先在 Parlor 网页选择或创建一个房间>");
-    expect(prompt).toContain("<未提供。若本机助手未配对，请让人类在 Parlor 的「接入 Agent」页生成一次性配对码>");
+    expect(prompt).toContain("<未提供。若本机助手未配对，请让人类在 Parlor 的「接入助手」页生成一次性配对码>");
     expect(prompt).toContain("https://parlor.example/prompts/codex.md");
   });
 

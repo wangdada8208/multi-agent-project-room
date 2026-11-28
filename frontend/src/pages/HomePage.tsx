@@ -4,7 +4,6 @@ import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Bot, Plus, Search } from "lucide-react";
 import { AppShell } from "../components/layout/AppShell";
 import { AttentionStrip, type AttentionItem } from "../components/rooms/AttentionStrip";
-import { CreateRoomDrawer } from "../components/rooms/CreateRoomDrawer";
 import { RoomCard } from "../components/rooms/RoomCard";
 import { Button } from "../components/ui/Button";
 import { Segmented } from "../components/ui/Segmented";
@@ -16,6 +15,8 @@ import { cloudInviteName } from "../lib/domain/cloudInvite";
 import { pendingRequestsFrom } from "../lib/domain/pendingRequests";
 import { listRoomRedemptions, listRoomSeats } from "../lib/localHelper";
 import { useAuthStore } from "../stores/authStore";
+import { useDocumentTitle } from "../hooks/useDocumentTitle";
+import { useWorkspaceUiStore } from "../stores/workspaceUiStore";
 import type { Room } from "../types/chat";
 import {
   isOnboardingDismissed,
@@ -28,6 +29,7 @@ import "../components/rooms/Rooms.css";
 type RoomFilter = "all" | "mine" | "pending";
 
 export function HomePage() {
+  useDocumentTitle("房间 · Parlor");
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
@@ -35,20 +37,20 @@ export function HomePage() {
 
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<RoomFilter>("all");
-  const [drawerOpen, setDrawerOpen] = useState(() => searchParams.get("create") === "1");
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [actionError, setActionError] = useState("");
   const [onboardingDismissed, setOnboardingDismissed] = useState(isOnboardingDismissed);
+  const openCreateRoom = useWorkspaceUiStore((state) => state.openCreateRoom);
 
   useEffect(() => {
     if (searchParams.get("create") === "1") {
-      setDrawerOpen(true);
+      openCreateRoom();
       const next = new URLSearchParams(searchParams);
       next.delete("create");
       setSearchParams(next, { replace: true });
     }
-  }, [searchParams, setSearchParams]);
+  }, [searchParams, setSearchParams, openCreateRoom]);
 
   const roomsQuery = useQuery({
     queryKey: ["rooms"],
@@ -202,9 +204,9 @@ export function HomePage() {
             <div className="wb-rooms-head__actions">
               <Link to="/agents" className="ui-button ui-button--secondary ui-button--md">
                 <Bot size={16} strokeWidth={1.8} />
-                <span>接入 Agent</span>
+                <span>接入助手</span>
               </Link>
-              <Button variant="primary" size="md" onClick={() => setDrawerOpen(true)}>
+              <Button variant="primary" size="md" onClick={openCreateRoom}>
                 <Plus size={16} strokeWidth={2} />
                 <span>新建房间</span>
               </Button>
@@ -240,7 +242,7 @@ export function HomePage() {
           <OnboardingView
             embedded
             progress={onboardingProgress}
-            onStartTemplate={() => setDrawerOpen(true)}
+            onStartTemplate={openCreateRoom}
             onDismiss={dismissOnboarding}
           />
         )}
@@ -249,12 +251,12 @@ export function HomePage() {
           <div className="wb-rooms-state">
             <p>还没有房间。先从模板建一个吧。</p>
             <div className="wb-rooms-state__actions">
-              <Button variant="primary" onClick={() => setDrawerOpen(true)}>
+              <Button variant="primary" onClick={openCreateRoom}>
                 <Plus size={15} strokeWidth={2} />
                 新建房间
               </Button>
               <Link to="/agents" className="ui-button ui-button--secondary ui-button--md">
-                接入 Agent
+                接入助手
               </Link>
             </div>
           </div>
@@ -266,7 +268,7 @@ export function HomePage() {
               <OnboardingView
                 embedded
                 progress={onboardingProgress}
-                onStartTemplate={() => setDrawerOpen(true)}
+                onStartTemplate={openCreateRoom}
                 onDismiss={dismissOnboarding}
               />
             )}
@@ -279,6 +281,8 @@ export function HomePage() {
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder="搜索房间"
                   aria-label="搜索房间"
+                  data-shortcut-room-search
+                  aria-keyshortcuts="/"
                 />
               </label>
               <Segmented<RoomFilter>
@@ -330,7 +334,7 @@ export function HomePage() {
                 <button
                   type="button"
                   className="wb-room-card wb-room-card--new"
-                  onClick={() => setDrawerOpen(true)}
+                  onClick={openCreateRoom}
                 >
                   <span className="wb-room-card__plus" aria-hidden="true">
                     <Plus size={18} strokeWidth={2} />
@@ -343,7 +347,6 @@ export function HomePage() {
           </>
         )}
 
-        <CreateRoomDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />
       </div>
     </AppShell>
   );

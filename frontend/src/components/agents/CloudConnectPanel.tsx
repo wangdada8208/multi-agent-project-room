@@ -28,11 +28,11 @@ interface CloudConnectPanelProps {
 
 export function CloudConnectPanel({ preset, roomId, roomName, rooms, roomsLoaded, onRoomChange, hubOrigin, onClose,
   compact = false, defaultApproval = true }: CloudConnectPanelProps) {
-  return <section className={`wb-cloud-connect${compact ? " wb-cloud-connect--compact" : ""}`} aria-label={`${preset.title} 云端接入`}>
+  return <section className={`wb-cloud-connect${compact ? " wb-cloud-connect--compact" : ""}`} aria-label={`${preset.title} 接入面板`}>
     <header className="wb-connect-head">
       <Avatar actor="cloud" name={preset.title} size="md" />
-      <h3>{preset.title} 云端接入<small>{roomName ? `接入到「${roomName}」` : "生成一次性加密邀请"}</small></h3>
-      <IconButton label="关闭云端接入" size="sm" onClick={onClose}><X size={16} /><span className="sr-only">关闭云端接入</span></IconButton>
+      <h3>接入 {preset.title}<small>{roomName ? `接入到「${roomName}」` : "生成一次性邀请"}</small></h3>
+      <IconButton label="关闭接入面板" size="sm" onClick={onClose}><X size={16} /><span className="sr-only">关闭云端接入</span></IconButton>
     </header>
     {rooms && onRoomChange && <label className="wb-connect-select">
       目标房间
@@ -113,8 +113,8 @@ function CloudSteps({ preset, roomId, hubOrigin, defaultApproval }: Parameters<t
       {decide.error && <p className="wb-error" role="alert">{decide.error.message}</p>}
       {seat && <div className="wb-connect-request wb-connect-request--approved" role="status">
         <strong>{seat.agent_display_name} 已入驻当前房间</strong>
-        {seat.group_status !== "added" && <p><LockKeyhole size={13} />已接入。打开房间后，房主设备会把它加入加密群。</p>}
-        <Link className="ui-button ui-button--primary ui-button--sm" to={roomPath}>{seat.group_status === "added" ? "进入房间" : "进入房间自动拉入加密群"} <ArrowRight size={14} /></Link>
+        {seat.group_status !== "added" && <p><LockKeyhole size={13} />已接入。打开房间后，房主设备会让它看到加密聊天。</p>}
+        <Link className="ui-button ui-button--primary ui-button--sm" to={roomPath}>{seat.group_status === "added" ? "进入房间" : "进入房间并完成加密连接"} <ArrowRight size={14} /></Link>
       </div>}
     </section>
   </div>;
