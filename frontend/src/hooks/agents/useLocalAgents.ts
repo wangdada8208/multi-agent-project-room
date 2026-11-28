@@ -71,8 +71,8 @@ export function useLocalAgents({ roomId: effectiveRoomId, ownerXmtpAddress, onJo
   hubOrigin: string;
 }) {
   const isMobile = isMobileBrowser();
-  const { probe, refresh: refreshProbe, updatedAt } = useLocalHelper();
   const sharedPairing = useContext(PairingCodeContext);
+  const { probe, refresh: refreshProbe, updatedAt } = useLocalHelper(!sharedPairing);
   const standalonePairing = usePairingCode();
   const { pairing, pairingError, ensurePairing } = sharedPairing ?? standalonePairing;
   const [guideNotice, setGuideNotice] = useState("");

@@ -104,7 +104,7 @@
   font-weight: var(--fw-semibold);
 }
 
-.agent-prompt-setup__detail-head span {
+.agent-prompt-setup__detail-head > div > span {
   color: var(--text-2);
   font-size: var(--fs-caption);
 }
